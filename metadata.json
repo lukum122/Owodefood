@@ -1,0 +1,6 @@
+{
+  "name": "Owode Food Delivery Marketplace",
+  "description": "A production-ready Multi-Vendor Food Delivery Marketplace featuring Customer, Vendor, Rider, and Admin portals with role-based access controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

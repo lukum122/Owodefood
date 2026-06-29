@@ -1,0 +1,2601 @@
+import React, { useState } from "react";
+import { useDatabase } from "../context/DatabaseContext";
+import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
+import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+
+/* 1. MASTER ORDERS AUDITOR SCREEN */
+export const AdminOrders: React.FC = () => {
+  const { orders, updateVendorOrder, currency, vatEnabled, vatRate } = useDatabase();
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  const handleForceCancel = (id: string) => {
+    setCancelTargetId(id);
+  };
+
+  const handleConfirmForceCancel = () => {
+    if (cancelTargetId) {
+      updateVendorOrder(cancelTargetId, "cancelled");
+      setCancelTargetId(null);
+      // Synchronize modal state if active
+      if (selectedOrder && selectedOrder.id === cancelTargetId) {
+        setSelectedOrder({ ...selectedOrder, status: "cancelled" });
+      }
+    }
+  };
+
+  const getBadgeStyle = (s: OrderStatus) => {
+    switch (s) {
+      case "pending": return "bg-yellow-50 text-yellow-700 border-yellow-200";
+      case "accepted": return "bg-blue-50 text-blue-700 border-blue-200";
+      case "preparing": return "bg-indigo-50 text-indigo-700 border-indigo-200";
+      case "ready": return "bg-purple-50 text-purple-700 border-purple-200";
+      case "out_for_delivery": return "bg-teal-50 text-teal-700 border-teal-200";
+      case "delivered": return "bg-green-50 text-green-700 border-green-200";
+      case "cancelled": return "bg-red-50 text-red-700 border-red-200";
+    }
+  };
+
+  return (
+    <div className="space-y-8 font-sans text-xs">
+      
+      {/* State-driven cancel confirmation modal avoiding window.confirm frame issues */}
+      {cancelTargetId && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 p-6 space-y-6 text-left">
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-red-500 font-bold block">Critical Admin Override</span>
+              <h3 className="text-base font-extrabold text-[#070329] tracking-tight">Force Cancel Order?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Are you sure you want to enforce an immediate cancellation on order <b className="text-gray-900">#{cancelTargetId}</b>? This overrides existing kitchen fulfillment and dispatch rider protocols.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button 
+                onClick={() => setCancelTargetId(null)}
+                className="px-4 py-2 bg-gray-50 text-gray-500 border border-gray-100 rounded-xl text-xs font-bold hover:bg-gray-100 transition cursor-pointer"
+              >
+                No, Back
+              </button>
+              <button 
+                onClick={handleConfirmForceCancel}
+                className="px-4 py-2 bg-red-650 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
+              >
+                Yes, Force Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* State-driven view detail modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-gray-100 p-6 sm:p-8 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto relative">
+            <div className="flex items-start justify-between gap-4 border-b border-gray-50 pb-4">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-widest text-purple-600 font-bold bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">Order Audit Details</span>
+                <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2 flex items-center gap-2">
+                  Order ID: <span className="font-mono text-gray-800">#{selectedOrder.id}</span>
+                </h3>
+                <span className="text-[10px] text-gray-400 block mt-1 font-sans">Placed on: {new Date(selectedOrder.createdAt).toLocaleString()}</span>
+              </div>
+              <button 
+                onClick={() => setSelectedOrder(null)}
+                className="p-1 text-gray-400 hover:text-gray-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Customer & Delivery Logistics */}
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-3">
+                <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-450 flex items-center gap-1.5 border-b border-gray-200/50 pb-1.5">
+                  <Users className="w-3.5 h-3.5 text-gray-400" /> Customer Information
+                </h4>
+                <div className="space-y-1.5 text-xs font-sans">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Name:</span>
+                    <strong className="text-gray-800">{selectedOrder.customerName}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Contact:</span>
+                    <strong className="text-gray-850 font-mono">{selectedOrder.customerPhone || "N/A"}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Pay Method:</span>
+                    <span className="font-bold text-indigo-700">{selectedOrder.paymentMethod}</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-gray-200/50 space-y-1.5">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-450 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-gray-400" /> Delivery Address
+                  </h4>
+                  <p className="text-xs font-sans text-gray-700 bg-white p-2.5 rounded-xl border border-gray-150/75 font-medium leading-relaxed">
+                    {selectedOrder.deliveryAddress}
+                  </p>
+                </div>
+              </div>
+
+              {/* Vendor & Operational State */}
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-3 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-455 flex items-center gap-1.5 border-b border-gray-200/50 pb-1.5">
+                    <Store className="w-3.5 h-3.5 text-gray-400" /> Merchant / Vendor Node
+                  </h4>
+                  <div className="mt-1.5">
+                    <strong className="text-sm text-gray-900 block font-sans font-extrabold">{selectedOrder.vendorName}</strong>
+                    <span className="text-[10px] text-gray-400 font-mono block mt-0.5">ID Ref: {selectedOrder.vendorId}</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-gray-200/50 space-y-2">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-450">Active Fulfillment Status</h4>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedOrder.status}
+                      onChange={(e) => {
+                        const nextStatus = e.target.value as OrderStatus;
+                        updateVendorOrder(selectedOrder.id, nextStatus);
+                        setSelectedOrder({ ...selectedOrder, status: nextStatus });
+                      }}
+                      className="text-xs p-2.5 bg-white border border-gray-250 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 flex-grow font-sans font-bold text-gray-700 cursor-pointer"
+                    >
+                      <option value="pending">⏳ Pending Dispatch</option>
+                      <option value="accepted">🧑‍🍳 Accepted</option>
+                      <option value="preparing">🍳 Preparing Order</option>
+                      <option value="ready">📦 Ready for Dispatch</option>
+                      <option value="out_for_delivery">🚴 Out with Courier</option>
+                      <option value="delivered">✅ Delivered & Closed</option>
+                      <option value="cancelled">❌ Cancelled Order</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Ordered Items Table */}
+            <div className="space-y-2">
+              <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-gray-450">Ordered Itemized Listing</h4>
+              <div className="border border-gray-150 rounded-2xl overflow-hidden bg-gray-50">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100/80 text-[10px] uppercase font-bold text-gray-500 border-b border-gray-150">
+                      <th className="py-2.5 px-4 font-sans">Item Details & Options</th>
+                      <th className="py-2.5 px-4 font-mono text-center">Qty</th>
+                      <th className="py-2.5 px-4 font-mono text-right">Unit Rate</th>
+                      <th className="py-2.5 px-4 font-mono text-right">Row Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-150 text-xs text-gray-750">
+                    {selectedOrder.items.map((oi) => (
+                      <tr key={oi.id} className="hover:bg-gray-150/45 transition">
+                        <td className="py-3 px-4 font-sans font-bold text-gray-900">{oi.name}</td>
+                        <td className="py-3 px-4 font-mono text-center font-bold text-gray-600">{oi.quantity}</td>
+                        <td className="py-3 px-4 font-mono text-right text-gray-500">{currency}{oi.price.toLocaleString()}</td>
+                        <td className="py-3 px-4 font-mono text-right font-black text-gray-950">{currency}{(oi.price * oi.quantity).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Financial Summary Breakdown */}
+            <div className="bg-gray-50 p-5 rounded-2xl border border-gray-150 text-xs space-y-2.5">
+              {(() => {
+                const subTotal = selectedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const vat = selectedOrder.tax !== undefined ? selectedOrder.tax : (vatEnabled ? subTotal * (vatRate / 100) : 0);
+                const svc = selectedOrder.serviceFee !== undefined ? selectedOrder.serviceFee : 0;
+                const del = Math.max(0, selectedOrder.totalAmount - subTotal - vat - svc);
+                
+                return (
+                  <>
+                    <div className="flex justify-between text-gray-500 font-sans">
+                      <span>Products Subtotal</span>
+                      <span className="font-mono text-gray-700">{currency}{subTotal.toLocaleString()}</span>
+                    </div>
+                    {vat > 0 && (
+                      <div className="flex justify-between text-gray-500 font-sans">
+                        <span>Value Added Tax (VAT)</span>
+                        <span className="font-mono text-gray-700">{currency}{Math.round(vat).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {svc > 0 && (
+                      <div className="flex justify-between text-gray-500 font-sans">
+                        <span>Fulfillment Service Fee</span>
+                        <span className="font-mono text-gray-700">{currency}{svc.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {del > 0 && (
+                      <div className="flex justify-between text-gray-500 font-sans">
+                        <span>Delivery Dispatch Fee</span>
+                        <span className="font-mono text-gray-700">{currency}{Math.round(del).toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-gray-200 pt-3 flex justify-between items-center text-sm">
+                      <span className="font-black text-[#070329] uppercase tracking-tight">Grand Total Settled</span>
+                      <strong className="font-black text-lg text-emerald-600 font-mono">{currency}{selectedOrder.totalAmount.toLocaleString()}</strong>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              {selectedOrder.status !== "cancelled" && selectedOrder.status !== "delivered" && (
+                <button
+                  onClick={() => {
+                    handleForceCancel(selectedOrder.id);
+                  }}
+                  className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-150 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Force Cancel
+                </button>
+              )}
+              <button 
+                onClick={() => setSelectedOrder(null)}
+                className="px-6 py-3 bg-[#070329] hover:bg-indigo-950 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
+              >
+                Close Audit Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none">Platform Master Orders</h1>
+        <p className="text-xs text-gray-400 mt-1 max-w-lg">Supervise real-time transaction, track courier driver assignments, and enforce emergency cancellations.</p>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+        {orders.length > 0 ? (
+          <div>
+            <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+              <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[950px]">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-4">Order ID</th>
+                  <th className="py-3 px-4">Merchant Node</th>
+                  <th className="py-3 px-4">Customer Name</th>
+                  <th className="py-3 px-4">Payment Method</th>
+                  <th className="py-3 px-4 font-mono text-right">Sum</th>
+                  <th className="py-3 px-4">Active Status</th>
+                  <th className="py-3 px-4">Courier Driver</th>
+                  <th className="py-3 px-4 text-center">Auditing Operations</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-xs">
+                {orders.map((o) => (
+                  <tr key={o.id} className="hover:bg-gray-50/50 transition">
+                    <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
+                    <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
+                    <td className="py-3.5 px-4 font-medium text-gray-700">{o.customerName}</td>
+                    <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px]">{o.paymentMethod}</td>
+                    <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{o.totalAmount.toLocaleString()}</td>
+                    <td className="py-3.5 px-4">
+                      <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
+                        {o.status.replace(/_/g, " ")}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {o.riderId ? (
+                        <span className="text-blue-700 font-medium">{o.riderName}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setSelectedOrder(o)}
+                          className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                        </button>
+                        {o.status !== "delivered" && o.status !== "cancelled" ? (
+                          <button
+                            onClick={() => handleForceCancel(o.id)}
+                            className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold border border-red-100 cursor-pointer text-[10px] transition"
+                          >
+                            Cancel
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 italic font-mono text-[10px] px-2 py-1 bg-gray-50 rounded-lg">Archived</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-400">
+            No orders logs registered mock database.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* 2. MERCHANT LICENSE MANAGER SCREEN */
+export const AdminVendors: React.FC = () => {
+  const { vendors, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency } = useDatabase();
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  
+  // Local edit states
+  const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState<string>("restaurant");
+  const [editCuisine, setEditCuisine] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editPrepTime, setEditPrepTime] = useState(20);
+  const [editDeliveryFee, setEditDeliveryFee] = useState(750);
+  const [editServiceFee, setEditServiceFee] = useState<number | undefined>(undefined);
+  const [editServiceFeeType, setEditServiceFeeType] = useState<"flat" | "percentage">("flat");
+  const [editServiceFeeValue, setEditServiceFeeValue] = useState<number>(0);
+  const [editCommissionType, setEditCommissionType] = useState<"flat" | "percentage">("percentage");
+  const [editCommissionValue, setEditCommissionValue] = useState<number>(15);
+  const [editFreeDelivery, setEditFreeDelivery] = useState<boolean>(false);
+  const [editOpeningTime, setEditOpeningTime] = useState("08:00");
+  const [editClosingTime, setEditClosingTime] = useState("22:00");
+  const [editDescription, setEditDescription] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  const handleApproval = (id: string, s: Vendor["status"]) => {
+    toggleVendorStatus(id, s);
+    if (selectedVendor && selectedVendor.id === id) {
+      setSelectedVendor(prev => prev ? { ...prev, status: s } : null);
+    }
+  };
+
+  const openVendorDetails = (v: Vendor) => {
+    setSelectedVendor(v);
+    setEditName(v.name);
+    setEditCategory(v.category || "restaurant");
+    setEditCuisine(v.cuisine);
+    setEditAddress(v.address);
+    setEditPrepTime(v.prepTime || 20);
+    setEditDeliveryFee(v.deliveryFee !== undefined ? v.deliveryFee : 750);
+    setEditServiceFee(v.serviceFee);
+    setEditServiceFeeType(v.serviceFeeType || "flat");
+    setEditServiceFeeValue(v.serviceFeeValue || 0);
+    setEditCommissionType(v.commissionType || "percentage");
+    setEditCommissionValue(v.commissionValue !== undefined ? v.commissionValue : 15);
+    setEditFreeDelivery(!!v.freeDelivery);
+    setEditOpeningTime(v.openingTime || "08:00");
+    setEditClosingTime(v.closingTime || "22:00");
+    setEditDescription(v.description || "");
+    setSuccessMsg("");
+  };
+
+  const handleSaveChanges = () => {
+    if (!selectedVendor) return;
+    
+    adminUpdateVendor(selectedVendor.id, {
+      name: editName,
+      category: editCategory,
+      cuisine: editCuisine,
+      address: editAddress,
+      prepTime: editPrepTime,
+      deliveryFee: editDeliveryFee,
+      serviceFee: editServiceFee,
+      serviceFeeType: editServiceFeeType,
+      serviceFeeValue: editServiceFeeValue,
+      commissionType: editCommissionType,
+      commissionValue: editCommissionValue,
+      freeDelivery: editFreeDelivery,
+      openingTime: editOpeningTime,
+      closingTime: editClosingTime,
+      description: editDescription,
+    });
+
+    setSuccessMsg("Merchant configurations updated successfully!");
+    
+    // Auto clear/dismiss after a delay
+    setTimeout(() => {
+      setSuccessMsg("");
+      setSelectedVendor(null);
+    }, 2000);
+  };
+
+  // Filter products belonging to this vendor for deep details view
+  const vendorProducts = selectedVendor 
+    ? products.filter(p => p.vendorId === selectedVendor.id)
+    : [];
+
+  return (
+    <div className="space-y-8 font-sans text-xs">
+      <div>
+        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950">Merchant Partner Licensing</h1>
+        <p className="text-xs text-gray-400 mt-1 max-w-lg">
+          Manage physical outlets, adjust packing dispatch delay buffers, categorize brands, configure custom delivery prices, and view full catalogues.
+        </p>
+      </div>
+
+      {/* VENDOR LIST TABLE */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+        {vendors.length > 0 ? (
+          <div>
+            <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+              <span className="animate-pulse">👉</span> Swipe table horizontally to view all fields
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[750px]">
+                <thead>
+                  <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
+                    <th className="py-3 px-4">Merchant Brand</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4">Cuisine / Tag</th>
+                    <th className="py-3 px-4">Delivery Fee</th>
+                    <th className="py-3 px-4">Prep / Packing</th>
+                    <th className="py-3 px-4">Hours</th>
+                    <th className="py-3 px-4">Rating</th>
+                    <th className="py-3 px-4">Licensing Status</th>
+                    <th className="py-3 px-4 text-center">Operational Approvals</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-xs">
+                  {vendors.map((v) => {
+                    // Category styling helper
+                    const catColors = {
+                      restaurant: "bg-orange-50 text-orange-700 border-orange-100",
+                      shop: "bg-yellow-50 text-yellow-700 border-yellow-100",
+                      pharmacy: "bg-sky-50 text-sky-700 border-sky-100",
+                      groceries: "bg-red-50 text-red-700 border-red-100",
+                    }[v.category || "restaurant"];
+
+                    return (
+                      <tr key={v.id} className="hover:bg-gray-50/50 transition">
+                        <td className="py-3.5 px-4 font-extrabold text-[#070329]">
+                          <div className="flex items-center gap-2">
+                            <Store className="w-4 h-4 text-[#0ea5e9] shrink-0" />
+                            <span>{v.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`py-1 px-2.5 rounded-full border text-[9px] font-black uppercase ${catColors}`}>
+                            {v.category || "restaurant"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="py-1 px-2.5 bg-blue-50 text-blue-700 rounded-full font-bold text-[10px] uppercase">
+                            {v.cuisine}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-gray-800 font-mono">
+                          {currency}{(v.deliveryFee !== undefined ? v.deliveryFee : 750).toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-gray-600 font-mono">
+                          {v.prepTime || 20} mins
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-550 font-medium">
+                          {v.openingTime && v.closingTime ? `${v.openingTime} - ${v.closingTime}` : "08:00 - 22:00"}
+                        </td>
+                        <td className="py-3.5 px-4 font-extrabold text-amber-600 flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                          {v.rating.toFixed(1)}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`py-1 px-2.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${
+                            v.status === "approved" ? "bg-green-50 text-green-700 border-green-200" :
+                            v.status === "suspended" ? "bg-red-50 text-red-650 border-red-200 font-extrabold" : "bg-yellow-50 text-yellow-700 border-yellow-250"
+                          }`}>
+                            {v.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex gap-2 justify-center items-center">
+                            <button
+                              onClick={() => openVendorDetails(v)}
+                              className="py-1 px-2 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold border border-sky-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View & Edit
+                            </button>
+                            
+                            {v.status !== "approved" ? (
+                              <button
+                                onClick={() => handleApproval(v.id, "approved")}
+                                className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
+                              >
+                                Approve
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleApproval(v.id, "suspended")}
+                                className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-600 font-bold border border-red-100 rounded-lg cursor-pointer text-[10px] transition"
+                              >
+                                Suspend
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-400">
+            No merchant partners registered.
+          </div>
+        )}
+      </div>
+
+      {/* VENDOR DETAIL INSPECTOR MODAL */}
+      {selectedVendor && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 bg-purple-100 text-purple-700 rounded-2xl flex items-center justify-center">
+                  <Store className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#070329] uppercase tracking-wider">Merchant Partner Profile</h3>
+                  <p className="text-[10px] text-gray-400 font-mono font-bold uppercase mt-0.5">ID: {selectedVendor.id} • Registered</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedVendor(null)}
+                className="p-2 hover:bg-gray-150 rounded-full transition text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-left">
+              {successMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-2 text-[11px] font-bold animate-bounce">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              {/* Editable Configuration Forms */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Brand Name */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Brand Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-bold text-gray-900"
+                  />
+                </div>
+
+                {/* Merchant Category - Direct Answer to "Add Vendor Category should be under Admin Portal" */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Merchant Classification</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition cursor-pointer font-extrabold text-gray-900"
+                  >
+                    {vendorCategories && vendorCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name} ({cat.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Cuisine Specialty */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Cuisine / Tag Specialty</label>
+                  <input
+                    type="text"
+                    value={editCuisine}
+                    onChange={(e) => setEditCuisine(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900"
+                  />
+                </div>
+
+                {/* Delivery Fee */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Base Delivery Fee ({currency})</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-xs font-black text-gray-400">{currency}</span>
+                    <input
+                      type="number"
+                      value={editDeliveryFee}
+                      onChange={(e) => setEditDeliveryFee(Number(e.target.value))}
+                      disabled={editFreeDelivery}
+                      className={`w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold ${editFreeDelivery ? "text-gray-400 line-through cursor-not-allowed bg-gray-100" : "text-gray-900"}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Individual Free Delivery Toggle */}
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editFreeDelivery}
+                      onChange={(e) => setEditFreeDelivery(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-800 block">Offer Free Delivery</span>
+                      <span className="text-[9px] text-gray-400 block font-sans">Zero delivery fee for this merchant's orders</span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Custom Service Charge Scheme */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Service Fee Override Mode</label>
+                  <select
+                    value={editServiceFeeType}
+                    onChange={(e) => setEditServiceFeeType(e.target.value as any)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition cursor-pointer font-bold text-gray-900"
+                  >
+                    <option value="flat">Flat Fee ({currency})</option>
+                    <option value="percentage">Percentage-based (%)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Service Fee Override Value</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-xs font-black text-gray-400">
+                      {editServiceFeeType === "flat" ? currency : "%"}
+                    </span>
+                    <input
+                      type="number"
+                      placeholder="Defaults to legacy override or global scheme"
+                      value={editServiceFeeValue}
+                      onChange={(e) => setEditServiceFeeValue(Number(e.target.value))}
+                      className="w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Custom commission Scheme */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Merchant Commission Mode</label>
+                  <select
+                    value={editCommissionType}
+                    onChange={(e) => setEditCommissionType(e.target.value as any)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition cursor-pointer font-bold text-gray-900"
+                  >
+                    <option value="percentage">Percentage rate (%)</option>
+                    <option value="flat">Flat per-order ({currency})</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Commission Charge Value</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-xs font-black text-gray-400">
+                      {editCommissionType === "flat" ? currency : "%"}
+                    </span>
+                    <input
+                      type="number"
+                      value={editCommissionValue}
+                      onChange={(e) => setEditCommissionValue(Number(e.target.value))}
+                      className="w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Prep Time */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Packing / Prep Time Buffer (Mins)</label>
+                  <div className="relative">
+                    <Clock className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+                    <input
+                      type="number"
+                      value={editPrepTime}
+                      onChange={(e) => setEditPrepTime(Number(e.target.value))}
+                      className="w-full text-xs pl-9 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Operating Hours */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Opens At</label>
+                    <input
+                      type="text"
+                      placeholder="08:00"
+                      value={editOpeningTime}
+                      onChange={(e) => setEditOpeningTime(e.target.value)}
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Closes At</label>
+                    <input
+                      type="text"
+                      placeholder="22:00"
+                      value={editClosingTime}
+                      onChange={(e) => setEditClosingTime(e.target.value)}
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Physical Location */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Physical Street Destination Address</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-3 w-4 h-4 text-[#0ea5e9]" />
+                    <input
+                      type="text"
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      className="w-full text-xs pl-9 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Description Textarea */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">About Merchant / Bio Details</label>
+                  <textarea
+                    rows={2}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-medium text-gray-700 resize-none"
+                    placeholder="Provide descriptions for users..."
+                  />
+                </div>
+              </div>
+
+              {/* DYNAMIC PRODUCTS SECTION - Complete Detail View */}
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-3.5">
+                  <h4 className="text-[11px] uppercase font-black text-gray-700 tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-purple-600" />
+                    Products catalogue ({vendorProducts.length})
+                  </h4>
+                </div>
+
+                {vendorProducts.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-1">
+                    {vendorProducts.map((p) => (
+                      <div key={p.id} className="flex gap-2.5 p-2 bg-gray-50 border border-gray-100 rounded-2xl items-center text-left">
+                        <img 
+                          src={p.image} 
+                          alt={p.name} 
+                          className="w-10 h-10 rounded-xl object-cover border border-gray-100 shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[11px] font-black text-gray-900 block truncate">{p.name}</span>
+                          <span className="text-[10px] text-gray-500 font-bold block font-mono">{currency}{p.price.toLocaleString()}</span>
+                        </div>
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${p.isAvailable ? "text-emerald-700 bg-emerald-50" : "text-gray-400 bg-gray-100"}`}>
+                          {p.isAvailable ? "Instock" : "OOS"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic">This vendor has not published any active items in their store yet.</p>
+                )}
+              </div>
+
+              {/* Status control */}
+              <div className="p-4 bg-gray-50 border border-gray-150 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-extrabold text-[#070329] block">Licensing status control</span>
+                  <p className="text-[10px] text-gray-400">Suspend partner or restore instant listing approvals.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleApproval(selectedVendor.id, "approved")}
+                    className={`py-1.5 px-3 rounded-xl font-bold text-[10px] cursor-pointer transition ${
+                      selectedVendor.status === "approved"
+                        ? "bg-green-600 text-white"
+                        : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    Approved
+                  </button>
+                  <button
+                    onClick={() => handleApproval(selectedVendor.id, "suspended")}
+                    className={`py-1.5 px-3 rounded-xl font-bold text-[10px] cursor-pointer transition ${
+                      selectedVendor.status === "suspended"
+                        ? "bg-red-600 text-white"
+                        : "bg-white border border-gray-200 text-gray-650 hover:bg-gray-100"
+                    }`}
+                  >
+                    Suspended
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-gray-100 flex gap-3 justify-end bg-gray-50/50">
+              <button
+                onClick={() => setSelectedVendor(null)}
+                className="py-2.5 px-4 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 transition cursor-pointer"
+              >
+                Close Without Saving
+              </button>
+              <button
+                onClick={handleSaveChanges}
+                className="py-2.5 px-5 bg-gradient-to-r from-[#0ea5e9] to-blue-600 text-white rounded-xl text-xs font-extrabold shadow-sm transition cursor-pointer hover:opacity-95 flex items-center gap-1.5"
+              >
+                <Save className="w-4 h-4" />
+                Commit configurations
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* 3. COURIER FLEETS SCREEN */
+export const AdminRiders: React.FC = () => {
+  const { riders, toggleRiderStatus } = useDatabase();
+
+  const handleApproval = (id: string, s: Rider["status"]) => {
+    toggleRiderStatus(id, s);
+  };
+
+  return (
+    <div className="space-y-8 font-sans text-xs">
+      <div>
+        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950">Logistics dispatch Couriers</h1>
+        <p className="text-xs text-gray-400 mt-1 max-w-lg">Verify drivers licenses, background checks, and vehicle dispatch configuration settings.</p>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+        {riders.length > 0 ? (
+          <div>
+            <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+              <span className="animate-pulse">👉</span> Swipe table horizontally to view dispatchers
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[750px]">
+              <thead>
+                <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
+                  <th className="py-3 px-4">Courier Name</th>
+                  <th className="py-3 px-4">Telephone</th>
+                  <th className="py-3 px-4">Vehicle Dispatch Mode</th>
+                  <th className="py-3 px-4">GPS Availability</th>
+                  <th className="py-3 px-4">Vetting Status</th>
+                  <th className="py-3 px-4 text-center">Operational Approvals</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-xs">
+                {riders.map((r) => (
+                  <tr key={r.id} className="hover:bg-gray-50/50 transition">
+                    <td className="py-3.5 px-4 font-extrabold text-[#070329] flex items-center gap-2">
+                      <Bike className="w-4 h-4 text-purple-650 shrink-0" />
+                      {r.name}
+                    </td>
+                    <td className="py-3.5 px-4 font-medium text-gray-650">{r.phone}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="py-1 px-2.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-[10px] font-bold uppercase">
+                        {r.vehicleType}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={`py-1 px-2 border rounded-md text-[9px] font-bold uppercase ${
+                        r.isAvailable ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-400"
+                      }`}>
+                        {r.isAvailable ? "Duty: ON" : "Duty: OFF"}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={`py-1 px-2.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${
+                        r.status === "approved" ? "bg-green-50 text-green-700 border-green-200" :
+                        r.status === "suspended" ? "bg-red-50 text-red-600 border-red-200" : "bg-yellow-50 text-yellow-700 border-yellow-250"
+                      }`}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex gap-2.5 justify-center">
+                        {r.status !== "approved" && (
+                          <button
+                            onClick={() => handleApproval(r.id, "approved")}
+                            className="py-1 px-2.5 bg-green-50 hover:bg-green-105 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Verify Courier
+                          </button>
+                        )}
+                        {r.status !== "suspended" && (
+                          <button
+                            onClick={() => handleApproval(r.id, "suspended")}
+                            className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-650 font-bold border border-red-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Suspend Courier
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-400">
+            No couriers registered.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* 4. CUSTOMERS DIRECTORY SCREEN */
+export const AdminCustomers: React.FC = () => {
+  const { users, deleteUser, adminCreateUser, adminUpdateUserRole } = useDatabase();
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  
+  // Filtering & search states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  
+  // Creation modal states
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newRole, setNewRole] = useState<UserRole>("customer");
+  
+  // Custom metadata for roles
+  const [vendorBusinessName, setVendorBusinessName] = useState("");
+  const [vendorCuisine, setVendorCuisine] = useState("");
+  const [riderVehicleType, setRiderVehicleType] = useState<Rider["vehicleType"]>("motorcycle");
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
+
+  const handleCreateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+    setFormSuccess("");
+
+    if (!newName.trim() || !newEmail.trim() || !newPhone.trim()) {
+      setFormError("All fields are required.");
+      return;
+    }
+
+    const extra = newRole === "vendor" 
+      ? { businessName: vendorBusinessName || undefined, cuisine: vendorCuisine || undefined }
+      : newRole === "rider"
+        ? { vehicleType: riderVehicleType }
+        : undefined;
+
+    const result = adminCreateUser(
+      newName.trim(),
+      newEmail.trim(),
+      newPhone.trim(),
+      newRole,
+      extra
+    );
+
+    if (result.success) {
+      setFormSuccess(`User ${newName} successfully created as a ${newRole}!`);
+      // Reset form
+      setNewName("");
+      setNewEmail("");
+      setNewPhone("");
+      setNewRole("customer");
+      setVendorBusinessName("");
+      setVendorCuisine("");
+      setRiderVehicleType("motorcycle");
+      setTimeout(() => {
+        setIsCreateModalOpen(false);
+        setFormSuccess("");
+      }, 1500);
+    } else {
+      setFormError(result.error || "An error occurred while creating the user.");
+    }
+  };
+
+  const handleDeleteModel = (id: string) => {
+    setDeleteTargetId(id);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteTargetId) {
+      deleteUser(deleteTargetId);
+      setDeleteTargetId(null);
+    }
+  };
+
+  // Filter the list of users based on search query and role filter
+  const filteredUsers = users.filter((u) => {
+    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = 
+      u.name.toLowerCase().includes(searchLower) ||
+      u.email.toLowerCase().includes(searchLower) ||
+      u.phone.includes(searchLower);
+    return matchesRole && matchesSearch;
+  });
+
+  const getRoleBadgeStyle = (role: UserRole) => {
+    switch (role) {
+      case "admin":
+        return "bg-rose-50 text-rose-700 border-rose-200";
+      case "vendor":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      case "rider":
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      case "customer":
+        return "bg-purple-50 text-purple-700 border-purple-200";
+    }
+  };
+
+  return (
+    <div className="space-y-8 font-sans text-xs">
+      
+      {/* State-driven delete user confirmation modal */}
+      {deleteTargetId && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 p-6 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200">
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-red-500 font-bold block">Destructive Admin Area</span>
+              <h3 className="text-base font-extrabold text-[#070329] tracking-tight">Expel User Profile?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Are you positive you want to permanently expel <b className="text-gray-900">{users.find(u => u.id === deleteTargetId)?.name || "this user"}</b> from the database directory? This deletes related business logs and order records.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button 
+                onClick={() => setDeleteTargetId(null)}
+                className="px-4 py-2 bg-gray-50 text-gray-500 border border-gray-100 rounded-xl text-xs font-bold hover:bg-gray-100 transition cursor-pointer"
+              >
+                No, Back
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
+              >
+                Yes, Expel User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New User Overlay Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 p-6 sm:p-8 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-4">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-widest text-purple-600 font-bold bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">User Creation Form</span>
+                <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2">Provision New User</h3>
+                <p className="text-[11px] text-gray-400 mt-1">Directly register a new user profile with selected platform privilege level.</p>
+              </div>
+              <button 
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              {formError && (
+                <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-red-600 font-bold flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                  {formError}
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="p-3 bg-green-50 border border-green-150 rounded-xl text-green-700 font-bold flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+                  {formSuccess}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Tunde Alao"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. tunde@platform.com"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Phone Number</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. +2348012345678"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Platform Role Assignment</label>
+                  <select
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans font-bold text-gray-700"
+                  >
+                    <option value="customer">Consumer (Customer) 🧑‍💻</option>
+                    <option value="vendor">Merchant (Vendor Store) 🏪</option>
+                    <option value="rider">Logistics (Rider Delivery) 🚴</option>
+                    <option value="admin">Administrator (Super User) 🛡️</option>
+                  </select>
+                </div>
+
+                {/* Adaptive Extra Fields for Vendor */}
+                {newRole === "vendor" && (
+                  <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 space-y-3 animate-in slide-in-from-top-2 duration-150">
+                    <span className="text-[9px] uppercase font-mono font-black text-amber-700 tracking-wider">Merchant Credentials Setup</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">Eatery / Business Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Tunde's Grill House"
+                          value={vendorBusinessName}
+                          onChange={(e) => setVendorBusinessName(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-200 transition font-sans"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">Primary Food / Cuisine Category</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Nigerian Local Rice, Burgers"
+                          value={vendorCuisine}
+                          onChange={(e) => setVendorCuisine(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-200 transition font-sans"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Adaptive Extra Fields for Rider */}
+                {newRole === "rider" && (
+                  <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-2 animate-in slide-in-from-top-2 duration-150">
+                    <span className="text-[9px] uppercase font-mono font-black text-blue-700 tracking-wider">Logistics Vehicle Assignment</span>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-1">Vehicle Type</label>
+                      <select
+                        value={riderVehicleType}
+                        onChange={(e) => setRiderVehicleType(e.target.value as Rider["vehicleType"])}
+                        className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 transition font-sans font-bold"
+                      >
+                        <option value="motorcycle">🏍️ Delivery Motorcycle</option>
+                        <option value="bicycle">🚲 Bicycle</option>
+                        <option value="car">🚗 Delivery Vehicle / Sedan</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-500 rounded-xl border border-gray-250 font-bold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#070329] hover:bg-indigo-950 text-white font-extrabold rounded-xl transition shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  Register User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Title Header with Action Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950 font-sans">User Directory</h1>
+          <p className="text-xs text-gray-400 mt-1 max-w-lg">Provision credentials, update privileges, search database records, and assign admin roles seamlessly.</p>
+        </div>
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition shadow-sm cursor-pointer flex items-center justify-center gap-2 self-start sm:self-auto text-xs"
+        >
+          <Plus className="w-4 h-4" />
+          Add New User
+        </button>
+      </div>
+
+      {/* Filter and Search controls */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-xs flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
+          <button
+            onClick={() => setRoleFilter("all")}
+            className={`px-3 py-1.5 rounded-lg font-bold border transition text-[11px] cursor-pointer ${
+              roleFilter === "all"
+                ? "bg-[#070329] text-white border-[#070329]"
+                : "bg-gray-50 text-gray-600 border-gray-150 hover:bg-gray-100"
+            }`}
+          >
+            All Users ({users.length})
+          </button>
+          <button
+            onClick={() => setRoleFilter("admin")}
+            className={`px-3 py-1.5 rounded-lg font-bold border transition text-[11px] cursor-pointer ${
+              roleFilter === "admin"
+                ? "bg-rose-600 text-white border-rose-600"
+                : "bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100"
+            }`}
+          >
+            Administrators ({users.filter(u => u.role === "admin").length})
+          </button>
+          <button
+            onClick={() => setRoleFilter("customer")}
+            className={`px-3 py-1.5 rounded-lg font-bold border transition text-[11px] cursor-pointer ${
+              roleFilter === "customer"
+                ? "bg-purple-600 text-white border-purple-600"
+                : "bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100"
+            }`}
+          >
+            Consumers ({users.filter(u => u.role === "customer").length})
+          </button>
+          <button
+            onClick={() => setRoleFilter("rider")}
+            className={`px-3 py-1.5 rounded-lg font-bold border transition text-[11px] cursor-pointer ${
+              roleFilter === "rider"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100"
+            }`}
+          >
+            Riders ({users.filter(u => u.role === "rider").length})
+          </button>
+          <button
+            onClick={() => setRoleFilter("vendor")}
+            className={`px-3 py-1.5 rounded-lg font-bold border transition text-[11px] cursor-pointer ${
+              roleFilter === "vendor"
+                ? "bg-amber-600 text-white border-amber-600"
+                : "bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100"
+            }`}
+          >
+            Vendors ({users.filter(u => u.role === "vendor").length})
+          </button>
+        </div>
+
+        {/* Search input field */}
+        <div className="relative w-full md:w-72">
+          <input
+            type="text"
+            placeholder="Search by name, email, or telephone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full text-xs p-2.5 pl-8 border border-gray-250 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 transition"
+          />
+          <span className="absolute left-2.5 top-3 text-gray-400">🔍</span>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-3 text-gray-450 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Users table list */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
+        {filteredUsers.length > 0 ? (
+          <div>
+            <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+              <span className="animate-pulse">👉</span> Swipe table horizontally to view profiles
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[850px]">
+              <thead>
+                <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
+                  <th className="py-3 px-4">User Member Details</th>
+                  <th className="py-3 px-4">Registration Contact Email</th>
+                  <th className="py-3 px-4">Destination Telephone</th>
+                  <th className="py-3 px-4">System Privilege Role</th>
+                  <th className="py-3 px-4">Registration Date</th>
+                  <th className="py-3 px-4 text-center">Manage / Assign Role</th>
+                  <th className="py-3 px-4 text-center">Delete</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-xs">
+                {filteredUsers.map((c) => (
+                  <tr key={c.id} className="hover:bg-gray-50/50 transition">
+                    <td className="py-3.5 px-4 font-extrabold text-[#070329]">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-[#070329] border border-indigo-150 flex items-center justify-center font-black font-sans shrink-0">
+                          {c.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <span className="block text-gray-900 font-sans font-black">{c.name}</span>
+                          <span className="text-[9px] text-gray-400 font-mono">ID: {c.id}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-gray-500">{c.email}</td>
+                    <td className="py-3.5 px-4 font-medium text-gray-700 font-mono">{c.phone}</td>
+                    <td className="py-3.5 px-4">
+                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${getRoleBadgeStyle(c.role)}`}>
+                        {c.role}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-gray-400 font-mono text-[10px]">{new Date(c.createdAt).toLocaleDateString()}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <select
+                        value={c.role}
+                        onChange={(e) => {
+                          const nextRole = e.target.value as UserRole;
+                          if (confirm(`Are you sure you want to reassign ${c.name}'s role to "${nextRole.toUpperCase()}"?`)) {
+                            adminUpdateUserRole(c.id, nextRole);
+                          }
+                        }}
+                        className="text-[10px] font-extrabold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-250 rounded-lg py-1 px-2 cursor-pointer outline-none focus:ring-2 focus:ring-purple-150 transition"
+                      >
+                        <option value="customer">Customer</option>
+                        <option value="vendor">Vendor</option>
+                        <option value="rider">Rider</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        onClick={() => handleDeleteModel(c.id)}
+                        className="p-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg cursor-pointer transition border border-red-100 inline-flex items-center justify-center"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-gray-400">
+            No registered users records matched your current query filter.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};/* 5. GLOBAL CONFIGURATION SETTINGS SCREEN */
+export const AdminSettings: React.FC = () => {
+  const { 
+    availableLocations, 
+    updateAvailableLocations, 
+    paymentGateways, 
+    updatePaymentGateways, 
+    categoryServiceFees, 
+    updateCategoryServiceFee, 
+    vendorCategories, 
+    addVendorCategory, 
+    removeVendorCategory,
+    updateVendorCategory,
+    globalServiceFeeType,
+    globalServiceFeeValue,
+    updateGlobalServiceFeeSettings,
+    globalFreeDelivery,
+    updateGlobalFreeDelivery,
+    currency,
+    updateCurrency,
+    
+    // Commission settings
+    platformCommissionRate,
+    updatePlatformCommissionRate,
+    riderCommissionType,
+    riderCommissionValue,
+    updateRiderCommissionSettings,
+
+    // VAT settings
+    vatEnabled,
+    vatRate,
+    updateVatSettings,
+
+    // Kwara coverage expansion
+    coverageGuideText,
+    updateCoverageGuideText,
+    extremeLocationTiers,
+    updateExtremeLocationTiers,
+    extremeLocations,
+    addExtremeLocation,
+    removeExtremeLocation,
+    updateExtremeLocations
+  } = useDatabase();
+  
+  const [newLocTierId, setNewLocTierId] = useState(""); // "" means No Surcharge / Base Fee
+  const [editingLocTierId, setEditingLocTierId] = useState("");
+  
+  const [comRate, setComRate] = useState(String(platformCommissionRate));
+  const [riderCommType, setRiderCommType] = useState<"flat" | "percentage">(riderCommissionType);
+  const [delCommission, setDelCommission] = useState(String(riderCommissionValue));
+  const [localVatEnabled, setLocalVatEnabled] = useState<boolean>(vatEnabled);
+  const [localVatRate, setLocalVatRate] = useState<string>(String(vatRate));
+  const [successWord, setSuccessWord] = useState("");
+  const [newLocInput, setNewLocInput] = useState("");
+
+  React.useEffect(() => {
+    setComRate(String(platformCommissionRate));
+    setRiderCommType(riderCommissionType);
+    setDelCommission(String(riderCommissionValue));
+    setLocalVatEnabled(vatEnabled);
+    setLocalVatRate(String(vatRate));
+  }, [platformCommissionRate, riderCommissionType, riderCommissionValue, vatEnabled, vatRate]);
+
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatId, setNewCatId] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("ShoppingBag");
+  const [newCatColor, setNewCatColor] = useState("orange");
+
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState("");
+  const [editingCatIcon, setEditingCatIcon] = useState("ShoppingBag");
+  const [editingCatColor, setEditingCatColor] = useState("orange");
+
+  const [editingLocIndex, setEditingLocIndex] = useState<number | null>(null);
+  const [editingLocValue, setEditingLocValue] = useState("");
+
+  // Kwara coverage expansion settings state
+  const [guideInput, setGuideInput] = useState(coverageGuideText);
+  const [newExtremeLocName, setNewExtremeLocName] = useState("");
+  const [newExtremeLocTierId, setNewExtremeLocTierId] = useState("tier-1");
+
+  // Load guideInput when coverageGuideText updates
+  React.useEffect(() => {
+    setGuideInput(coverageGuideText);
+  }, [coverageGuideText]);
+
+  const handleStartEditCategory = (cat: any) => {
+    setEditingCatId(cat.id);
+    setEditingCatName(cat.name);
+    setEditingCatIcon(cat.iconName || "ShoppingBag");
+    setEditingCatColor(cat.color || "orange");
+  };
+
+  const handleSaveEditCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCatId) return;
+    if (!editingCatName.trim()) {
+      alert("Category name is required.");
+      return;
+    }
+    updateVendorCategory(editingCatId, {
+      name: editingCatName.trim(),
+      iconName: editingCatIcon,
+      color: editingCatColor,
+    });
+    setEditingCatId(null);
+    setSuccessWord("Vendor category updated successfully!");
+    setTimeout(() => setSuccessWord(""), 3000);
+  };
+
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newCatName.trim() && newCatId.trim()) {
+      const sanitizedId = newCatId.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (vendorCategories.some(c => c.id === sanitizedId)) {
+        alert("A category with this ID already exists.");
+        return;
+      }
+      addVendorCategory({
+        id: sanitizedId,
+        name: newCatName.trim(),
+        iconName: newCatIcon,
+        color: newCatColor,
+      });
+      setNewCatName("");
+      setNewCatId("");
+      setNewCatIcon("ShoppingBag");
+      setNewCatColor("orange");
+      setSuccessWord("Vendor category registered successfully!");
+      setTimeout(() => setSuccessWord(""), 3000);
+    }
+  };
+
+  const handleRemoveCategory = (catId: string) => {
+    if (confirm(`Are you sure you want to remove the category "${catId}"? Default service fee rules for this category will be deleted.`)) {
+      removeVendorCategory(catId);
+      setSuccessWord("Vendor category removed successfully.");
+      setTimeout(() => setSuccessWord(""), 3000);
+    }
+  };
+
+  const [localGateways, setLocalGateways] = useState<PaymentGateway[]>(paymentGateways || []);
+  const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
+
+  // Sync state whenever paymentGateways load
+  React.useEffect(() => {
+    if (paymentGateways && paymentGateways.length > 0) {
+      setLocalGateways(paymentGateways);
+    }
+  }, [paymentGateways]);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updatePlatformCommissionRate(Number(comRate) || 0);
+    updateRiderCommissionSettings(riderCommType, Number(delCommission) || 0);
+    updateVatSettings(localVatEnabled, Number(localVatRate) || 0);
+    setSuccessWord("Platform parameters synchronized successfully!");
+    setTimeout(() => {
+      setSuccessWord("");
+    }, 3000);
+  };
+
+  const handleAddLocation = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newLocInput.trim();
+    if (trimmed) {
+      if (availableLocations.includes(trimmed)) {
+        alert("This location already exists.");
+        return; // skip duplicate
+      }
+      updateAvailableLocations([...availableLocations, trimmed]);
+      
+      // If a tier is specified, also add it to extremeLocations
+      if (newLocTierId) {
+        addExtremeLocation(trimmed, newLocTierId);
+      }
+      
+      setNewLocInput("");
+      setNewLocTierId("");
+      setSuccessWord("Fulfillment location registered successfully!");
+      setTimeout(() => {
+        setSuccessWord("");
+      }, 3000);
+    }
+  };
+
+  const handleRemoveLocation = (locToRemove: string) => {
+    updateAvailableLocations(availableLocations.filter(loc => loc !== locToRemove));
+    
+    // Also remove its extreme/surcharge mapping if any
+    const matchedEx = extremeLocations.find(el => el.name === locToRemove);
+    if (matchedEx) {
+      removeExtremeLocation(matchedEx.id);
+    }
+    
+    setSuccessWord("Fulfillment location removed successfully.");
+    setTimeout(() => {
+      setSuccessWord("");
+    }, 3000);
+  };
+
+  const handleStartEditLocation = (index: number, val: string) => {
+    setEditingLocIndex(index);
+    setEditingLocValue(val);
+    const exLoc = extremeLocations.find(el => el.name === val);
+    setEditingLocTierId(exLoc ? exLoc.tierId : "");
+  };
+
+  const handleSaveEditLocation = (index: number) => {
+    if (!editingLocValue.trim()) {
+      alert("Location name cannot be empty.");
+      return;
+    }
+    const trimmed = editingLocValue.trim();
+    if (availableLocations.some((loc, i) => i !== index && loc.toLowerCase() === trimmed.toLowerCase())) {
+      alert("This location already exists.");
+      return;
+    }
+    const oldVal = availableLocations[index];
+    const updated = [...availableLocations];
+    updated[index] = trimmed;
+    updateAvailableLocations(updated);
+
+    // Update extreme locations in sync
+    let updatedExtremeLocations = extremeLocations.filter(el => el.name !== oldVal);
+    if (editingLocTierId) {
+      updatedExtremeLocations.push({
+        id: "ex-" + Math.random().toString(36).substring(2, 11),
+        name: trimmed,
+        tierId: editingLocTierId
+      });
+    }
+    updateExtremeLocations(updatedExtremeLocations);
+
+    setEditingLocIndex(null);
+    setSuccessWord("Fulfillment location updated successfully!");
+    setTimeout(() => {
+      setSuccessWord("");
+    }, 3000);
+  };
+
+  const handleToggleGateway = (id: string) => {
+    const updated = localGateways.map(g => g.id === id ? { ...g, isEnabled: !g.isEnabled } : g);
+    setLocalGateways(updated);
+    updatePaymentGateways(updated);
+    const target = localGateways.find(g => g.id === id);
+    setSuccessWord(`${target?.name} is now ${!(target?.isEnabled) ? 'enabled' : 'disabled'}!`);
+    setTimeout(() => {
+      setSuccessWord("");
+    }, 3000);
+  };
+
+  const handleUpdateKeys = (id: string, keyValues: Partial<PaymentGateway>) => {
+    const updated = localGateways.map(g => g.id === id ? { ...g, ...keyValues } : g);
+    setLocalGateways(updated);
+    updatePaymentGateways(updated);
+    setSuccessWord(`Configuration updated for ${localGateways.find(g => g.id === id)?.name}!`);
+    setTimeout(() => {
+      setSuccessWord("");
+    }, 3000);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8 font-sans text-xs">
+      <div>
+        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none">Platform Settings Hub</h1>
+        <p className="text-xs text-gray-500 mt-1">Configure global standard delivery fees, platform commission indices, coverage areas, and active frontend payment gateways.</p>
+      </div>
+
+      {successWord && (
+        <div className="p-3.5 bg-green-50 text-green-700 border border-green-150 rounded-2xl font-bold text-center animate-in fade-in duration-200">
+          {successWord}
+        </div>
+      )}
+
+      {/* CARD 1: Operational Settings */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-purple-600 text-white flex items-center justify-center p-1 shadow-md shadow-purple-100">
+            <Shield className="w-8 h-8 text-white fill-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Operational Variables</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Control base coefficients of the Owode Food marketplace.</span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-650 block">Corporate Platform Commission (%)</label>
+              <input
+                type="number"
+                value={comRate}
+                onChange={(e) => setComRate(e.target.value)}
+                className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-mono font-bold"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-650 block">Courier Commission Type</label>
+              <select
+                value={riderCommType}
+                onChange={(e) => setRiderCommType(e.target.value as any)}
+                className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-bold"
+              >
+                <option value="flat">Flat Amount ({currency})</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-650 block">
+                Courier Commission Value ({riderCommType === "flat" ? currency : "%"})
+              </label>
+              <input
+                type="number"
+                value={delCommission}
+                onChange={(e) => setDelCommission(e.target.value)}
+                className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-mono font-bold"
+                required
+              />
+            </div>
+          </div>
+
+          {/* VAT Configuration Row */}
+          <div className="pt-4 border-t border-gray-100 space-y-4">
+            <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-purple-600">Value Added Tax (VAT) Parameters</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-center justify-between p-3.5 border border-gray-200 rounded-xl bg-gray-50/50">
+                <div>
+                  <span className="text-xs font-bold text-gray-700 block">Apply Value Added Tax (VAT)</span>
+                  <span className="text-[10px] text-gray-450 block">Calculate dynamic tax percentage at checkout</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLocalVatEnabled(!localVatEnabled)}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
+                    localVatEnabled ? "bg-green-500" : "bg-gray-200"
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
+                      localVatEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-650 block">VAT Percentage Rate (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  disabled={!localVatEnabled}
+                  value={localVatRate}
+                  onChange={(e) => setLocalVatRate(e.target.value)}
+                  className={`w-full text-xs p-3.5 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-100 font-mono font-bold ${
+                    !localVatEnabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-50/50 focus:bg-white"
+                  }`}
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              type="submit"
+              className="py-2.5 px-5 bg-[#070329] hover:bg-opacity-95 text-white stroke-purple-100 text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow transition cursor-pointer"
+            >
+              <Save className="w-4 h-4 text-purple-300" />
+              Commit Platform Variables
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* CARD: Global Fees & Pricing Policy */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-teal-600 text-white flex items-center justify-center p-1 shadow-md shadow-teal-100">
+            <Coins className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Global Fee & Delivery Strategy</h3>
+            <span className="text-xs text-gray-400 block mt-0.5 font-sans">Set default service charge schemes (flat, percentage, or categorized) and delivery policies.</span>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Service Fee Scheme */}
+          <div className="space-y-3">
+            <span className="text-xs font-bold text-gray-700 block">Service Charge System Policy</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { type: "category", label: "Category-Specific Fallback", desc: "Based on vendor cuisine/store type" },
+                { type: "flat", label: "Flat Fee Policy", desc: "Constant naira value across all orders" },
+                { type: "percentage", label: "Percentage-Based Fee", desc: "Percentage calculation of total subtotal" }
+              ].map(opt => (
+                <button
+                  key={opt.type}
+                  type="button"
+                  onClick={() => updateGlobalServiceFeeSettings(opt.type as any, globalServiceFeeValue)}
+                  className={`p-4 rounded-2xl border text-left flex flex-col justify-between h-28 cursor-pointer transition ${
+                    globalServiceFeeType === opt.type
+                      ? "bg-teal-50/50 border-teal-500 text-teal-950"
+                      : "bg-gray-50/50 border-gray-150 hover:bg-gray-50 text-gray-800"
+                  }`}
+                >
+                  <span className="text-xs font-black uppercase tracking-wider">{opt.label}</span>
+                  <span className="text-[10px] text-gray-400 leading-snug font-sans mt-2">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Service Fee Value input if not category */}
+          {globalServiceFeeType !== "category" && (
+            <div className="p-4 bg-teal-50/30 rounded-2xl border border-teal-100 space-y-1.5 animate-fade-in">
+              <label className="text-xs font-bold text-teal-800">
+                {globalServiceFeeType === "flat" ? "Global Flat Service Fee (₦)" : "Global Service Fee Percentage (%)"}
+              </label>
+              <div className="relative max-w-xs">
+                <span className="absolute left-3.5 top-3.5 text-xs font-black text-gray-400">
+                  {globalServiceFeeType === "flat" ? "₦" : "%"}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={globalServiceFeeValue}
+                  onChange={(e) => updateGlobalServiceFeeSettings(globalServiceFeeType, Number(e.target.value))}
+                  className="w-full text-xs pl-8 pr-3 py-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-teal-100 font-mono font-bold text-gray-900"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Global Free Delivery */}
+          <div className="pt-4 border-t border-gray-100">
+            <label className="flex items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-gray-100/50 transition cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={globalFreeDelivery}
+                onChange={(e) => updateGlobalFreeDelivery(e.target.checked)}
+                className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-100 border-gray-300 rounded cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-black text-gray-900 block uppercase tracking-wider">Enable Global Free Delivery</span>
+                <span className="text-[10px] text-gray-400 font-sans leading-normal block mt-1">
+                  Enforces {currency}0 delivery fee across all active orders on Owode Food, overriding any vendor-specific standard delivery fee.
+                </span>
+              </div>
+            </label>
+          </div>
+
+          {/* Global Platform Currency Settings */}
+          <div className="pt-6 border-t border-gray-100 space-y-4">
+            <div>
+              <span className="text-xs font-black text-gray-900 block uppercase tracking-wider">Platform Base Currency</span>
+              <span className="text-[10px] text-gray-400 font-sans leading-normal block mt-1">
+                Sets the global currency symbol used in all customer menus, cart details, checkouts, rider payouts, and admin panels.
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {[
+                { symbol: "₦", label: "Naira (₦)" },
+                { symbol: "$", label: "Dollar ($)" },
+                { symbol: "€", label: "Euro (€)" },
+                { symbol: "£", label: "Pound (£)" },
+                { symbol: "₵", label: "Cedi (₵)" }
+              ].map((cur) => (
+                <button
+                  key={cur.symbol}
+                  type="button"
+                  onClick={() => updateCurrency(cur.symbol)}
+                  className={`p-3 rounded-xl border text-center flex flex-col items-center justify-center cursor-pointer transition ${
+                    currency === cur.symbol
+                      ? "bg-teal-50 border-teal-500 text-teal-950 font-black font-mono"
+                      : "bg-gray-50/50 border-gray-100 hover:bg-gray-50 text-gray-700 font-mono"
+                  }`}
+                >
+                  <span className="text-sm font-bold">{cur.symbol}</span>
+                  <span className="text-[9px] text-gray-400 mt-1 font-sans font-normal">{cur.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1.5 bg-gray-50 p-4 rounded-2xl border border-gray-100 max-w-xs">
+              <label className="text-[10px] font-bold text-gray-600 block uppercase tracking-wider">Custom Currency Symbol</label>
+              <input
+                type="text"
+                maxLength={5}
+                value={currency}
+                onChange={(e) => updateCurrency(e.target.value)}
+                placeholder="e.g. ₦, $, €, Ksh"
+                className="w-full text-xs px-3 py-2 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-teal-100 font-mono font-bold text-gray-900"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CARD: Category Service Fees */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-[#070329] text-white flex items-center justify-center p-1 shadow-md shadow-indigo-100">
+            <Coins className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Category Service Fees</h3>
+            <span className="text-xs text-gray-400 block mt-0.5 font-sans">Define standard/default platform service fees charged on orders per vendor type.</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {vendorCategories && vendorCategories.map((cat) => {
+            const IconComponent = (LucideIcons as any)[cat.iconName] || LucideIcons.ShoppingBag;
+            return (
+              <div key={cat.id} className="space-y-1.5 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 mb-2 font-bold text-gray-800">
+                  <div className="w-6 h-6 rounded bg-white border border-gray-100 flex items-center justify-center">
+                    <IconComponent className="w-3.5 h-3.5 text-purple-600" />
+                  </div>
+                  <span className="font-sans text-xs">{cat.name} Service Fee</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 text-xs font-black text-gray-400">{currency}</span>
+                  <input
+                    type="number"
+                    value={categoryServiceFees[cat.id] !== undefined ? categoryServiceFees[cat.id] : 300}
+                    onChange={(e) => updateCategoryServiceFee(cat.id, Number(e.target.value))}
+                    className="w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-purple-100 font-mono font-bold text-gray-900"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* CARD: Manage Vendor Categories */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center p-1 shadow-md shadow-indigo-100">
+            <Layers className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Vendor Categories</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Create, update, or remove top-level hub categories across the Owode Food platform.</span>
+          </div>
+        </div>
+
+        {/* Existing categories list */}
+        <div className="space-y-2.5">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-gray-400 font-bold block">Active Vendor Categories ({vendorCategories?.length || 0})</span>
+          
+          <div className="divide-y divide-gray-100 bg-gray-50/50 rounded-2xl p-4 border border-gray-100">
+            {vendorCategories && vendorCategories.length > 0 ? (
+              vendorCategories.map((cat) => {
+                const IconComponent = (LucideIcons as any)[cat.iconName] || LucideIcons.ShoppingBag;
+                const isEditing = editingCatId === cat.id;
+
+                if (isEditing) {
+                  return (
+                    <div key={cat.id} className="py-4 space-y-3 first:pt-0 last:pb-0 border-b border-gray-100 last:border-0">
+                      <div className="flex items-center justify-between bg-teal-50/50 p-3 rounded-2xl border border-teal-100">
+                        <span className="text-xs font-bold text-teal-800 uppercase">Editing Category: {cat.id}</span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingCatId(null)}
+                            className="text-xs font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-205 py-1.5 px-3 rounded-xl transition cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveEditCategory}
+                            className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 py-1.5 px-3.5 rounded-xl transition cursor-pointer"
+                          >
+                            Save Changes
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500">Category Display Name</label>
+                          <input
+                            type="text"
+                            value={editingCatName}
+                            onChange={(e) => setEditingCatName(e.target.value)}
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-teal-100 font-semibold text-gray-900"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500">Lucide Icon</label>
+                          <select
+                            value={editingCatIcon}
+                            onChange={(e) => setEditingCatIcon(e.target.value)}
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-teal-100 font-semibold cursor-pointer text-gray-900"
+                          >
+                            <option value="ShoppingBag">ShoppingBag 🛍️</option>
+                            <option value="Store">Store 🏪</option>
+                            <option value="UtensilsCrossed">UtensilsCrossed 🍴</option>
+                            <option value="Apple">Apple 🍎</option>
+                            <option value="Pill">Pill 💊</option>
+                            <option value="Coffee">Coffee ☕</option>
+                            <option value="IceCream">IceCream 🍦</option>
+                            <option value="Pizza">Pizza 🍕</option>
+                            <option value="GlassWater">GlassWater 🥛</option>
+                            <option value="Flower2">Flower2 🌸</option>
+                            <option value="BookOpen">BookOpen 📖</option>
+                            <option value="HeartPulse">HeartPulse 🩺</option>
+                            <option value="Truck">Truck 🚚</option>
+                            <option value="Gift">Gift 🎁</option>
+                            <option value="Compass">Compass 🧭</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500">Color Palette Accent</label>
+                          <select
+                            value={editingCatColor}
+                            onChange={(e) => setEditingCatColor(e.target.value)}
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-teal-100 font-semibold cursor-pointer text-gray-900"
+                          >
+                            <option value="orange">Orange 🟧</option>
+                            <option value="emerald">Emerald 🟩</option>
+                            <option value="sky">Sky 🟦</option>
+                            <option value="rose">Rose 🟥</option>
+                            <option value="purple">Purple 🟪</option>
+                            <option value="indigo">Indigo 🟪</option>
+                            <option value="pink">Pink 🌸</option>
+                            <option value="amber">Amber 🟨</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={cat.id} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center border border-gray-100 bg-white`}>
+                        <IconComponent className="w-4 h-4 text-purple-600" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold text-gray-800 block">{cat.name}</span>
+                        <span className="text-[9px] font-mono text-gray-400">ID: {cat.id} | Color: {cat.color}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleStartEditCategory(cat)}
+                        className="text-gray-400 hover:text-teal-600 transition p-1 cursor-pointer"
+                        title="Edit category"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveCategory(cat.id)}
+                        className="text-gray-400 hover:text-red-750 transition p-1 cursor-pointer"
+                        title="Delete category"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-gray-400 text-xs text-center py-4">No active categories. Create one below!</p>
+            )}
+          </div>
+        </div>
+
+        {/* Create New Category Form */}
+        <form onSubmit={handleAddCategory} className="space-y-4 pt-2">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-600 font-bold block">Register New Category</span>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Category Display Name</label>
+              <input
+                type="text"
+                value={newCatName}
+                onChange={(e) => {
+                  setNewCatName(e.target.value);
+                  if (!newCatId) {
+                    setNewCatId(e.target.value.toLowerCase().trim().replace(/[^a-z0-9]/g, ""));
+                  }
+                }}
+                placeholder="e.g. Bakeries, Flowers"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-semibold"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Category Unique ID (alphanumeric)</label>
+              <input
+                type="text"
+                value={newCatId}
+                onChange={(e) => setNewCatId(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+                placeholder="e.g. bakery, flowers"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-mono font-bold"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Lucide Icon name</label>
+              <select
+                value={newCatIcon}
+                onChange={(e) => setNewCatIcon(e.target.value)}
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-semibold"
+              >
+                <option value="ShoppingBag">ShoppingBag 🛍️</option>
+                <option value="Store">Store 🏪</option>
+                <option value="UtensilsCrossed">UtensilsCrossed 🍴</option>
+                <option value="Apple">Apple 🍎</option>
+                <option value="Pill">Pill 💊</option>
+                <option value="Coffee">Coffee ☕</option>
+                <option value="IceCream">IceCream 🍦</option>
+                <option value="Pizza">Pizza 🍕</option>
+                <option value="GlassWater">GlassWater 🥛</option>
+                <option value="Flower2">Flower2 🌸</option>
+                <option value="BookOpen">BookOpen 📖</option>
+                <option value="HeartPulse">HeartPulse 🩺</option>
+                <option value="Truck">Truck 🚚</option>
+                <option value="Gift">Gift 🎁</option>
+                <option value="Compass">Compass 🧭</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Color Palette Accent</label>
+              <select
+                value={newCatColor}
+                onChange={(e) => setNewCatColor(e.target.value)}
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-semibold"
+              >
+                <option value="orange">Orange 🟧</option>
+                <option value="yellow">Yellow 🟨</option>
+                <option value="sky">Sky Blue 🟦</option>
+                <option value="red">Red 🟥</option>
+                <option value="purple">Purple 🟪</option>
+                <option value="emerald">Emerald Green 🟩</option>
+                <option value="indigo">Indigo 🌌</option>
+                <option value="pink">Pink 🦩</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              className="py-2.5 px-5 bg-[#070329] hover:bg-opacity-95 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-purple-300" />
+              Register Category
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* CARD 2: Service Delivery Locations */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-sky-600 text-white flex items-center justify-center p-1 shadow-md shadow-sky-100">
+            <MapPin className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Fulfillment Locations & Delivery Zones</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Control the available "Deliver to" zones and link them to delivery surcharge tiers.</span>
+          </div>
+        </div>
+
+        {/* Existing Locations list */}
+        <div className="space-y-2.5">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-gray-400 font-bold block">Active Coverage Locations & Associated Tiers ({availableLocations.length})</span>
+          
+          <div className="divide-y divide-gray-100 bg-gray-50/50 rounded-2xl p-4 border border-gray-100">
+            {availableLocations.length > 0 ? (
+              availableLocations.map((loc, index) => {
+                const isEditing = editingLocIndex === index;
+                const exLoc = extremeLocations.find(el => el.name === loc);
+                const tier = exLoc ? extremeLocationTiers.find(t => t.id === exLoc.tierId) : null;
+
+                return (
+                  <div key={loc} className="py-2.5 flex items-center justify-between first:pt-0 last:pb-0 gap-4">
+                    {isEditing ? (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-grow">
+                        <div className="flex items-center gap-2 flex-grow">
+                          <MapPin className="w-4 h-4 text-teal-600 shrink-0" />
+                          <input
+                            type="text"
+                            value={editingLocValue}
+                            onChange={(e) => setEditingLocValue(e.target.value)}
+                            className="flex-grow text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-4 focus:ring-teal-50 font-semibold text-gray-900 bg-white"
+                            autoFocus
+                          />
+                        </div>
+                        <select
+                          value={editingLocTierId}
+                          onChange={(e) => setEditingLocTierId(e.target.value)}
+                          className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-4 focus:ring-teal-50 font-semibold text-gray-900 bg-white"
+                        >
+                          <option value="">Base Fee (No Surcharge)</option>
+                          {extremeLocationTiers.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} (+{currency}{t.surcharge})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-gray-800">
+                        <MapPin className="w-4 h-4 text-red-500 shrink-0" />
+                        <span>{loc}</span>
+                        {tier ? (
+                          <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 font-extrabold rounded-full border border-amber-100 shrink-0">
+                            {tier.name} (+{currency}{tier.surcharge.toLocaleString()})
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-700 font-extrabold rounded-full border border-green-100 shrink-0">
+                            Base Fee
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Let's call the proper handleSaveEditLocation that uses editingLocValue
+                              // Wait, we need to make sure the input's onChange sets editingLocValue!
+                              handleSaveEditLocation(index);
+                            }}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded transition cursor-pointer"
+                            title="Save location"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingLocIndex(null)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition cursor-pointer"
+                            title="Cancel"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditLocation(index, loc)}
+                            className="p-1 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded transition cursor-pointer"
+                            title="Edit location & tier"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLocation(loc)}
+                            className="text-gray-400 hover:text-red-750 hover:bg-red-50 rounded transition p-1 cursor-pointer"
+                            title="Delete location"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-gray-400 text-xs text-center py-4">No active delivery locations. Add one below!</p>
+            )}
+          </div>
+        </div>
+
+        {/* Add New Location form */}
+        <form onSubmit={handleAddLocation} className="space-y-3 pt-2">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-sky-600 font-bold block">Register New Coverage Area & Surcharge Tier</span>
+          
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="relative md:col-span-6">
+              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={newLocInput}
+                onChange={(e) => setNewLocInput(e.target.value)}
+                placeholder="e.g. University Permanent Site, Eyenkorin"
+                className="w-full text-xs pl-10 pr-3.5 py-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold"
+                required
+              />
+            </div>
+
+            <div className="md:col-span-4">
+              <select
+                value={newLocTierId}
+                onChange={(e) => setNewLocTierId(e.target.value)}
+                className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 font-semibold text-gray-950"
+              >
+                <option value="">Base Fee (No Surcharge)</option>
+                {extremeLocationTiers.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} (+{currency}{t.surcharge.toLocaleString()})</option>
+                ))}
+              </select>
+            </div>
+            
+            <button
+              type="submit"
+              className="md:col-span-2 py-3.5 px-5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Add Area
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* CARD 2B: Configure Tier Surcharge Pricing */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500 text-white flex items-center justify-center p-1 shadow-md shadow-amber-100">
+            <Truck className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Tier-Based Surcharge Pricing</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Configure delivery mobilization surcharge rates for each tier level.</span>
+          </div>
+        </div>
+
+        {/* 1. Edit Tier Surcharges */}
+        <div className="space-y-4">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-gray-400 font-bold block">Configure Tier Surcharge Fees</span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {extremeLocationTiers.map((tier) => (
+              <div key={tier.id} className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-2">
+                <span className="text-xs font-black text-[#070329] block">{tier.name}</span>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">{currency}</span>
+                  <input
+                    type="number"
+                    value={tier.surcharge}
+                    onChange={(e) => {
+                      const updatedValue = Number(e.target.value);
+                      const updatedTiers = extremeLocationTiers.map(t => 
+                        t.id === tier.id ? { ...t, surcharge: updatedValue } : t
+                      );
+                      updateExtremeLocationTiers(updatedTiers);
+                    }}
+                    className="w-full text-xs font-bold pl-7 pr-3 py-2 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-amber-50 outline-none text-gray-950"
+                    placeholder="Surcharge fee"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* CARD 2C: Coverage Reference Guide Editor */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-teal-600 text-white flex items-center justify-center p-1 shadow-md shadow-teal-100">
+            <Layers className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Coverage Reference Guide</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Edit the reference guide shown to customers during delivery selection.</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <textarea
+            value={guideInput}
+            onChange={(e) => setGuideInput(e.target.value)}
+            rows={10}
+            placeholder="Describe the coverage zones, key landmarks, delivery timetables, or extreme charges..."
+            className="w-full text-xs font-mono p-4 border border-gray-200 rounded-2xl bg-gray-50/30 focus:bg-white focus:ring-4 focus:ring-teal-50 outline-none leading-relaxed text-gray-800"
+          />
+
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[10px] text-gray-400 font-mono">Format using standard Markdown blocks.</span>
+            <button
+              type="button"
+              onClick={() => {
+                updateCoverageGuideText(guideInput);
+                setSuccessWord("Coverage Guide saved!");
+                setTimeout(() => setSuccessWord(""), 3000);
+              }}
+              className="px-5 py-3 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black rounded-xl flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              Save Coverage Guide
+            </button>
+          </div>
+
+          {successWord && (
+            <div className="p-3 bg-green-50 text-green-700 text-xs font-bold rounded-xl text-center border border-green-100 animate-pulse">
+              {successWord}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* CARD 3: Payment Gateways Manager */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center p-1 shadow-md shadow-emerald-100">
+            <CreditCard className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Payment Gateways</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Select and configure payment options showing at customer checkout.</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {localGateways.map((gw) => {
+            const isConfigurable = gw.id === "monnify" || gw.id === "bank_transfer";
+            const isOpen = activeConfigId === gw.id;
+            
+            return (
+              <div 
+                key={gw.id} 
+                className={`p-5 rounded-2xl border transition duration-200 ${
+                  gw.isEnabled 
+                    ? "bg-white border-gray-200 shadow-sm" 
+                    : "bg-gray-50/60 border-gray-100 opacity-75"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-[#070329]">{gw.name}</span>
+                      {gw.isEnabled ? (
+                        <span className="bg-green-50 text-green-700 border border-green-100 text-[9px] font-bold px-1.5 py-0.5 rounded-md font-mono">
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span className="bg-gray-100 text-gray-500 border border-gray-200 text-[9px] font-bold px-1.5 py-0.5 rounded-md font-mono">
+                          DISABLED
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">{gw.desc}</p>
+                  </div>
+
+                  {/* Toggle Action and Settings gear */}
+                  <div className="flex items-center gap-2.5">
+                    {isConfigurable && gw.isEnabled && (
+                      <button
+                        onClick={() => setActiveConfigId(isOpen ? null : gw.id)}
+                        className={`p-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
+                          isOpen 
+                            ? "bg-[#0ea5e9]/10 text-[#0ea5e9] border border-[#0ea5e9]/20" 
+                            : "bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600"
+                        }`}
+                        title="Configure Gateways API keys or parameters"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => handleToggleGateway(gw.id)}
+                      type="button"
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        gw.isEnabled ? "bg-emerald-600" : "bg-gray-250"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          gw.isEnabled ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-panel configurations */}
+                {isConfigurable && gw.isEnabled && isOpen && (
+                  <div className="mt-5 pt-5 border-t border-gray-100 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-[#0ea5e9] font-bold block flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-blue-500" />
+                      {gw.name} Secure Parameters
+                    </span>
+
+                    {gw.id === "monnify" && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-550 uppercase">API Key / Public Key</label>
+                          <input
+                            type="text"
+                            value={gw.apiKey || ""}
+                            onChange={(e) => handleUpdateKeys("monnify", { apiKey: e.target.value })}
+                            placeholder="MK_prod_..."
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-gray-50/50 font-mono focus:bg-white outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-550 uppercase">Secret Key</label>
+                          <input
+                            type="password"
+                            value={gw.secretKey || ""}
+                            onChange={(e) => handleUpdateKeys("monnify", { secretKey: e.target.value })}
+                            placeholder="sk_prod_..."
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-gray-50/50 font-mono focus:bg-white outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-550 uppercase">Monnify Contract Code</label>
+                          <input
+                            type="text"
+                            value={gw.contractCode || ""}
+                            onChange={(e) => handleUpdateKeys("monnify", { contractCode: e.target.value })}
+                            placeholder="1234567890"
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-gray-50/50 font-mono focus:bg-white outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {gw.id === "bank_transfer" && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-550 uppercase">Bank Name</label>
+                          <input
+                            type="text"
+                            value={gw.bankName || ""}
+                            onChange={(e) => handleUpdateKeys("bank_transfer", { bankName: e.target.value })}
+                            placeholder="Guaranty Trust Bank"
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-gray-50/50 font-semibold focus:bg-white outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-555 uppercase">Account Number</label>
+                          <input
+                            type="text"
+                            value={gw.accountNumber || ""}
+                            onChange={(e) => handleUpdateKeys("bank_transfer", { accountNumber: e.target.value })}
+                            placeholder="0123456789"
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-gray-50/50 font-mono focus:bg-white outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-555 uppercase">Account Name</label>
+                          <input
+                            type="text"
+                            value={gw.accountName || ""}
+                            onChange={(e) => handleUpdateKeys("bank_transfer", { accountName: e.target.value })}
+                            placeholder="Owode Food Marketplace LTD"
+                            className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-gray-50/50 font-semibold focus:bg-white outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-gray-400">
+                      * Parameters are committed securely and will be processed immediately upon customer checkout.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
