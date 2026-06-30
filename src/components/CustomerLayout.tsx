@@ -66,6 +66,8 @@ export const CustomerLayout: React.FC = () => {
 
   // Dropdown UI visibility state
   const [showLocationSelect, setShowLocationSelect] = useState(false);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [districtFilterQuery, setDistrictFilterQuery] = useState("");
 
   const cartTotalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotalPrice = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -286,7 +288,7 @@ export const CustomerLayout: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col lg:flex-row text-[#070329] selection:bg-[#070329]/15 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8f9fa] flex flex-col lg:flex-row text-[#070329] selection:bg-[#070329]/15">
       
       {/* 1. Left Sidebar for Desktop */}
       <aside className="hidden lg:flex w-72 bg-[#070329] text-white flex-col shrink-0 sticky top-0 h-screen transition-all duration-300">
@@ -325,70 +327,88 @@ export const CustomerLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         
         {/* Top Header section */}
-        <header className="bg-white/95 backdrop-blur-md border-b border-gray-100 z-40 sticky top-0 py-4 px-4 sm:px-6 lg:px-8 shadow-sm flex items-center justify-between gap-4">
+        <header className="bg-white/95 backdrop-blur-md border-b border-gray-100 z-40 sticky top-0 py-3 sm:py-4 px-3 sm:px-6 lg:px-8 shadow-sm flex items-center justify-between gap-1.5 sm:gap-4">
           
           {/* Logo on mobile view only */}
-          <div className="flex items-center gap-2 lg:hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2 lg:hidden shrink-0">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-xl transition cursor-pointer"
+              className="p-1.5 sm:p-2 -ml-1 sm:-ml-2 text-gray-600 hover:bg-gray-100 rounded-xl transition cursor-pointer"
               title="Open Navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <Link to="/" className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-xl bg-[#070329] text-white flex items-center justify-center font-extrabold text-sm shadow">
+            <Link to="/" className="flex items-center gap-1.5 sm:gap-2">
+              <span className="w-8 h-8 rounded-xl bg-[#070329] text-white flex items-center justify-center font-extrabold text-sm shadow shrink-0">
                 O
               </span>
-              <span className="font-bold text-sm tracking-wider text-[#070329] uppercase">
+              <span className="font-bold text-sm tracking-wider text-[#070329] uppercase hidden min-[440px]:inline">
                 Owode Food
               </span>
             </Link>
           </div>
 
           {/* Location Delivery Selector (Nigeria Theme) */}
-          <div className="relative">
+          <div className="relative min-w-0">
             <button 
               onClick={() => setShowLocationSelect(!showLocationSelect)}
-              className="flex items-center gap-1.5 text-left group focus:outline-none"
+              className="flex items-center gap-1 sm:gap-1.5 text-left group focus:outline-none min-w-0"
             >
-              <div className="p-2 bg-red-50 rounded-xl text-red-500">
+              <div className="p-1.5 sm:p-2 bg-red-50 rounded-xl text-red-500 shrink-0">
                 <MapPin className="w-4 h-4 shrink-0" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold block leading-none">Deliver to</span>
-                <span className="text-xs font-bold text-[#070329] flex items-center gap-1 truncate max-w-[160px] sm:max-w-xs">
+                <span className="text-xs font-bold text-[#070329] flex items-center gap-1 truncate max-w-[85px] min-[380px]:max-w-[125px] sm:max-w-xs">
                   {selectedLocation}
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-500 group-hover:text-blue-600 transition" />
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-500 group-hover:text-blue-600 transition shrink-0" />
                 </span>
               </div>
             </button>
 
-            {showLocationSelect && (
+             {showLocationSelect && (
               <div className="absolute left-0 mt-3 w-64 bg-white border border-gray-100 rounded-2xl shadow-xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 block mb-2">Select Delivery Zone</span>
-                {availableLocations.map((addr) => (
-                  <button
-                    key={addr}
-                    onClick={() => {
-                      setSelectedLocation(addr);
-                      setShowLocationSelect(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition hover:bg-gray-50 ${
-                      selectedLocation === addr ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700"
-                    }`}
-                  >
-                    <MapPin className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{addr}</span>
-                  </button>
-                ))}
+                <div className="px-2 mb-2">
+                  <input
+                    type="text"
+                    placeholder="Search zone..."
+                    value={locationQuery}
+                    onChange={(e) => setLocationQuery(e.target.value)}
+                    className="w-full text-xs p-2 border border-gray-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 font-medium text-gray-900"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-0.5">
+                  {availableLocations
+                    .filter((addr) => addr.toLowerCase().includes(locationQuery.toLowerCase()))
+                    .map((addr) => (
+                      <button
+                        key={addr}
+                        onClick={() => {
+                          setSelectedLocation(addr);
+                          setShowLocationSelect(false);
+                          setLocationQuery("");
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition hover:bg-gray-50 ${
+                          selectedLocation === addr ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700"
+                        }`}
+                      >
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{addr}</span>
+                      </button>
+                    ))}
+                  {availableLocations.filter((addr) => addr.toLowerCase().includes(locationQuery.toLowerCase())).length === 0 && (
+                    <div className="text-[10px] text-gray-400 text-center py-4">No matching zones found</div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           {/* Center search (pure action input proxying home path or listing) */}
           <div className="hidden md:flex flex-1 max-w-md relative mx-4">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text"
               placeholder="Search for food, restaurants..."
@@ -402,8 +422,8 @@ export const CustomerLayout: React.FC = () => {
           </div>
 
           {/* Right Notification Bell & Profile Avatar */}
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            <button className="p-2.5 hover:bg-gray-100 rounded-xl text-gray-600 relative transition">
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
+            <button className="p-2 sm:p-2.5 hover:bg-gray-100 rounded-xl text-gray-600 relative transition">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
@@ -411,12 +431,12 @@ export const CustomerLayout: React.FC = () => {
             {currentUser ? (
               <Link 
                 to="/profile" 
-                className="flex items-center gap-2 p-1 hover:bg-gray-50 rounded-xl transition"
+                className="flex items-center gap-1.5 p-1 hover:bg-gray-50 rounded-xl transition"
               >
                 <img 
                   src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80" 
                   alt="user avatar"
-                  className="w-8 h-8 rounded-full object-cover border border-gray-100 shadow-sm"
+                  className="w-8 h-8 rounded-full object-cover border border-gray-100 shadow-sm shrink-0"
                   referrerPolicy="no-referrer"
                 />
                 <span className="text-xs font-bold hidden sm:inline text-[#070329]">
@@ -426,7 +446,7 @@ export const CustomerLayout: React.FC = () => {
             ) : (
               <Link 
                 to="/login"
-                className="text-xs font-bold bg-[#070329] text-white py-2 px-4 rounded-xl shadow transition hover:bg-opacity-90"
+                className="text-xs font-bold bg-[#070329] text-white py-2 px-3 sm:py-2 sm:px-4 rounded-xl shadow transition hover:bg-opacity-90"
               >
                 Login
               </Link>
@@ -473,7 +493,7 @@ export const CustomerLayout: React.FC = () => {
           <div className="relative">
             <ShoppingBag className="w-5 h-5 text-white" />
             {cartTotalItems > 0 && (
-              <span className="absolute -top-2.5 -right-2.5 w-4.5 h-4.5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+              <span className="absolute -top-2.5 -right-2.5 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
                 {cartTotalItems}
               </span>
             )}
@@ -587,7 +607,7 @@ export const CustomerLayout: React.FC = () => {
                 </div>
               </form>
 
-              {/* simulated payment methods */}
+              {/* payment methods */}
               <div className="space-y-2 pt-2">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Fast Settlement Services</h4>
                 <div className="grid grid-cols-2 gap-2">
@@ -641,14 +661,26 @@ export const CustomerLayout: React.FC = () => {
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Select Delivery District / Zone</label>
+                  <input
+                    type="text"
+                    placeholder="🔍 Filter zones list..."
+                    value={districtFilterQuery}
+                    onChange={(e) => setDistrictFilterQuery(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-100 text-gray-950 font-medium mb-1.5"
+                  />
                   <select
                     value={newAddressDistrict}
                     onChange={(e) => setNewAddressDistrict(e.target.value)}
                     className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-white focus:ring-4 focus:ring-blue-100 outline-none text-gray-950 font-bold"
                   >
-                    {availableLocations.map((loc) => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
+                    {availableLocations
+                      .filter((loc) => loc.toLowerCase().includes(districtFilterQuery.toLowerCase()))
+                      .map((loc) => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    {availableLocations.filter((loc) => loc.toLowerCase().includes(districtFilterQuery.toLowerCase())).length === 0 && (
+                      <option value="">No matching zones found</option>
+                    )}
                   </select>
                 </div>
 

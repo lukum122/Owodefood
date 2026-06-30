@@ -1,16 +1,23 @@
 import React, { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
-import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, ShieldCheck, X, Truck } from "lucide-react";
+import { isVendorOpen } from "../types";
+import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, ShieldCheck, X, Truck, AlertTriangle } from "lucide-react";
 
 export const CustomerVendorMenu: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency } = useDatabase();
+  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser } = useDatabase();
   const [addedBanner, setAddedBanner] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"menu" | "reviews" | "info">("menu");
   const [productToOverwrite, setProductToOverwrite] = useState<any | null>(null);
   const [customizingProduct, setCustomizingProduct] = useState<any | null>(null);
   const [selectedAddons, setSelectedAddons] = useState<any[]>([]);
+
+  // New review form states
+  const [newRating, setNewRating] = useState<number>(5);
+  const [newComment, setNewComment] = useState<string>("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<boolean>(false);
 
   const vendorObj = vendors.find(v => v.id === id);
   if (!vendorObj) {
@@ -32,6 +39,9 @@ export const CustomerVendorMenu: React.FC = () => {
   const categoriesList: string[] = Array.from(new Set(vendorProducts.map(p => p.category as string))) as string[];
 
   const handleAddProduct = (p: any) => {
+    if (!isVendorOpen(vendorObj)) {
+      return;
+    }
     // Check if cart has items from another vendor
     if (cart.length > 0 && cart[0].product.vendorId !== vendorObj.id) {
       setProductToOverwrite(p);
@@ -46,6 +56,9 @@ export const CustomerVendorMenu: React.FC = () => {
   };
 
   const handleCustomizeOrAdd = (p: any) => {
+    if (!isVendorOpen(vendorObj)) {
+      return;
+    }
     if (p.addons && p.addons.length > 0) {
       setCustomizingProduct(p);
       setSelectedAddons([]);
@@ -55,6 +68,9 @@ export const CustomerVendorMenu: React.FC = () => {
   };
 
   const handleAddProductWithCustomExtras = (p: any, addons: any[]) => {
+    if (!isVendorOpen(vendorObj)) {
+      return;
+    }
     if (cart.length > 0 && cart[0].product.vendorId !== vendorObj.id) {
       setProductToOverwrite({ product: p, addons });
       setCustomizingProduct(null);
@@ -84,12 +100,32 @@ export const CustomerVendorMenu: React.FC = () => {
     }
   };
 
-  // Mock Reviews
-  const mockReviews = [
-    { id: 1, author: "Adebayo O.", rating: 5, comment: "Smoky Jollof of dreams! Highly recommend Mama Cass, original flavor is preserved.", date: "2 days ago" },
-    { id: 2, author: "Chinedu E.", rating: 4, comment: "Crispy grilled chicken is excellent. Perfectly packed and came hot.", date: "1 week ago" },
-    { id: 3, author: "Fatima Y.", rating: 5, comment: "Authentic taste. Fast checkout setup, we will order again on Friday!", date: "2 weeks ago" }
-  ];
+  // Filter reviews for this vendor
+  const vendorReviews = reviews.filter(r => r.vendorId === vendorObj.id);
+
+  const handleSubmitReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setFormSuccess(false);
+
+    if (!currentUser) {
+      setFormError("Please log in to submit a review.");
+      return;
+    }
+
+    if (!newComment.trim()) {
+      setFormError("Review comment cannot be empty.");
+      return;
+    }
+
+    addReview(vendorObj.id, newRating, newComment.trim());
+    setFormSuccess(true);
+    setNewComment("");
+    setNewRating(5);
+    setTimeout(() => {
+      setFormSuccess(false);
+    }, 3000);
+  };
 
   return (
     <div className="space-y-8 font-sans">
@@ -166,9 +202,16 @@ export const CustomerVendorMenu: React.FC = () => {
           )}
           
           <div className="absolute bottom-6 left-6 right-6 text-white space-y-2">
-            <span className="py-1 px-3 bg-[#0ea5e9] text-white text-[10px] font-extrabold uppercase rounded-full">
-              {vendorObj.cuisine}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="py-1 px-3 bg-[#0ea5e9] text-white text-[10px] font-extrabold uppercase rounded-full">
+                {vendorObj.cuisine}
+              </span>
+              {!isVendorOpen(vendorObj) && (
+                <span className="py-1 px-3 bg-red-600 text-white text-[10px] font-extrabold uppercase rounded-full flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" /> Closed
+                </span>
+              )}
+            </div>
             <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
               {vendorObj.name}
             </h1>
@@ -202,7 +245,7 @@ export const CustomerVendorMenu: React.FC = () => {
             <div className="flex items-center gap-1.5">
               <Truck className="w-4 h-4 text-emerald-600" />
               <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                {currency}{vendorObj.deliveryFee !== undefined ? vendorObj.deliveryFee.toLocaleString() : "750"} Delivery
+                {currency}{(vendorObj.deliveryFee ?? 750).toLocaleString()} Delivery
               </span>
             </div>
           </div>
@@ -230,7 +273,7 @@ export const CustomerVendorMenu: React.FC = () => {
             activeTab === "reviews" ? "border-[#0ea5e9] text-[#0ea5e9]" : "border-transparent text-gray-400 hover:text-[#070329]"
           }`}
         >
-          Reviews ({mockReviews.length})
+          Reviews ({vendorReviews.length})
         </button>
         <button 
           onClick={() => setActiveTab("info")}
@@ -314,7 +357,11 @@ export const CustomerVendorMenu: React.FC = () => {
                                     {currency}{product.price.toLocaleString()}
                                   </span>
 
-                                  {product.isAvailable ? (
+                                  {!isVendorOpen(vendorObj) ? (
+                                    <span className="text-[10px] font-black text-red-650 bg-red-50 py-1.5 px-3 rounded-xl border border-red-100 uppercase tracking-wider">
+                                      Closed
+                                    </span>
+                                  ) : product.isAvailable ? (
                                     qtyInCart > 0 ? (
                                       <div className="flex flex-col items-end gap-1">
                                         <div className="flex items-center gap-2 bg-gray-150 py-1 px-2 rounded-xl border border-gray-200">
@@ -387,23 +434,107 @@ export const CustomerVendorMenu: React.FC = () => {
 
         {/* REVIEWS TAB */}
         {activeTab === "reviews" && (
-          <div className="lg:col-span-12 space-y-4 max-w-2xl">
-            {mockReviews.map(r => (
-              <div key={r.id} className="bg-white p-5 rounded-3xl border border-gray-100 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-[#070329]">{r.author}</h4>
-                    <span className="text-[10px] text-gray-400 font-medium">{r.date}</span>
+          <div className="lg:col-span-12 space-y-6 max-w-2xl">
+            {/* WRITE A REVIEW FORM */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-black text-[#070329] uppercase tracking-wider">Share your experience</h3>
+              
+              {currentUser ? (
+                <form onSubmit={handleSubmitReview} className="space-y-4">
+                  {formError && (
+                    <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-semibold">
+                      {formError}
+                    </div>
+                  )}
+                  {formSuccess && (
+                    <div className="p-3 bg-green-50 border border-green-100 text-green-600 rounded-xl text-xs font-semibold">
+                      ✓ Your review has been published successfully!
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-gray-500">Your Rating:</span>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((stars) => (
+                        <button
+                          key={stars}
+                          type="button"
+                          onClick={() => setNewRating(stars)}
+                          className="focus:outline-none cursor-pointer transform hover:scale-110 transition"
+                        >
+                          <Star
+                            className={`w-6 h-6 ${
+                              stars <= newRating
+                                ? "text-amber-500 fill-amber-500"
+                                : "text-gray-200"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: r.rating }).map((_, i) => (
-                      <Star key={i} className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                    ))}
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-500">Your Comment:</label>
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="What did you love about their food? Be specific!"
+                      className="w-full text-xs p-3.5 border border-gray-100 bg-gray-50/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 focus:border-[#0ea5e9] min-h-[90px] font-medium text-[#070329] placeholder-gray-400"
+                    />
                   </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-[#0ea5e9] text-white py-3 px-5 rounded-2xl text-xs font-bold hover:bg-[#0284c7] cursor-pointer shadow-sm hover:shadow transition"
+                  >
+                    Submit Review
+                  </button>
+                </form>
+              ) : (
+                <div className="p-4 bg-gray-50 rounded-2xl text-center border border-gray-100">
+                  <p className="text-xs font-bold text-gray-600">Want to write a review?</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Please sign in to your customer account to leave feedback.</p>
                 </div>
-                <p className="text-xs text-gray-650 leading-relaxed font-medium">"{r.comment}"</p>
-              </div>
-            ))}
+              )}
+            </div>
+
+            {/* REVIEWS LIST */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-black text-[#070329] uppercase tracking-wider px-1">
+                Customer Feedback ({vendorReviews.length})
+              </h3>
+
+              {vendorReviews.length > 0 ? (
+                vendorReviews.map(r => (
+                  <div key={r.id} className="bg-white p-5 rounded-3xl border border-gray-100 space-y-3 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-[#070329]">{r.author}</h4>
+                        <span className="text-[10px] text-gray-400 font-medium">
+                          {r.createdAt ? new Date(r.createdAt).toLocaleDateString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          }) : "Recently"}
+                        </span>
+                      </div>
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: r.rating }).map((_, i) => (
+                          <Star key={i} className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-650 leading-relaxed font-medium">"{r.comment}"</p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-gray-200">
+                  <p className="text-xs font-bold text-gray-500">No reviews yet</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Be the first to share your dining experience!</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

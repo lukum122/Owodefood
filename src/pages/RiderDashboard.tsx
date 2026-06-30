@@ -46,7 +46,7 @@ export const RiderDashboard: React.FC = () => {
 
   // Compute actual payouts based on delivery fees of completed orders minus platform commission
   const earnings = completedOrders.reduce(
-    (sum, o) => sum + getNetPayout(o.deliveryFee !== undefined ? o.deliveryFee : 750), 
+    (sum, o) => sum + getNetPayout(o.deliveryFee ?? 750), 
     0
   );
 
@@ -149,7 +149,7 @@ export const RiderDashboard: React.FC = () => {
                     </div>
 
                     <div className="text-[11px] text-indigo-700 font-bold block bg-indigo-50/50 p-2 rounded-xl">
-                      Estimated earnings: {currency}{getNetPayout(job.deliveryFee !== undefined ? job.deliveryFee : 750).toLocaleString()} (after commission)
+                      Estimated earnings: {currency}{getNetPayout(job.deliveryFee ?? 750).toLocaleString()} (after commission)
                     </div>
                   </div>
 

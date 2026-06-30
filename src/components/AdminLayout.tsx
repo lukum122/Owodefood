@@ -152,7 +152,7 @@ export const AdminLayout: React.FC = () => {
               className="md:hidden p-2 bg-slate-50 hover:bg-slate-100 border border-gray-200 rounded-xl text-slate-700 transition cursor-pointer"
               title="Open Navigation Menu"
             >
-              <Menu className="w-4.5 h-4.5" />
+              <Menu className="w-5 h-5" />
             </button>
 
             <div className="min-w-0">

@@ -17,6 +17,7 @@ export interface User {
   name: string;
   phone: string;
   role: UserRole;
+  gender?: string;
   createdAt: string;
 }
 
@@ -43,6 +44,7 @@ export interface Vendor {
   createdAt: string;
   openingTime?: string;
   closingTime?: string;
+  openingDays?: string[]; // e.g., ["Monday", "Tuesday", etc.]
   coverImage?: string;
   category?: VendorCategory;
   prepTime?: number; // preparation/packing time in minutes
@@ -171,5 +173,52 @@ export interface ExtremeLocation {
   id: string;
   name: string;
   tierId: string;
+}
+
+export interface Review {
+  id: string;
+  vendorId: string;
+  customerId: string;
+  author: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
+export function isVendorOpen(vendor: any): boolean {
+  if (!vendor) return false;
+
+  const now = new Date();
+  
+  // 1. Check opening days (e.g., ["Monday", "Tuesday", etc.])
+  const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const currentDayName = daysOfWeek[now.getDay()];
+
+  if (vendor.openingDays && Array.isArray(vendor.openingDays) && vendor.openingDays.length > 0) {
+    if (!vendor.openingDays.includes(currentDayName)) {
+      return false;
+    }
+  }
+
+  // 2. Check opening/closing hours
+  const opening = vendor.openingTime || "08:00";
+  const closing = vendor.closingTime || "22:00";
+
+  const [opH, opM] = opening.split(":").map(Number);
+  const [clH, clM] = closing.split(":").map(Number);
+
+  const curH = now.getHours();
+  const curM = now.getMinutes();
+
+  const openMinutes = opH * 60 + opM;
+  const closeMinutes = clH * 60 + clM;
+  const currentMinutes = curH * 60 + curM;
+
+  if (closeMinutes < openMinutes) {
+    // Overnight operation
+    return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
+  }
+
+  return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 }
 

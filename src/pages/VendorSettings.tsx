@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign } from "lucide-react";
 import { VendorCategory } from "../types";
@@ -35,6 +35,9 @@ export const VendorSettings: React.FC = () => {
 
   const [openingTime, setOpeningTime] = useState(currentVendor?.openingTime || "08:00");
   const [closingTime, setClosingTime] = useState(currentVendor?.closingTime || "22:00");
+  const [openingDays, setOpeningDays] = useState<string[]>(
+    currentVendor?.openingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+  );
   const [category, setCategory] = useState<string>(currentVendor?.category || "restaurant");
   const [prepTime, setPrepTime] = useState<number>(currentVendor?.prepTime || 20);
   const [deliveryFee, setDeliveryFee] = useState<number>(currentVendor?.deliveryFee || 750);
@@ -44,6 +47,39 @@ export const VendorSettings: React.FC = () => {
 
   const vendorFileRef = useRef<HTMLInputElement>(null);
   const coverFileRef = useRef<HTMLInputElement>(null);
+
+  // Sync state with currentVendor once it loads
+  useEffect(() => {
+    if (currentVendor) {
+      setName(currentVendor.name || "");
+      setDescription(currentVendor.description || "");
+      setCuisine(currentVendor.cuisine || "Italian");
+      setImage(currentVendor.image || "");
+      setCoverImage(currentVendor.coverImage || "");
+      setOpeningTime(currentVendor.openingTime || "08:00");
+      setClosingTime(currentVendor.closingTime || "22:00");
+      setOpeningDays(currentVendor.openingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]);
+      setCategory(currentVendor.category || "restaurant");
+      setPrepTime(currentVendor.prepTime || 20);
+      setDeliveryFee(currentVendor.deliveryFee || 750);
+
+      const dist = availableLocations.find(loc => {
+        const distName = loc.split(",")[0].trim().toLowerCase();
+        return (currentVendor.address || "").toLowerCase().includes(distName);
+      }) || (availableLocations[0] || "");
+      setSelectedDistrict(dist);
+
+      let street = currentVendor.address || "";
+      if (dist) {
+        const distName = dist.split(",")[0].trim();
+        const idx = street.toLowerCase().indexOf(distName.toLowerCase());
+        if (idx !== -1) {
+          street = street.substring(0, idx).replace(/,\s*$/, "").trim();
+        }
+      }
+      setStreetAddress(street);
+    }
+  }, [currentVendor, availableLocations]);
 
   const handleVendorImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -96,6 +132,7 @@ export const VendorSettings: React.FC = () => {
         address: finalAddress,
         openingTime,
         closingTime,
+        openingDays,
         category,
         prepTime,
         deliveryFee,
@@ -213,6 +250,39 @@ export const VendorSettings: React.FC = () => {
                   required
                 />
               </div>
+            </div>
+
+            {/* Operating Days Selection */}
+            <div className="mt-4 border-t border-gray-200/60 pt-4">
+              <label className="text-[11px] font-bold text-gray-600 block mb-2">Operating Days</label>
+              <div className="flex flex-wrap gap-1.5">
+                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => {
+                  const isSelected = openingDays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          if (openingDays.length > 1) {
+                            setOpeningDays(openingDays.filter((d) => d !== day));
+                          }
+                        } else {
+                          setOpeningDays([...openingDays, day]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                        isSelected
+                          ? "bg-sky-600 text-white shadow-sm"
+                          : "bg-white text-gray-500 hover:bg-gray-100 border border-gray-200"
+                      }`}
+                    >
+                      {day.substring(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[9px] text-gray-400 mt-1.5">Your store will automatically display as CLOSED and reject purchases on toggled-off days.</p>
             </div>
           </div>
 

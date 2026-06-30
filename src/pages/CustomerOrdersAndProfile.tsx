@@ -177,6 +177,7 @@ export const CustomerProfile: React.FC = () => {
   const navigate = useNavigate();
   const [name, setName] = useState(currentUser?.name || "");
   const [phone, setPhone] = useState(currentUser?.phone || "");
+  const [gender, setGender] = useState(currentUser?.gender || "");
   
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
@@ -193,7 +194,7 @@ export const CustomerProfile: React.FC = () => {
     }
 
     try {
-      updateProfile(name, phone);
+      updateProfile(name, phone, gender);
       setSuccessText("Your member profile details were synced successfully!");
       setIsEditing(false);
       setTimeout(() => {
@@ -273,6 +274,27 @@ export const CustomerProfile: React.FC = () => {
             />
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-600 block">Gender</label>
+            <div className="grid grid-cols-2 gap-3">
+              {(["male", "female"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  disabled={!isEditing}
+                  onClick={() => setGender(g)}
+                  className={`py-2.5 px-3 text-center font-bold text-xs capitalize rounded-xl border transition ${
+                    gender === g
+                      ? "bg-[#0ea5e9] border-[#0ea5e9] text-white shadow-sm"
+                      : "bg-gray-50/50 border-gray-200 text-gray-500"
+                  } ${!isEditing ? "opacity-75 cursor-not-allowed" : "cursor-pointer hover:bg-gray-100"}`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="pt-4 border-t border-gray-50 flex justify-end gap-3">
             {isEditing ? (
               <>
@@ -281,6 +303,7 @@ export const CustomerProfile: React.FC = () => {
                   onClick={() => {
                     setName(currentUser?.name || "");
                     setPhone(currentUser?.phone || "");
+                    setGender(currentUser?.gender || "");
                     setIsEditing(false);
                   }}
                   className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition cursor-pointer font-sans"

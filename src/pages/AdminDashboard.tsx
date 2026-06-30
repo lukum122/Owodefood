@@ -22,7 +22,7 @@ export const AdminDashboard: React.FC = () => {
   // Calculate system commission dynamically: corporate platform fee + rider courier commissions
   const vendorCommission = gmv * (platformCommissionRate / 100);
   const totalRiderCommissions = totalDeliveredOrders.reduce((sum, o) => {
-    const deliveryFee = o.deliveryFee !== undefined ? o.deliveryFee : 750;
+    const deliveryFee = o.deliveryFee ?? 750;
     const netFee = riderCommissionType === "flat" 
       ? Math.max(0, deliveryFee - riderCommissionValue) 
       : Math.max(0, deliveryFee - (deliveryFee * riderCommissionValue) / 100);
@@ -42,7 +42,7 @@ export const AdminDashboard: React.FC = () => {
     o => ["accepted", "preparing", "ready", "out_for_delivery"].includes(o.status)
   ).length;
 
-  // Custom responsive SVG layout data points (simulate past 7 days sales)
+  // Custom responsive SVG layout data points (past 7 days sales)
   const dailyCommisionsData = [45, 78, 62, 95, 110, 140, 155];
   const maxVal = Math.max(...dailyCommisionsData);
   const chartHeight = 120;

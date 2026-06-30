@@ -113,7 +113,7 @@ export const VendorLayout: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900 overflow-x-hidden">
+    <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900">
       
       {/* Sidebar navigation - Desktop only */}
       <aside className="w-64 bg-[#070329] text-white flex-col shrink-0 hidden lg:flex border-r border-blue-950/40">

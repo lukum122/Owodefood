@@ -879,13 +879,13 @@ export const AdminPOS: React.FC = () => {
 
               {/* Money Totals */}
               <div className="space-y-1 pt-1 text-right">
-                {completedOrder.tax !== undefined && completedOrder.tax > 0 && (
+                {completedOrder.tax !== undefined && completedOrder.tax !== null && completedOrder.tax > 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-400 text-left">EST. VAT:</span>
                     <span className="font-bold">{currency}{completedOrder.tax.toLocaleString()}</span>
                   </div>
                 )}
-                {completedOrder.serviceFee !== undefined && (
+                {completedOrder.serviceFee !== undefined && completedOrder.serviceFee !== null && (
                   <div className="flex justify-between">
                     <span className="text-gray-400 text-left">SERVICE FEE:</span>
                     <span className="font-bold">{currency}{completedOrder.serviceFee.toLocaleString()}</span>

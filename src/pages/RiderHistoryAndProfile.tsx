@@ -30,7 +30,7 @@ export const RiderHistory: React.FC = () => {
   };
 
   const netEarnings = pastOrders.reduce(
-    (sum, o) => sum + getNetPayout(o.deliveryFee !== undefined ? o.deliveryFee : 750), 
+    (sum, o) => sum + getNetPayout(o.deliveryFee ?? 750), 
     0
   );
 
@@ -50,7 +50,7 @@ export const RiderHistory: React.FC = () => {
         {pastOrders.length > 0 ? (
           <div className="divide-y divide-gray-50 max-h-[600px] overflow-y-auto pr-1 text-xs">
             {pastOrders.map((hist) => {
-              const baseFee = hist.deliveryFee !== undefined ? hist.deliveryFee : 750;
+              const baseFee = hist.deliveryFee ?? 750;
               const netFee = getNetPayout(baseFee);
               const commDeducted = baseFee - netFee;
               

@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { DatabaseProvider } from "./context/DatabaseContext";
 import { AuthGuard, PublicOnlyRoute } from "./components/Guards";
-import { RoleSwitcher } from "./components/RoleSwitcher";
+import { ScrollToTop } from "./components/ScrollToTop";
 
 // Layout Imports
 import { CustomerLayout } from "./components/CustomerLayout";
@@ -44,9 +44,7 @@ export default function App() {
   return (
     <DatabaseProvider>
       <BrowserRouter>
-        
-        {/* Floating Sandbox Review RoleSwitcher in the developer preview */}
-        <RoleSwitcher />
+        <ScrollToTop />
 
         <Routes>
           

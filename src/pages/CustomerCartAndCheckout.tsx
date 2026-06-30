@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
-import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers } from "lucide-react";
+import { isVendorOpen } from "../types";
+import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle } from "lucide-react";
 
 export const CustomerCart: React.FC = () => {
-  const { vendors, cart, updateCartQuantity, removeFromCart, clearCart, calculateDeliveryFee, calculateServiceFee, currency, vatEnabled, vatRate } = useDatabase();
+  const { vendors, cart, updateCartQuantity, removeFromCart, clearCart, calculateDeliveryFee, calculateServiceFee, currency, vatEnabled, vatRate, maxCartItems } = useDatabase();
   const navigate = useNavigate();
 
   // Dynamic cost calculation incorporating custom addons
@@ -50,15 +51,25 @@ export const CustomerCart: React.FC = () => {
         
         {/* Cart Item lists */}
         <div className="lg:col-span-8 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Basket Items ({cart.length})</span>
-            <button
-              onClick={clearCart}
-              className="text-xs font-bold text-red-650 hover:text-red-700 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              Empty Cart
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-4 gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Basket Items ({cart.length})</span>
+              <div className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10px] rounded-full border border-blue-100">
+                Bike Limit: {maxCartItems} Items Max
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-[11px] font-bold text-gray-500">
+                Order Load: <span className={cart.reduce((sum, item) => sum + item.quantity, 0) >= maxCartItems ? "text-red-650" : "text-[#0ea5e9]"}>{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>/{maxCartItems}
+              </div>
+              <button
+                onClick={clearCart}
+                className="text-xs font-bold text-red-650 hover:text-red-700 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                Empty Cart
+              </button>
+            </div>
           </div>
 
           <div className="divide-y divide-gray-100 text-xs">
@@ -158,11 +169,23 @@ export const CustomerCart: React.FC = () => {
             </div>
           </div>
 
+          {cartVendor && !isVendorOpen(cartVendor) && (
+            <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+              <span>This kitchen ({cartVendor.name}) is currently closed. You can review items but cannot order until they open.</span>
+            </div>
+          )}
+
           <button
             onClick={() => navigate("/checkout")}
-            className="w-full py-3.5 px-5 bg-[#070329] hover:bg-[#0ea5e9] text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
+            disabled={cartVendor ? !isVendorOpen(cartVendor) : false}
+            className={`w-full py-3.5 px-5 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-lg transition ${
+              cartVendor && !isVendorOpen(cartVendor) 
+                ? "bg-gray-300 cursor-not-allowed opacity-60" 
+                : "bg-[#070329] hover:bg-[#0ea5e9] cursor-pointer"
+            }`}
           >
-            <span>Proceed to Secure Checkout</span>
+            <span>{cartVendor && !isVendorOpen(cartVendor) ? "Kitchen Closed" : "Proceed to Secure Checkout"}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
 
@@ -238,6 +261,8 @@ export const CustomerCheckout: React.FC = () => {
   });
   
   const [paymentMethod, setPaymentMethod] = useState("Credit Card");
+  const [zoneSearchQuery, setZoneSearchQuery] = useState("");
+  const [showZoneDropdown, setShowZoneDropdown] = useState(false);
   const [isOrdered, setIsOrdered] = useState(false);
   const [errorWord, setErrorWord] = useState("");
 
@@ -452,24 +477,75 @@ export const CustomerCheckout: React.FC = () => {
           {/* Delivery address input */}
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
                   <MapPin className="w-4 h-4 text-red-500" />
                   Delivery Zone / District
                 </label>
-                <select
-                  value={selectedDistrict}
-                  onChange={(e) => setSelectedDistrict(e.target.value)}
-                  className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
-                  required
-                >
-                  <option value="">Select Local Zone</option>
-                  {availableLocations.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
+                
+                {/* Custom searchable dropdown selector */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowZoneDropdown(!showZoneDropdown)}
+                    className="w-full text-left text-xs p-3.5 border border-gray-150 rounded-2xl bg-gray-50/50 hover:bg-gray-100/50 transition font-semibold text-gray-800 flex items-center justify-between"
+                  >
+                    <span className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span className="truncate">{selectedDistrict || "Select Local Zone"}</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-normal shrink-0">▼</span>
+                  </button>
+
+                  {showZoneDropdown && (
+                    <div className="absolute left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl p-3.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex justify-between items-center mb-2 px-1">
+                        <span className="text-[10px] font-bold text-[#070329] uppercase tracking-wider">Search Delivery Zone</span>
+                        <button 
+                          type="button"
+                          onClick={() => setShowZoneDropdown(false)}
+                          className="text-gray-400 hover:text-gray-650 text-[10px] font-bold"
+                        >
+                          ✕ Close
+                        </button>
+                      </div>
+                      <div className="mb-2.5">
+                        <input
+                          type="text"
+                          placeholder="🔍 Search delivery zones..."
+                          value={zoneSearchQuery}
+                          onChange={(e) => setZoneSearchQuery(e.target.value)}
+                          className="w-full text-xs p-2.5 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50/50"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                        {availableLocations
+                          .filter((loc) => loc.toLowerCase().includes(zoneSearchQuery.toLowerCase()))
+                          .map((loc) => (
+                            <button
+                              key={loc}
+                              type="button"
+                              onClick={() => {
+                                setSelectedDistrict(loc);
+                                setShowZoneDropdown(false);
+                                setZoneSearchQuery("");
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition hover:bg-gray-50 ${
+                                selectedDistrict === loc ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700"
+                              }`}
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate">{loc}</span>
+                            </button>
+                          ))}
+                        {availableLocations.filter((loc) => loc.toLowerCase().includes(zoneSearchQuery.toLowerCase())).length === 0 && (
+                          <div className="text-[10px] text-gray-400 text-center py-4">No matching zones found</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -699,9 +775,14 @@ export const CustomerCheckout: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-4 px-5 bg-[#070329] hover:bg-[#0ea5e9] text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-lg transition cursor-pointer font-sans"
+            disabled={cartVendor ? !isVendorOpen(cartVendor) : false}
+            className={`w-full py-4 px-5 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-lg transition font-sans ${
+              cartVendor && !isVendorOpen(cartVendor) 
+                ? "bg-gray-300 cursor-not-allowed opacity-60" 
+                : "bg-[#070329] hover:bg-[#0ea5e9] cursor-pointer"
+            }`}
           >
-            Authorize Purchase & Place Order
+            {cartVendor && !isVendorOpen(cartVendor) ? "Closed - Cannot Place Order" : "Authorize Purchase & Place Order"}
           </button>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation } from "../types";
+import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review } from "../types";
 
 export interface CartItem {
   id: string;
@@ -55,6 +55,10 @@ interface DatabaseContextType {
   vatRate: number;
   updateVatSettings: (enabled: boolean, rate: number) => void;
 
+  // Max cart item limit
+  maxCartItems: number;
+  updateMaxCartItems: (limit: number) => void;
+
   // Employee Management
   employees: Employee[];
   addEmployee: (employee: Omit<Employee, "id" | "createdAt">) => void;
@@ -63,10 +67,10 @@ interface DatabaseContextType {
   
   // Auth Actions
   login: (email: string, role: UserRole) => { success: boolean; error?: string };
-  register: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
+  register: (name: string, email: string, phone: string, role: UserRole, gender?: string, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
   logout: () => void;
   overrideUserRole: (role: UserRole) => void; // Development booster
-  updateProfile: (name: string, phone: string) => void;
+  updateProfile: (name: string, phone: string, gender?: string) => void;
   
   // Cart Actions
   addToCart: (product: Product, selectedAddons?: Addon[]) => void;
@@ -110,6 +114,10 @@ interface DatabaseContextType {
   savedAddresses: UserSavedAddress[];
   addSavedAddress: (streetAddress: string, district: string, landmarkNote: string) => void;
   removeSavedAddress: (id: string) => void;
+
+  // Reviews System
+  reviews: Review[];
+  addReview: (vendorId: string, rating: number, comment: string) => void;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
@@ -128,6 +136,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [orders, setOrders] = useState<Order[]>([]);
   const [riders, setRiders] = useState<Rider[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
 
   // Coverage guide & extreme locations states
@@ -254,6 +263,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   
   const [vatEnabled, setVatEnabled] = useState<boolean>(true);
   const [vatRate, setVatRate] = useState<number>(7.5);
+  const [maxCartItems, setMaxCartItems] = useState<number>(12);
   
   const categories: Category[] = [
     { id: "1", name: "Burgers", icon: "🍔" },
@@ -263,78 +273,253 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     { id: "5", name: "Desserts", icon: "🍰" },
   ];
 
-  // Load initial data from Local Storage or Seed Data
+  // Load initial data from Cloud SQL or fallback to Local Storage / Seeds
   useEffect(() => {
-    // 1. Users Seed
-    const savedUsers = localStorage.getItem("fd_users");
-    const savedVendors = localStorage.getItem("fd_vendors");
-    const savedProducts = localStorage.getItem("fd_products");
-    const savedOrders = localStorage.getItem("fd_orders");
-    const savedRiders = localStorage.getItem("fd_riders");
+    const loadFromCloudSQL = async () => {
+      try {
+        const res = await fetch("/api/sync/load");
+        if (!res.ok) throw new Error("Backend load failed");
+        const data = await res.json();
 
-    let initialUsers: User[] = [];
-    if (savedUsers) {
-      initialUsers = JSON.parse(savedUsers);
-    } else {
-      initialUsers = [
-        { id: "cust-1", email: "customer@gmail.com", name: "Sarah Collins", phone: "+234 803 123 4567", role: "customer", createdAt: new Date().toISOString() },
-        { id: "vend-id1", email: "vendor@gmail.com", name: "Mama Cass", phone: "+234 812 345 6789", role: "vendor", createdAt: new Date().toISOString() },
-        { id: "vend-id2", email: "burger@gmail.com", name: "Chicken Republic", phone: "+234 815 555 1212", role: "vendor", createdAt: new Date().toISOString() },
-        { id: "ride-1", email: "rider@gmail.com", name: "Rider Daniel", phone: "+234 905 987 6543", role: "rider", createdAt: new Date().toISOString() },
-        { id: "admin-1", email: "admin@gmail.com", name: "Platform Admin", phone: "+234 809 999 0000", role: "admin", createdAt: new Date().toISOString() },
-      ];
-      localStorage.setItem("fd_users", JSON.stringify(initialUsers));
-    }
-    setUsers(initialUsers);
+        if (data.users && data.users.length > 0) {
+          // Found data in Cloud SQL! Let's load it and synchronize local states.
+          setUsers(data.users);
+          localStorage.setItem("fd_users", JSON.stringify(data.users));
 
-    // 2. Vendors Seed
-    let initialVendors: Vendor[] = [];
-    if (savedVendors) {
-      initialVendors = JSON.parse(savedVendors);
-      // Self-healing: ensure all loaded vendors have the new properties or fallbacks & Kwara localization
-      let updated = false;
-      initialVendors = initialVendors.map(v => {
-        let needsUpdate = false;
-        const up: Vendor = { ...v };
-        
-        // Auto-migration to Kwara / Ilorin
-        if (up.address && (up.address.includes("Lagos") || up.address.includes("Lekki") || up.address.includes("Victoria Island") || up.address.includes("Ikeja") || up.address.includes("Admiralty"))) {
-          if (up.id === "v-1") { up.address = "Fate Road, Ilorin, Kwara"; needsUpdate = true; }
-          else if (up.id === "v-2" || up.id === "v-3") { up.address = "GRA, Ilorin, Kwara"; needsUpdate = true; }
-          else if (up.id === "v-4") { up.address = "Challenge Area, Ilorin, Kwara"; needsUpdate = true; }
-          else if (up.id === "v-5") { up.address = "Tanke Road, Ilorin, Kwara"; needsUpdate = true; }
-          else if (up.id === "v-6") { up.address = "GRA, Ilorin, Kwara"; needsUpdate = true; }
-          else if (up.id === "v-7") { up.address = "Adewole Estate, Ilorin, Kwara"; up.name = "Chowstore Ilorin"; needsUpdate = true; }
-          else { 
-            up.address = up.address
-              .replace(/Lagos/gi, "Kwara")
-              .replace(/Lekki/gi, "Tanke")
-              .replace(/Ikeja/gi, "Challenge")
-              .replace(/Victoria Island/gi, "GRA"); 
-            needsUpdate = true; 
+          setVendors(data.vendors);
+          localStorage.setItem("fd_vendors", JSON.stringify(data.vendors));
+
+          setProducts(data.products);
+          localStorage.setItem("fd_products", JSON.stringify(data.products));
+
+          setRiders(data.riders);
+          localStorage.setItem("fd_riders", JSON.stringify(data.riders));
+
+          setOrders(data.orders);
+          localStorage.setItem("fd_orders", JSON.stringify(data.orders));
+
+          if (data.paymentGateways && data.paymentGateways.length > 0) {
+            setPaymentGateways(data.paymentGateways);
+            localStorage.setItem("fd_payment_gateways", JSON.stringify(data.paymentGateways));
           }
-        }
 
-        if (!up.category) {
-          up.category = "restaurant";
-          needsUpdate = true;
+          if (data.savedAddresses) {
+            setSavedAddresses(data.savedAddresses);
+            localStorage.setItem("fd_saved_addresses", JSON.stringify(data.savedAddresses));
+          }
+
+          if (data.extremeLocationTiers && data.extremeLocationTiers.length > 0) {
+            setExtremeLocationTiers(data.extremeLocationTiers);
+            localStorage.setItem("fd_extreme_tiers", JSON.stringify(data.extremeLocationTiers));
+          }
+
+          if (data.extremeLocations) {
+            setExtremeLocations(data.extremeLocations);
+            localStorage.setItem("fd_extreme_locations", JSON.stringify(data.extremeLocations));
+          }
+
+          if (data.employees && data.employees.length > 0) {
+            setEmployees(data.employees);
+            localStorage.setItem("fd_employees", JSON.stringify(data.employees));
+          }
+
+          if (data.reviews) {
+            setReviews(data.reviews);
+            localStorage.setItem("fd_reviews", JSON.stringify(data.reviews));
+          }
+
+          if (data.systemSettings) {
+            if (data.systemSettings.platformCommissionRate) setPlatformCommissionRate(Number(data.systemSettings.platformCommissionRate));
+            if (data.systemSettings.riderCommissionType) setRiderCommissionType(data.systemSettings.riderCommissionType as any);
+            if (data.systemSettings.riderCommissionValue) setRiderCommissionValue(Number(data.systemSettings.riderCommissionValue));
+            if (data.systemSettings.vatEnabled) setVatEnabled(data.systemSettings.vatEnabled === "true");
+            if (data.systemSettings.vatRate) setVatRate(Number(data.systemSettings.vatRate));
+            if (data.systemSettings.maxCartItems) setMaxCartItems(Number(data.systemSettings.maxCartItems));
+          }
+
+          // Compute and set available locations
+          const savedAvailableLocations = localStorage.getItem("fd_available_locations");
+          let initialAvailableLocations: string[] = [];
+          if (savedAvailableLocations) {
+            initialAvailableLocations = JSON.parse(savedAvailableLocations);
+          } else {
+            initialAvailableLocations = [
+              "Tanke, Ilorin, Kwara",
+              "GRA, Ilorin, Kwara",
+              "Challenge, Ilorin, Kwara",
+              "Fate, Ilorin, Kwara",
+              "Adewole, Ilorin, Kwara",
+              "Post Office Area, Ilorin, Kwara"
+            ];
+          }
+          const extremeLocationsToUse = (data.extremeLocations && data.extremeLocations.length > 0)
+            ? data.extremeLocations
+            : [
+                { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
+                { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
+                { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
+                { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
+                { id: "ex-5", name: "Shao", tierId: "tier-2" },
+                { id: "ex-6", name: "Oke-Oyi", tierId: "tier-2" },
+                { id: "ex-7", name: "Ganmo Outer Bounds", tierId: "tier-3" },
+                { id: "ex-8", name: "Afono", tierId: "tier-3" }
+              ];
+          const finalLocations = [...initialAvailableLocations];
+          extremeLocationsToUse.forEach((ex: any) => {
+            if (!finalLocations.includes(ex.name)) {
+              finalLocations.push(ex.name);
+            }
+          });
+          localStorage.setItem("fd_available_locations", JSON.stringify(finalLocations));
+          setAvailableLocations(finalLocations);
+
+          // Restore vendor categories
+          const savedVendorCategories = localStorage.getItem("fd_vendor_categories");
+          let initialCategories: VendorCategoryInfo[] = [];
+          if (savedVendorCategories) {
+            initialCategories = JSON.parse(savedVendorCategories);
+          } else {
+            initialCategories = [
+              { id: "restaurant", name: "Restaurants", iconName: "UtensilsCrossed", color: "orange" },
+              { id: "shop", name: "Shops", iconName: "Store", color: "yellow" },
+              { id: "pharmacy", name: "Pharmacies", iconName: "Pill", color: "sky" },
+              { id: "groceries", name: "Chowstore", iconName: "Apple", color: "red" },
+            ];
+            localStorage.setItem("fd_vendor_categories", JSON.stringify(initialCategories));
+          }
+          setVendorCategories(initialCategories);
+
+          const savedCurrency = localStorage.getItem("fd_currency");
+          if (savedCurrency) {
+            setCurrency(savedCurrency);
+          }
+
+          // Restore category service fees
+          const savedCategoryFees = localStorage.getItem("fd_category_service_fees");
+          if (savedCategoryFees) {
+            setCategoryServiceFees(JSON.parse(savedCategoryFees));
+          }
+
+          // Restore session or auto-login
+          const savedSession = sessionStorage.getItem("fd_session_user");
+          if (savedSession) {
+            const u = JSON.parse(savedSession);
+            setCurrentUser(u);
+            if (u.role === "vendor") {
+              const v = data.vendors.find((vendor: any) => vendor.userId === u.id);
+              setCurrentVendor(v || null);
+            } else if (u.role === "rider") {
+              const r = data.riders.find((rider: any) => rider.userId === u.id);
+              setCurrentRider(r || null);
+            }
+          } else {
+            const defaultCust = data.users.find((u: any) => u.role === "customer") || null;
+            if (defaultCust) {
+              setCurrentUser(defaultCust);
+              sessionStorage.setItem("fd_session_user", JSON.stringify(defaultCust));
+            }
+          }
+          return;
         }
-        if (up.prepTime === undefined) {
-          up.prepTime = up.id === "v-1" ? 25 : up.id === "v-2" ? 15 : 20;
-          needsUpdate = true;
-        }
-        if (up.deliveryFee === undefined) {
-          up.deliveryFee = up.id === "v-1" ? 750 : up.id === "v-2" ? 600 : 800;
-          needsUpdate = true;
-        }
-        if (needsUpdate) updated = true;
-        return up;
-      });
-      // Ensure the newly added shops, pharmacies, and groceries are always present
-      const hasShop = initialVendors.some(v => v.id === "v-5");
-      if (!hasShop) {
-        updated = true;
-        initialVendors.push(
+      } catch (err) {
+        console.error("Failed to load sync data from Cloud SQL. Falling back to Local Storage/Seeds.", err);
+      }
+
+      // FALLBACK & SEEDING FLOW:
+      // If Cloud SQL was empty, run original seed & bulk sync to database!
+      
+      // 1. Users
+      const savedUsers = localStorage.getItem("fd_users");
+      let initialUsers: User[] = [];
+      if (savedUsers) {
+        initialUsers = JSON.parse(savedUsers);
+      } else {
+        initialUsers = [
+          { id: "cust-1", email: "customer@gmail.com", name: "Sarah Collins", phone: "+234 803 123 4567", role: "customer", createdAt: new Date().toISOString() },
+          { id: "vend-id1", email: "vendor@gmail.com", name: "Mama Cass", phone: "+234 812 345 6789", role: "vendor", createdAt: new Date().toISOString() },
+          { id: "vend-id2", email: "burger@gmail.com", name: "Chicken Republic", phone: "+234 815 555 1212", role: "vendor", createdAt: new Date().toISOString() },
+          { id: "ride-1", email: "rider@gmail.com", name: "Rider Daniel", phone: "+234 905 987 6543", role: "rider", createdAt: new Date().toISOString() },
+          { id: "admin-1", email: "admin@gmail.com", name: "Platform Admin", phone: "+234 809 999 0000", role: "admin", createdAt: new Date().toISOString() },
+        ];
+        localStorage.setItem("fd_users", JSON.stringify(initialUsers));
+      }
+      setUsers(initialUsers);
+
+      // 2. Vendors
+      const savedVendors = localStorage.getItem("fd_vendors");
+      let initialVendors: Vendor[] = [];
+      if (savedVendors) {
+        initialVendors = JSON.parse(savedVendors);
+      } else {
+        initialVendors = [
+          {
+            id: "v-1",
+            userId: "vend-id1",
+            name: "Mama Cass",
+            description: "Traditional Nigerian dishes, rich aromatic Jollof Rice, Swallow, and delicious side delicacies.",
+            cuisine: "Desserts",
+            image: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?w=600&auto=format&fit=crop&q=60",
+            rating: 4.7,
+            address: "Fate Road, Ilorin, Kwara",
+            status: "approved",
+            createdAt: new Date().toISOString(),
+            category: "restaurant",
+            prepTime: 25,
+            deliveryFee: 750,
+            openingTime: "08:00",
+            closingTime: "22:00"
+          },
+          {
+            id: "v-2",
+            userId: "vend-id2",
+            name: "Chicken Republic",
+            description: "Home of the famous Soulfully Spiced chicken, crunchy tenders, and legendary Jollof meals.",
+            cuisine: "Chicken",
+            image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60",
+            rating: 4.6,
+            address: "GRA, Ilorin, Kwara",
+            status: "approved",
+            createdAt: new Date().toISOString(),
+            category: "restaurant",
+            prepTime: 15,
+            deliveryFee: 600,
+            openingTime: "09:00",
+            closingTime: "21:30"
+          },
+          {
+            id: "v-3",
+            userId: "vendor3-id",
+            name: "Domino's Pizza",
+            description: "Hot, fresh, oven-baked pizzas, delicious chicken sides, and sweet dessert treats.",
+            cuisine: "Pizza",
+            image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60",
+            rating: 4.5,
+            address: "GRA, Ilorin, Kwara",
+            status: "approved",
+            createdAt: new Date().toISOString(),
+            category: "restaurant",
+            prepTime: 20,
+            deliveryFee: 900,
+            openingTime: "09:00",
+            closingTime: "23:00"
+          },
+          {
+            id: "v-4",
+            userId: "vendor4-id",
+            name: "KFC",
+            description: "Crispy fried chicken buckets, spicy Zinger burgers, and golden fries.",
+            cuisine: "Burgers",
+            image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60",
+            rating: 4.4,
+            address: "Challenge Area, Ilorin, Kwara",
+            status: "approved",
+            createdAt: new Date().toISOString(),
+            category: "restaurant",
+            prepTime: 20,
+            deliveryFee: 800,
+            openingTime: "10:00",
+            closingTime: "22:00"
+          },
           {
             id: "v-5",
             userId: "vendor5-id",
@@ -386,500 +571,382 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             openingTime: "08:00",
             closingTime: "20:00"
           }
-        );
-      }
-      if (updated) {
+        ];
         localStorage.setItem("fd_vendors", JSON.stringify(initialVendors));
       }
-    } else {
-      initialVendors = [
-        {
-          id: "v-1",
-          userId: "vend-id1",
-          name: "Mama Cass",
-          description: "Traditional Nigerian dishes, rich aromatic Jollof Rice, Swallow, and delicious side delicacies.",
-          cuisine: "Desserts",
-          image: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?w=600&auto=format&fit=crop&q=60",
-          rating: 4.7,
-          address: "Fate Road, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "restaurant",
-          prepTime: 25,
-          deliveryFee: 750,
-          openingTime: "08:00",
-          closingTime: "22:00"
-        },
-        {
-          id: "v-2",
-          userId: "vend-id2",
-          name: "Chicken Republic",
-          description: "Home of the famous Soulfully Spiced chicken, crunchy tenders, and legendary Jollof meals.",
-          cuisine: "Chicken",
-          image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60",
-          rating: 4.6,
-          address: "GRA, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "restaurant",
-          prepTime: 15,
-          deliveryFee: 600,
-          openingTime: "09:00",
-          closingTime: "21:30"
-        },
-        {
-          id: "v-3",
-          userId: "vendor3-id",
-          name: "Domino's Pizza",
-          description: "Hot, fresh, oven-baked pizzas, delicious chicken sides, and sweet dessert treats.",
-          cuisine: "Pizza",
-          image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60",
-          rating: 4.5,
-          address: "GRA, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "restaurant",
-          prepTime: 20,
-          deliveryFee: 900,
-          openingTime: "09:00",
-          closingTime: "23:00"
-        },
-        {
-          id: "v-4",
-          userId: "vendor4-id",
-          name: "KFC",
-          description: "Crispy fried chicken buckets, spicy Zinger burgers, and golden fries.",
-          cuisine: "Burgers",
-          image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60",
-          rating: 4.4,
-          address: "Challenge Area, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "restaurant",
-          prepTime: 20,
-          deliveryFee: 800,
-          openingTime: "10:00",
-          closingTime: "22:00"
-        },
-        {
-          id: "v-5",
-          userId: "vendor5-id",
-          name: "Mega Plaza Supermarket",
-          description: "Household groceries, premium imported products, electronics, snacks, cold beverages, laundry essentials, and personal toiletries.",
-          cuisine: "Groceries",
-          image: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=600&auto=format&fit=crop&q=60",
-          rating: 4.6,
-          address: "Tanke Road, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "shop",
-          prepTime: 40,
-          deliveryFee: 1200,
-          openingTime: "08:00",
-          closingTime: "21:00"
-        },
-        {
-          id: "v-6",
-          userId: "vendor6-id",
-          name: "Medplus Pharmacy",
-          description: "Prescription medicines, daily vitamins, first aid kits, skin care products, and essential sanitizers.",
-          cuisine: "Drinks",
-          image: "https://images.unsplash.com/photo-1586015555751-63bb77f4322a?w=600&auto=format&fit=crop&q=60",
-          rating: 4.8,
-          address: "GRA, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "pharmacy",
-          prepTime: 10,
-          deliveryFee: 500,
-          openingTime: "07:00",
-          closingTime: "23:00"
-        },
-        {
-          id: "v-7",
-          userId: "vendor7-id",
-          name: "Chowstore Ilorin",
-          description: "Fresh farm-to-table produce, local spices, cooking oil, fresh tomatoes, green vegetables, grains, and kitchen condiments.",
-          cuisine: "Salads",
-          image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=60",
-          rating: 4.9,
-          address: "Adewole Estate, Ilorin, Kwara",
-          status: "approved",
-          createdAt: new Date().toISOString(),
-          category: "groceries",
-          prepTime: 30,
-          deliveryFee: 1000,
-          openingTime: "08:00",
-          closingTime: "20:00"
-        }
-      ];
-      localStorage.setItem("fd_vendors", JSON.stringify(initialVendors));
-    }
-    setVendors(initialVendors);
+      setVendors(initialVendors);
 
-    // 3. Products Seed
-    const defaultAddonsMap: Record<string, { id: string; name: string; price: number }[]> = {
-      "p-1": [
-        { id: "a-1", name: "Grilled Chicken Thigh", price: 1500 },
-        { id: "a-2", name: "Fried Plantain Portion", price: 500 },
-        { id: "a-3", name: "Extra Coleslaw", price: 400 }
-      ],
-      "p-2": [
-        { id: "a-4", name: "Peppered Gizzard", price: 1200 },
-        { id: "a-2", name: "Fried Plantain Portion", price: 500 },
-        { id: "a-13", name: "Boiled Egg Side", price: 300 }
-      ],
-      "p-5": [
-        { id: "a-5", name: "Moimoi Option", price: 600 },
-        { id: "a-6", name: "Extra Chicken Piece", price: 1800 }
-      ],
-      "p-7": [
-        { id: "a-7", name: "Extra Mozzarella Cheese", price: 1000 },
-        { id: "a-8", name: "BBQ Drizzle Cup", price: 300 }
-      ],
-      "p-8": [
-        { id: "a-7", name: "Extra Mozzarella Cheese", price: 1000 },
-        { id: "a-9", name: "Extra Sweetcorn", price: 400 }
-      ],
-      "p-9": [
-        { id: "a-10", name: "Double Beef Upgrade", price: 1500 },
-        { id: "a-11", name: "Fried Egg Side", price: 300 },
-        { id: "a-12", name: "Cheddar Cheese Slice", price: 400 }
-      ]
-    };
+      // 3. Products
+      const savedProducts = localStorage.getItem("fd_products");
+      let initialProducts: Product[] = [];
+      const defaultAddonsMap: Record<string, { id: string; name: string; price: number }[]> = {
+        "p-1": [
+          { id: "a-1", name: "Grilled Chicken Thigh", price: 1500 },
+          { id: "a-2", name: "Fried Plantain Portion", price: 500 },
+          { id: "a-3", name: "Extra Coleslaw", price: 400 }
+        ],
+        "p-2": [
+          { id: "a-4", name: "Peppered Gizzard", price: 1200 },
+          { id: "a-2", name: "Fried Plantain Portion", price: 500 },
+          { id: "a-13", name: "Boiled Egg Side", price: 300 }
+        ],
+        "p-5": [
+          { id: "a-5", name: "Moimoi Option", price: 600 },
+          { id: "a-6", name: "Extra Chicken Piece", price: 1800 }
+        ],
+        "p-7": [
+          { id: "a-7", name: "Extra Mozzarella Cheese", price: 1000 },
+          { id: "a-8", name: "BBQ Drizzle Cup", price: 300 }
+        ],
+        "p-8": [
+          { id: "a-7", name: "Extra Mozzarella Cheese", price: 1000 },
+          { id: "a-9", name: "Extra Sweetcorn", price: 400 }
+        ],
+        "p-9": [
+          { id: "a-10", name: "Double Beef Upgrade", price: 1500 },
+          { id: "a-11", name: "Fried Egg Side", price: 300 },
+          { id: "a-12", name: "Cheddar Cheese Slice", price: 400 }
+        ]
+      };
 
-    let initialProducts: Product[] = [];
-    if (savedProducts) {
-      initialProducts = JSON.parse(savedProducts);
-      // Ensure products for v-5, v-6, v-7 exist
-      const hasShopProducts = initialProducts.some(p => p.vendorId === "v-5");
-      if (!hasShopProducts) {
-        initialProducts.push(
-          // Mega Plaza Supermarket (v-5)
+      if (savedProducts) {
+        initialProducts = JSON.parse(savedProducts);
+      } else {
+        initialProducts = [
+          { id: "p-1", vendorId: "v-1", name: "Jollof Rice", description: "Smoky party Jollof rice with fried plantains and sliced salad.", price: 4500, image: "https://images.unsplash.com/photo-1628294895950-9805353123bc?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-2", vendorId: "v-1", name: "Fried Rice", description: "Special fried rice with fresh vegetables.", price: 4000, image: "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-3", vendorId: "v-1", name: "Grilled Chicken", description: "Spicy grilled chicken thigh marinated in local spices.", price: 3500, image: "https://images.unsplash.com/photo-1598902108854-10e335adac99?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-4", vendorId: "v-1", name: "Coca Cola (50cl)", description: "Ice cold refreshing Cola beverage in plastic bottle.", price: 500, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=60", category: "Drinks", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-5", vendorId: "v-2", name: "Citizens Meal", description: "Standard meal package containing Jollof rice, 1 fried chicken and drink.", price: 3200, image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-6", vendorId: "v-2", name: "Crunchy Chicken (2 pcs)", description: "Crispy and spicy original recipe fried chicken pieces.", price: 2800, image: "https://images.unsplash.com/photo-1562967914-608f82629710?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-7", vendorId: "v-3", name: "Pepperoni Supreme Pizza", description: "Loaded with pepperoni, mozzarella cheese and pizza sauce.", price: 6500, image: "https://images.unsplash.com/photo-1628840042765-356cda07504e?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-8", vendorId: "v-3", name: "Chicken Supreme Pizza", description: "Oven-grilled chicken breast slices, sweet corn, green peppers.", price: 7200, image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-9", vendorId: "v-4", name: "Zinger Burger", description: "A hot & crispy chicken fillet inside a warm toasted sesame bun.", price: 3800, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=60", category: "Burgers", isAvailable: true, createdAt: new Date().toISOString() },
+          { id: "p-10", vendorId: "v-4", name: "Fried Chicken Bucket", description: "5 pieces of signature original recipe fried chicken.", price: 6800, image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
           { id: "p-11", vendorId: "v-5", name: "Brand New Hardcover Notebook", description: "Standard ruled 80-sheet hardcover study/business journal.", price: 1500, image: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&auto=format&fit=crop&q=60", category: "Stationery", isAvailable: true, createdAt: new Date().toISOString() },
           { id: "p-12", vendorId: "v-5", name: "Premium Salted Potato Crisps", description: "Crunchy golden potato crisps seasoned with light sea salt.", price: 950, image: "https://images.unsplash.com/photo-1566478989037-eec170784d20?w=600&auto=format&fit=crop&q=60", category: "Snacks", isAvailable: true, createdAt: new Date().toISOString() },
-          
-          // Medplus Pharmacy (v-6)
           { id: "p-13", vendorId: "v-6", name: "Vitamin C Chewable Boosters", description: "High potency Vitamin C tablets (1000mg) for strong immunity.", price: 3200, image: "https://images.unsplash.com/photo-1616679911721-fe6eec14f7e9?w=600&auto=format&fit=crop&q=60", category: "Wellness", isAvailable: true, createdAt: new Date().toISOString() },
           { id: "p-14", vendorId: "v-6", name: "Aloe Hand Sanitizer Gel", description: "Kills 99.9% of germs while keeping skin moisturized with organic Aloe Vera.", price: 1200, image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60", category: "Hygiene", isAvailable: true, createdAt: new Date().toISOString() },
-          
-          // Chowstore Lekki (v-7)
           { id: "p-15", vendorId: "v-7", name: "Farm Fresh Tomatoes Basket", description: "Freshly harvested, organic and juicy red tomatoes (1kg).", price: 2800, image: "https://images.unsplash.com/photo-1595855759920-86582396756a?w=600&auto=format&fit=crop&q=60", category: "Produce", isAvailable: true, createdAt: new Date().toISOString() },
           { id: "p-16", vendorId: "v-7", name: "Golden Penny Spaghetti Pasta", description: "Rich in fiber, quick-cooking premium semolina wheat spaghetti pack (500g).", price: 1100, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: new Date().toISOString() }
-        );
+        ];
         localStorage.setItem("fd_products", JSON.stringify(initialProducts));
       }
-    } else {
-      initialProducts = [
-        // Mama Cass (v-1)
-        { id: "p-1", vendorId: "v-1", name: "Jollof Rice", description: "Smoky party Jollof rice with fried plantains and sliced salad.", price: 4500, image: "https://images.unsplash.com/photo-1628294895950-9805353123bc?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-2", vendorId: "v-1", name: "Fried Rice", description: "Special fried rice with fresh vegetables.", price: 4000, image: "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-3", vendorId: "v-1", name: "Grilled Chicken", description: "Spicy grilled chicken thigh marinated in local spices.", price: 3500, image: "https://images.unsplash.com/photo-1598902108854-10e335adac99?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-4", vendorId: "v-1", name: "Coca Cola (50cl)", description: "Ice cold refreshing Cola beverage in plastic bottle.", price: 500, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=60", category: "Drinks", isAvailable: true, createdAt: new Date().toISOString() },
-        
-        // Chicken Republic (v-2)
-        { id: "p-5", vendorId: "v-2", name: "Citizens Meal", description: "Standard meal package containing Jollof rice, 1 fried chicken and drink.", price: 3200, image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-6", vendorId: "v-2", name: "Crunchy Chicken (2 pcs)", description: "Crispy and spicy original recipe fried chicken pieces.", price: 2800, image: "https://images.unsplash.com/photo-1562967914-608f82629710?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
-        
-        // Domino's Pizza (v-3)
-        { id: "p-7", vendorId: "v-3", name: "Pepperoni Supreme Pizza", description: "Loaded with pepperoni, mozzarella cheese and pizza sauce.", price: 6500, image: "https://images.unsplash.com/photo-1628840042765-356cda07504e?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-8", vendorId: "v-3", name: "Chicken Supreme Pizza", description: "Oven-grilled chicken breast slices, sweet corn, green peppers.", price: 7200, image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: new Date().toISOString() },
-        
-        // KFC (v-4)
-        { id: "p-9", vendorId: "v-4", name: "Zinger Burger", description: "A hot & crispy chicken fillet inside a warm toasted sesame bun.", price: 3800, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=60", category: "Burgers", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-10", vendorId: "v-4", name: "Fried Chicken Bucket", description: "5 pieces of signature original recipe fried chicken.", price: 6800, image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
 
-        // Mega Plaza Supermarket (v-5)
-        { id: "p-11", vendorId: "v-5", name: "Brand New Hardcover Notebook", description: "Standard ruled 80-sheet hardcover study/business journal.", price: 1500, image: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&auto=format&fit=crop&q=60", category: "Stationery", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-12", vendorId: "v-5", name: "Premium Salted Potato Crisps", description: "Crunchy golden potato crisps seasoned with light sea salt.", price: 950, image: "https://images.unsplash.com/photo-1566478989037-eec170784d20?w=600&auto=format&fit=crop&q=60", category: "Snacks", isAvailable: true, createdAt: new Date().toISOString() },
-        
-        // Medplus Pharmacy (v-6)
-        { id: "p-13", vendorId: "v-6", name: "Vitamin C Chewable Boosters", description: "High potency Vitamin C tablets (1000mg) for strong immunity.", price: 3200, image: "https://images.unsplash.com/photo-1616679911721-fe6eec14f7e9?w=600&auto=format&fit=crop&q=60", category: "Wellness", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-14", vendorId: "v-6", name: "Aloe Hand Sanitizer Gel", description: "Kills 99.9% of germs while keeping skin moisturized with organic Aloe Vera.", price: 1200, image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60", category: "Hygiene", isAvailable: true, createdAt: new Date().toISOString() },
-        
-        // Chowstore Lekki (v-7)
-        { id: "p-15", vendorId: "v-7", name: "Farm Fresh Tomatoes Basket", description: "Freshly harvested, organic and juicy red tomatoes (1kg).", price: 2800, image: "https://images.unsplash.com/photo-1595855759920-86582396756a?w=600&auto=format&fit=crop&q=60", category: "Produce", isAvailable: true, createdAt: new Date().toISOString() },
-        { id: "p-16", vendorId: "v-7", name: "Golden Penny Spaghetti Pasta", description: "Rich in fiber, quick-cooking premium semolina wheat spaghetti pack (500g).", price: 1100, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: new Date().toISOString() }
-      ];
-      localStorage.setItem("fd_products", JSON.stringify(initialProducts));
-    }
-
-    const productsWithAddons = initialProducts.map(p => {
-      if (defaultAddonsMap[p.id]) {
-        return { ...p, addons: defaultAddonsMap[p.id] };
-      }
-      return p;
-    });
-    setProducts(productsWithAddons);
-
-    // 4. Riders Seed
-    let initialRiders: Rider[] = [];
-    if (savedRiders) {
-      initialRiders = JSON.parse(savedRiders);
-    } else {
-      initialRiders = [
-        {
-          id: "r-1",
-          userId: "ride-1",
-          name: "Rider Daniel",
-          phone: "+234 905 987 6543",
-          vehicleType: "motorcycle",
-          status: "approved",
-          isAvailable: true,
-          createdAt: new Date().toISOString()
+      const productsWithAddons = initialProducts.map(p => {
+        if (defaultAddonsMap[p.id]) {
+          return { ...p, addons: defaultAddonsMap[p.id] };
         }
-      ];
-      localStorage.setItem("fd_riders", JSON.stringify(initialRiders));
-    }
-    setRiders(initialRiders);
+        return p;
+      });
+      setProducts(productsWithAddons);
 
-    // 5. Orders Seed
-    let initialOrders: Order[] = [];
-    if (savedOrders) {
-      initialOrders = JSON.parse(savedOrders);
-    } else {
-      initialOrders = [
-        {
-          id: "1253",
-          customerId: "cust-1",
-          customerName: "Sarah Collins",
-          customerPhone: "+234 803 123 4567",
-          vendorId: "v-1",
-          vendorName: "Mama Cass",
-          riderId: "r-1",
-          riderName: "Rider Daniel",
-          status: "delivered",
-          totalAmount: 15000,
-          deliveryAddress: "Tanke Road, Ilorin, Kwara",
-          paymentMethod: "Cash on Delivery",
-          createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
-          items: [
-            { id: "oi-1", orderId: "ord-1253", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 2 },
-            { id: "oi-4", orderId: "ord-1253", productId: "p-4", name: "Coca Cola (50cl)", price: 500, quantity: 2 }
-          ]
-        },
-        {
-          id: "1254",
-          customerId: "cust-1",
-          customerName: "Sarah Collins",
-          customerPhone: "+234 803 123 4567",
-          vendorId: "v-2",
-          vendorName: "Chicken Republic",
-          riderId: "r-1",
-          riderName: "Rider Daniel",
-          status: "ready",
-          totalAmount: 4500,
-          deliveryAddress: "Fate Road, Ilorin, Kwara",
-          paymentMethod: "Paystack (Card)",
-          createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
-          items: [
-            { id: "oi-2", orderId: "ord-1254", productId: "p-5", name: "Citizens Meal", price: 3200, quantity: 1 }
-          ]
-        },
-        {
-          id: "1255",
-          customerId: "cust-1",
-          customerName: "Sarah Collins",
-          customerPhone: "+234 803 123 4567",
-          vendorId: "v-1",
-          vendorName: "Mama Cass",
-          status: "preparing",
-          totalAmount: 12000,
-          deliveryAddress: "Fate Road, Ilorin, Kwara",
-          paymentMethod: "Paystack (Card)",
-          createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
-          items: [
-            { id: "oi-3", orderId: "ord-1255", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 3 }
-          ]
-        },
-        {
-          id: "1256",
-          customerId: "cust-1",
-          customerName: "Sarah Collins",
-          customerPhone: "+234 803 123 4567",
-          vendorId: "v-1",
-          vendorName: "Mama Cass",
-          status: "pending",
-          totalAmount: 8500,
-          deliveryAddress: "Fate Road, Ilorin, Kwara",
-          paymentMethod: "Paystack (Card)",
-          createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
-          items: [
-            { id: "oi-5", orderId: "ord-1256", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 1 },
-            { id: "oi-6", orderId: "ord-1256", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 1 }
-          ]
+      // 4. Riders
+      const savedRiders = localStorage.getItem("fd_riders");
+      let initialRiders: Rider[] = [];
+      if (savedRiders) {
+        initialRiders = JSON.parse(savedRiders);
+      } else {
+        initialRiders = [
+          {
+            id: "r-1",
+            userId: "ride-1",
+            name: "Rider Daniel",
+            phone: "+234 905 987 6543",
+            vehicleType: "motorcycle",
+            status: "approved",
+            isAvailable: true,
+            createdAt: new Date().toISOString()
+          }
+        ];
+        localStorage.setItem("fd_riders", JSON.stringify(initialRiders));
+      }
+      setRiders(initialRiders);
+
+      // 5. Orders
+      const savedOrders = localStorage.getItem("fd_orders");
+      let initialOrders: Order[] = [];
+      if (savedOrders) {
+        initialOrders = JSON.parse(savedOrders);
+      } else {
+        initialOrders = [
+          {
+            id: "1253",
+            customerId: "cust-1",
+            customerName: "Sarah Collins",
+            customerPhone: "+234 803 123 4567",
+            vendorId: "v-1",
+            vendorName: "Mama Cass",
+            riderId: "r-1",
+            riderName: "Rider Daniel",
+            status: "delivered",
+            totalAmount: 15000,
+            deliveryAddress: "Tanke Road, Ilorin, Kwara",
+            paymentMethod: "Cash on Delivery",
+            createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
+            items: [
+              { id: "oi-1", orderId: "ord-1253", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 2 },
+              { id: "oi-4", orderId: "ord-1253", productId: "p-4", name: "Coca Cola (50cl)", price: 500, quantity: 2 }
+            ]
+          },
+          {
+            id: "1254",
+            customerId: "cust-1",
+            customerName: "Sarah Collins",
+            customerPhone: "+234 803 123 4567",
+            vendorId: "v-2",
+            vendorName: "Chicken Republic",
+            riderId: "r-1",
+            riderName: "Rider Daniel",
+            status: "ready",
+            totalAmount: 4500,
+            deliveryAddress: "Fate Road, Ilorin, Kwara",
+            paymentMethod: "Paystack (Card)",
+            createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
+            items: [
+              { id: "oi-2", orderId: "ord-1254", productId: "p-5", name: "Citizens Meal", price: 3200, quantity: 1 }
+            ]
+          },
+          {
+            id: "1255",
+            customerId: "cust-1",
+            customerName: "Sarah Collins",
+            customerPhone: "+234 803 123 4567",
+            vendorId: "v-1",
+            vendorName: "Mama Cass",
+            status: "preparing",
+            totalAmount: 12000,
+            deliveryAddress: "Fate Road, Ilorin, Kwara",
+            paymentMethod: "Paystack (Card)",
+            createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
+            items: [
+              { id: "oi-3", orderId: "ord-1255", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 3 }
+            ]
+          },
+          {
+            id: "1256",
+            customerId: "cust-1",
+            customerName: "Sarah Collins",
+            customerPhone: "+234 803 123 4567",
+            vendorId: "v-1",
+            vendorName: "Mama Cass",
+            status: "pending",
+            totalAmount: 8500,
+            deliveryAddress: "Fate Road, Ilorin, Kwara",
+            paymentMethod: "Paystack (Card)",
+            createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
+            items: [
+              { id: "oi-5", orderId: "ord-1256", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 1 },
+              { id: "oi-6", orderId: "ord-1256", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 1 }
+            ]
+          }
+        ];
+        localStorage.setItem("fd_orders", JSON.stringify(initialOrders));
+      }
+      setOrders(initialOrders);
+
+      // 6. Restore active session
+      const savedSessionUser = sessionStorage.getItem("fd_session_user");
+      if (savedSessionUser) {
+        const u: User = JSON.parse(savedSessionUser);
+        setCurrentUser(u);
+        if (u.role === "vendor") {
+          const v = initialVendors.find(vendor => vendor.userId === u.id);
+          setCurrentVendor(v || null);
+        } else if (u.role === "rider") {
+          const r = initialRiders.find(rider => rider.userId === u.id);
+          setCurrentRider(r || null);
         }
-      ];
-      localStorage.setItem("fd_orders", JSON.stringify(initialOrders));
-    }
-    setOrders(initialOrders);
-
-    // 6. Restore active session if any
-    const savedSessionUser = sessionStorage.getItem("fd_session_user");
-    if (savedSessionUser) {
-      const u: User = JSON.parse(savedSessionUser);
-      setCurrentUser(u);
-      
-      // Load respective portal context too
-      if (u.role === "vendor") {
-        const v = initialVendors.find(vendor => vendor.userId === u.id);
-        setCurrentVendor(v || null);
-      } else if (u.role === "rider") {
-        const r = initialRiders.find(rider => rider.userId === u.id);
-        setCurrentRider(r || null);
+      } else {
+        const defaultCust = initialUsers.find(u => u.role === "customer") || null;
+        if (defaultCust) {
+          setCurrentUser(defaultCust);
+          sessionStorage.setItem("fd_session_user", JSON.stringify(defaultCust));
+        }
       }
-    } else {
-      // Auto login as basic customer to begin with! Perfect onboarding.
-      const defaultCust = initialUsers.find(u => u.role === "customer") || null;
-      if (defaultCust) {
-        setCurrentUser(defaultCust);
-        sessionStorage.setItem("fd_session_user", JSON.stringify(defaultCust));
+
+      // 7. Available Locations Seed
+      const savedAvailableLocations = localStorage.getItem("fd_available_locations");
+      let initialAvailableLocations: string[] = [];
+      if (savedAvailableLocations) {
+        initialAvailableLocations = JSON.parse(savedAvailableLocations);
+      } else {
+        initialAvailableLocations = [
+          "Tanke, Ilorin, Kwara",
+          "GRA, Ilorin, Kwara",
+          "Challenge, Ilorin, Kwara",
+          "Fate, Ilorin, Kwara",
+          "Adewole, Ilorin, Kwara",
+          "Post Office Area, Ilorin, Kwara"
+        ];
       }
-    }
 
-    // 7. Available Locations Seed
-    const savedAvailableLocations = localStorage.getItem("fd_available_locations");
-    let initialAvailableLocations: string[] = [];
-    if (savedAvailableLocations) {
-      initialAvailableLocations = JSON.parse(savedAvailableLocations);
-    } else {
-      initialAvailableLocations = [
-        "Tanke, Ilorin, Kwara",
-        "GRA, Ilorin, Kwara",
-        "Challenge, Ilorin, Kwara",
-        "Fate, Ilorin, Kwara",
-        "Adewole, Ilorin, Kwara",
-        "Post Office Area, Ilorin, Kwara"
-      ];
-    }
+      const savedExtremeLocations = localStorage.getItem("fd_extreme_locations");
+      let initialExtreme: ExtremeLocation[] = [];
+      if (savedExtremeLocations) {
+        try {
+          initialExtreme = JSON.parse(savedExtremeLocations);
+        } catch {}
+      }
+      if (!initialExtreme || initialExtreme.length === 0) {
+        initialExtreme = [
+          { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
+          { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
+          { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
+          { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
+          { id: "ex-5", name: "Shao", tierId: "tier-2" },
+          { id: "ex-6", name: "Oke-Oyi", tierId: "tier-2" },
+          { id: "ex-7", name: "Ganmo Outer Bounds", tierId: "tier-3" },
+          { id: "ex-8", name: "Afono", tierId: "tier-3" }
+        ];
+      }
 
-    // Ensure all seed extreme locations are also added to availableLocations so that delivery zones are fully linked with tiers
-    const savedExtremeLocations = localStorage.getItem("fd_extreme_locations");
-    let initialExtreme: ExtremeLocation[] = [];
-    if (savedExtremeLocations) {
+      let finalLocations = [...initialAvailableLocations];
+      initialExtreme.forEach(ex => {
+        if (!finalLocations.includes(ex.name)) {
+          finalLocations.push(ex.name);
+        }
+      });
+      localStorage.setItem("fd_available_locations", JSON.stringify(finalLocations));
+      setAvailableLocations(finalLocations);
+
+      // 8. Restore or seed Payment Gateways
+      const savedPaymentGateways = localStorage.getItem("fd_payment_gateways");
+      let initialPaymentGateways: PaymentGateway[] = [];
+      if (savedPaymentGateways) {
+        initialPaymentGateways = JSON.parse(savedPaymentGateways);
+      } else {
+        initialPaymentGateways = [
+          { id: "credit_card", name: "Credit Card", desc: "Pay with VISA / Mastercard / Verve", isEnabled: true, apiKey: "pk_live_51O..." },
+          { id: "cash_on_delivery", name: "Cash on Delivery", desc: "Pay with cash or bank transfer on arrival", isEnabled: true },
+          { id: "wallet", name: "Owode Food Wallet", desc: "Instantly settle using your balance wallet", isEnabled: true },
+          { id: "monnify", name: "Monnify (Bank & Card)", desc: "Secure automated payments via Monnify API", isEnabled: true, apiKey: "MK_prod_x94k...", secretKey: "sk_prod_948j...", contractCode: "1234567890" },
+          { id: "bank_transfer", name: "Local Bank Transfer", desc: "Direct transfer with automated receipt uploading", isEnabled: true, bankName: "GTBank", accountNumber: "0123456789", accountName: "Owode Food Marketplace LTD" }
+        ];
+        localStorage.setItem("fd_payment_gateways", JSON.stringify(initialPaymentGateways));
+      }
+      setPaymentGateways(initialPaymentGateways);
+
+      // 9. Restore category service fees
+      const savedCategoryFees = localStorage.getItem("fd_category_service_fees");
+      if (savedCategoryFees) {
+        setCategoryServiceFees(JSON.parse(savedCategoryFees));
+      }
+
+      // 10. Restore vendor categories
+      const savedVendorCategories = localStorage.getItem("fd_vendor_categories");
+      let initialCategories: VendorCategoryInfo[] = [];
+      if (savedVendorCategories) {
+        initialCategories = JSON.parse(savedVendorCategories);
+      } else {
+        initialCategories = [
+          { id: "restaurant", name: "Restaurants", iconName: "UtensilsCrossed", color: "orange" },
+          { id: "shop", name: "Shops", iconName: "Store", color: "yellow" },
+          { id: "pharmacy", name: "Pharmacies", iconName: "Pill", color: "sky" },
+          { id: "groceries", name: "Chowstore", iconName: "Apple", color: "red" },
+        ];
+        localStorage.setItem("fd_vendor_categories", JSON.stringify(initialCategories));
+      }
+      setVendorCategories(initialCategories);
+
+      // 11. Restore global service fee / delivery fee settings
+      const savedFeeType = localStorage.getItem("fd_global_service_fee_type");
+      if (savedFeeType) {
+        setGlobalServiceFeeType(savedFeeType as any);
+      }
+      const savedFeeValue = localStorage.getItem("fd_global_service_fee_value");
+      if (savedFeeValue) {
+        setGlobalServiceFeeValue(Number(savedFeeValue));
+      }
+      const savedFreeDel = localStorage.getItem("fd_global_free_delivery");
+      if (savedFreeDel) {
+        setGlobalFreeDelivery(savedFreeDel === "true");
+      }
+
+      const savedCurrency = localStorage.getItem("fd_currency");
+      if (savedCurrency) {
+        setCurrency(savedCurrency);
+      }
+
+      const savedPlatformCommissionRate = localStorage.getItem("fd_platform_commission_rate");
+      if (savedPlatformCommissionRate) {
+        setPlatformCommissionRate(Number(savedPlatformCommissionRate));
+      }
+      const savedRiderCommissionType = localStorage.getItem("fd_rider_commission_type");
+      if (savedRiderCommissionType) {
+        setRiderCommissionType(savedRiderCommissionType as any);
+      }
+      const savedRiderCommissionValue = localStorage.getItem("fd_rider_commission_value");
+      if (savedRiderCommissionValue) {
+        setRiderCommissionValue(Number(savedRiderCommissionValue));
+      }
+
+      const savedVatEnabled = localStorage.getItem("fd_vat_enabled");
+      if (savedVatEnabled) {
+        setVatEnabled(savedVatEnabled === "true");
+      }
+      const savedVatRate = localStorage.getItem("fd_vat_rate");
+      if (savedVatRate) {
+        setVatRate(Number(savedVatRate));
+      }
+
+      const savedMaxCartItems = localStorage.getItem("fd_max_cart_items");
+      if (savedMaxCartItems) {
+        setMaxCartItems(Number(savedMaxCartItems));
+      }
+
+      // 12. Restore employees
+      const savedEmployees = localStorage.getItem("fd_employees");
+      let initialEmployees: Employee[] = [];
+      if (savedEmployees) {
+        initialEmployees = JSON.parse(savedEmployees);
+      } else {
+        initialEmployees = [
+          { id: "emp-1", name: "Adewale Banjo", email: "adewale@owodefood.com", phone: "+234 812 345 6789", department: "dispatcher", status: "active", permissions: ["manage_orders", "manage_riders"], createdAt: new Date().toISOString() },
+          { id: "emp-2", name: "Chidi Okafor", email: "chidi@owodefood.com", phone: "+234 803 111 2222", department: "finance", status: "active", permissions: ["view_settings"], createdAt: new Date().toISOString() },
+          { id: "emp-3", name: "Fatima Yusuf", email: "fatima@owodefood.com", phone: "+234 705 999 8888", department: "support", status: "active", permissions: ["manage_orders", "manage_vendors"], createdAt: new Date().toISOString() },
+        ];
+        localStorage.setItem("fd_employees", JSON.stringify(initialEmployees));
+      }
+      setEmployees(initialEmployees);
+
+      // 13. Restore reviews
+      const savedReviews = localStorage.getItem("fd_reviews");
+      let initialReviews: Review[] = [];
+      if (savedReviews) {
+        initialReviews = JSON.parse(savedReviews);
+      } else {
+        initialReviews = [
+          { id: "rev-1", vendorId: "v-1", customerId: "cust-1", author: "Adebayo O.", rating: 5, comment: "Smoky Jollof of dreams! Highly recommend Mama Cass, original flavor is preserved.", createdAt: "2026-06-27T10:00:00.000Z" },
+          { id: "rev-2", vendorId: "v-1", customerId: "cust-1", author: "Chinedu E.", rating: 4, comment: "Crispy grilled chicken is excellent. Perfectly packed and came hot.", createdAt: "2026-06-25T14:30:00.000Z" },
+          { id: "rev-3", vendorId: "v-2", customerId: "cust-1", author: "Fatima Y.", rating: 5, comment: "Authentic taste. Fast checkout setup, we will order again on Friday!", createdAt: "2026-06-20T12:00:00.000Z" }
+        ];
+        localStorage.setItem("fd_reviews", JSON.stringify(initialReviews));
+      }
+      setReviews(initialReviews);
+
+      // Upload seeded / local storage data to Cloud SQL for permanent persistence!
       try {
-        initialExtreme = JSON.parse(savedExtremeLocations);
-      } catch {
-        // fallback
+        await syncSave("USERS_BULK", initialUsers);
+        await syncSave("VENDORS_BULK", initialVendors);
+        await syncSave("PRODUCTS_BULK", productsWithAddons);
+        await syncSave("RIDERS_BULK", initialRiders);
+        await syncSave("ORDERS_BULK", initialOrders);
+        await syncSave("PAYMENT_GATEWAYS_BULK", initialPaymentGateways);
+        await syncSave("EXTREME_LOCATION_TIERS_BULK", [
+          { id: "tier-1", name: "Tier 1: Outer Suburbs", surcharge: 1000 },
+          { id: "tier-2", name: "Tier 2: Extreme Outskirts", surcharge: 2000 },
+          { id: "tier-3", name: "Tier 3: Ultra Remote / Borders", surcharge: 3500 }
+        ]);
+        await syncSave("EXTREME_LOCATIONS_BULK", initialExtreme);
+        await syncSave("EMPLOYEES_BULK", initialEmployees);
+        await syncSave("REVIEWS_BULK", initialReviews);
+      } catch (e) {
+        console.error("Failed to seed database with fallback variables", e);
       }
-    }
-    if (!initialExtreme || initialExtreme.length === 0) {
-      initialExtreme = [
-        { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
-        { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
-        { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
-        { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
-        { id: "ex-5", name: "Shao", tierId: "tier-2" },
-        { id: "ex-6", name: "Oke-Oyi", tierId: "tier-2" },
-        { id: "ex-7", name: "Ganmo Outer Bounds", tierId: "tier-3" },
-        { id: "ex-8", name: "Afono", tierId: "tier-3" }
-      ];
-    }
+    };
 
-    // Now let's merge them together
-    let finalLocations = [...initialAvailableLocations];
-    initialExtreme.forEach(ex => {
-      if (!finalLocations.includes(ex.name)) {
-        finalLocations.push(ex.name);
-      }
-    });
-    localStorage.setItem("fd_available_locations", JSON.stringify(finalLocations));
-    setAvailableLocations(finalLocations);
-
-    // 8. Restore or seed Payment Gateways
-    const savedPaymentGateways = localStorage.getItem("fd_payment_gateways");
-    let initialPaymentGateways: PaymentGateway[] = [];
-    if (savedPaymentGateways) {
-      initialPaymentGateways = JSON.parse(savedPaymentGateways);
-    } else {
-      initialPaymentGateways = [
-        { id: "credit_card", name: "Credit Card", desc: "Pay with VISA / Mastercard / Verve", isEnabled: true, apiKey: "pk_live_51O..." },
-        { id: "cash_on_delivery", name: "Cash on Delivery", desc: "Pay with cash or bank transfer on arrival", isEnabled: true },
-        { id: "wallet", name: "Owode Food Wallet", desc: "Instantly settle using your balance wallet", isEnabled: true },
-        { id: "monnify", name: "Monnify (Bank & Card)", desc: "Secure automated payments via Monnify API", isEnabled: true, apiKey: "MK_prod_x94k...", secretKey: "sk_prod_948j...", contractCode: "1234567890" },
-        { id: "bank_transfer", name: "Local Bank Transfer", desc: "Direct transfer with automated receipt uploading", isEnabled: true, bankName: "GTBank", accountNumber: "0123456789", accountName: "Owode Food Marketplace LTD" }
-      ];
-      localStorage.setItem("fd_payment_gateways", JSON.stringify(initialPaymentGateways));
-    }
-    setPaymentGateways(initialPaymentGateways);
-
-    // 9. Restore category service fees
-    const savedCategoryFees = localStorage.getItem("fd_category_service_fees");
-    if (savedCategoryFees) {
-      setCategoryServiceFees(JSON.parse(savedCategoryFees));
-    }
-
-    // 10. Restore vendor categories
-    const savedVendorCategories = localStorage.getItem("fd_vendor_categories");
-    let initialCategories: VendorCategoryInfo[] = [];
-    if (savedVendorCategories) {
-      initialCategories = JSON.parse(savedVendorCategories);
-    } else {
-      initialCategories = [
-        { id: "restaurant", name: "Restaurants", iconName: "UtensilsCrossed", color: "orange" },
-        { id: "shop", name: "Shops", iconName: "Store", color: "yellow" },
-        { id: "pharmacy", name: "Pharmacies", iconName: "Pill", color: "sky" },
-        { id: "groceries", name: "Chowstore", iconName: "Apple", color: "red" },
-      ];
-      localStorage.setItem("fd_vendor_categories", JSON.stringify(initialCategories));
-    }
-    setVendorCategories(initialCategories);
-
-    // 11. Restore global service fee / delivery fee settings
-    const savedFeeType = localStorage.getItem("fd_global_service_fee_type");
-    if (savedFeeType) {
-      setGlobalServiceFeeType(savedFeeType as any);
-    }
-    const savedFeeValue = localStorage.getItem("fd_global_service_fee_value");
-    if (savedFeeValue) {
-      setGlobalServiceFeeValue(Number(savedFeeValue));
-    }
-    const savedFreeDel = localStorage.getItem("fd_global_free_delivery");
-    if (savedFreeDel) {
-      setGlobalFreeDelivery(savedFreeDel === "true");
-    }
-
-    const savedCurrency = localStorage.getItem("fd_currency");
-    if (savedCurrency) {
-      setCurrency(savedCurrency);
-    }
-
-    const savedPlatformCommissionRate = localStorage.getItem("fd_platform_commission_rate");
-    if (savedPlatformCommissionRate) {
-      setPlatformCommissionRate(Number(savedPlatformCommissionRate));
-    }
-    const savedRiderCommissionType = localStorage.getItem("fd_rider_commission_type");
-    if (savedRiderCommissionType) {
-      setRiderCommissionType(savedRiderCommissionType as any);
-    }
-    const savedRiderCommissionValue = localStorage.getItem("fd_rider_commission_value");
-    if (savedRiderCommissionValue) {
-      setRiderCommissionValue(Number(savedRiderCommissionValue));
-    }
-
-    const savedVatEnabled = localStorage.getItem("fd_vat_enabled");
-    if (savedVatEnabled) {
-      setVatEnabled(savedVatEnabled === "true");
-    }
-    const savedVatRate = localStorage.getItem("fd_vat_rate");
-    if (savedVatRate) {
-      setVatRate(Number(savedVatRate));
-    }
-
-    // 12. Restore employees
-    const savedEmployees = localStorage.getItem("fd_employees");
-    let initialEmployees: Employee[] = [];
-    if (savedEmployees) {
-      initialEmployees = JSON.parse(savedEmployees);
-    } else {
-      initialEmployees = [
-        { id: "emp-1", name: "Adewale Banjo", email: "adewale@owodefood.com", phone: "+234 812 345 6789", department: "dispatcher", status: "active", permissions: ["manage_orders", "manage_riders"], createdAt: new Date().toISOString() },
-        { id: "emp-2", name: "Chidi Okafor", email: "chidi@owodefood.com", phone: "+234 803 111 2222", department: "finance", status: "active", permissions: ["view_settings"], createdAt: new Date().toISOString() },
-        { id: "emp-3", name: "Fatima Yusuf", email: "fatima@owodefood.com", phone: "+234 705 999 8888", department: "support", status: "active", permissions: ["manage_orders", "manage_vendors"], createdAt: new Date().toISOString() },
-      ];
-      localStorage.setItem("fd_employees", JSON.stringify(initialEmployees));
-    }
-    setEmployees(initialEmployees);
+    loadFromCloudSQL();
   }, []);
 
   const updateAvailableLocations = (locations: string[]) => {
@@ -895,6 +962,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const updateExtremeLocationTiers = (tiers: ExtremeLocationTier[]) => {
     setExtremeLocationTiers(tiers);
     localStorage.setItem("fd_extreme_tiers", JSON.stringify(tiers));
+    syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
   };
 
   const addExtremeLocation = (name: string, tierId: string) => {
@@ -902,17 +970,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = [...extremeLocations, newLoc];
     setExtremeLocations(updated);
     localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
+    syncSave("EXTREME_LOCATIONS_BULK", updated);
   };
 
   const removeExtremeLocation = (id: string) => {
     const updated = extremeLocations.filter(item => item.id !== id);
     setExtremeLocations(updated);
     localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
+    syncSave("EXTREME_LOCATION_DELETE", { id });
   };
 
   const updateExtremeLocations = (locations: ExtremeLocation[]) => {
     setExtremeLocations(locations);
     localStorage.setItem("fd_extreme_locations", JSON.stringify(locations));
+    syncSave("EXTREME_LOCATIONS_BULK", locations);
   };
 
   const addSavedAddress = (streetAddress: string, district: string, landmarkNote: string) => {
@@ -927,17 +998,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = [...savedAddresses, newAddress];
     setSavedAddresses(updated);
     localStorage.setItem("fd_saved_addresses", JSON.stringify(updated));
+    syncSave("USER_SAVED_ADDRESSES_BULK", updated);
   };
 
   const removeSavedAddress = (id: string) => {
     const updated = savedAddresses.filter(item => item.id !== id);
     setSavedAddresses(updated);
     localStorage.setItem("fd_saved_addresses", JSON.stringify(updated));
+    syncSave("USER_SAVED_ADDRESS_DELETE", { id });
   };
 
   const updatePaymentGateways = (gateways: PaymentGateway[]) => {
     setPaymentGateways(gateways);
     localStorage.setItem("fd_payment_gateways", JSON.stringify(gateways));
+    syncSave("PAYMENT_GATEWAYS_BULK", gateways);
   };
 
   const updateCategoryServiceFee = (category: string, fee: number) => {
@@ -995,6 +1069,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const updatePlatformCommissionRate = (rate: number) => {
     setPlatformCommissionRate(rate);
     localStorage.setItem("fd_platform_commission_rate", String(rate));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "platformCommissionRate", value: String(rate) });
   };
 
   const updateRiderCommissionSettings = (type: "flat" | "percentage", value: number) => {
@@ -1002,6 +1077,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     setRiderCommissionValue(value);
     localStorage.setItem("fd_rider_commission_type", type);
     localStorage.setItem("fd_rider_commission_value", String(value));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "riderCommissionType", value: type });
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "riderCommissionValue", value: String(value) });
   };
 
   const updateVatSettings = (enabled: boolean, rate: number) => {
@@ -1009,6 +1086,14 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     setVatRate(rate);
     localStorage.setItem("fd_vat_enabled", String(enabled));
     localStorage.setItem("fd_vat_rate", String(rate));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "vatEnabled", value: String(enabled) });
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "vatRate", value: String(rate) });
+  };
+
+  const updateMaxCartItems = (limit: number) => {
+    setMaxCartItems(limit);
+    localStorage.setItem("fd_max_cart_items", String(limit));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "maxCartItems", value: String(limit) });
   };
 
   const calculateServiceFee = (vendorId: string | undefined, subtotal: number): number => {
@@ -1101,6 +1186,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = [...employees, newEmp];
     setEmployees(updated);
     localStorage.setItem("fd_employees", JSON.stringify(updated));
+    syncSave("EMPLOYEES_BULK", updated);
 
     // Also register them in users state so they can log in via quick login!
     const updatedUsers = [...users, {
@@ -1118,6 +1204,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = employees.map(emp => emp.id === id ? { ...emp, ...updatedFields } : emp);
     setEmployees(updated);
     localStorage.setItem("fd_employees", JSON.stringify(updated));
+    syncSave("EMPLOYEES_BULK", updated);
 
     // Keep users state synced too
     const updatedUsers = users.map(u => u.id === id ? { 
@@ -1134,42 +1221,67 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = employees.filter(emp => emp.id !== id);
     setEmployees(updated);
     localStorage.setItem("fd_employees", JSON.stringify(updated));
+    syncSave("EMPLOYEE_DELETE", { id });
 
     // Also delete from users state
     const updatedUsers = users.filter(u => u.id !== id);
     persistUsers(updatedUsers);
   };
 
-  // Update localStorage whenever values change
+  // Cloud SQL Sync helper
+  const syncSave = async (type: string, payload: any) => {
+    try {
+      const res = await fetch("/api/sync/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, payload }),
+      });
+      if (!res.ok) {
+        console.error(`Failed to sync action: ${type}`, await res.text());
+      }
+    } catch (err) {
+      console.error(`Error syncing action: ${type}`, err);
+    }
+  };
+
+  // Update localStorage whenever values change and sync to Cloud SQL
   const persistUsers = (newUsers: User[]) => {
     setUsers(newUsers);
     localStorage.setItem("fd_users", JSON.stringify(newUsers));
+    syncSave("USERS_BULK", newUsers);
   };
 
   const persistVendors = (newVendors: Vendor[]) => {
     setVendors(newVendors);
     localStorage.setItem("fd_vendors", JSON.stringify(newVendors));
+    syncSave("VENDORS_BULK", newVendors);
   };
 
   const persistProducts = (newProducts: Product[]) => {
     setProducts(newProducts);
     localStorage.setItem("fd_products", JSON.stringify(newProducts));
+    syncSave("PRODUCTS_BULK", newProducts);
   };
 
   const persistOrders = (newOrders: Order[]) => {
     setOrders(newOrders);
     localStorage.setItem("fd_orders", JSON.stringify(newOrders));
+    syncSave("ORDERS_BULK", newOrders);
   };
 
   const persistRiders = (newRiders: Rider[]) => {
     setRiders(newRiders);
     localStorage.setItem("fd_riders", JSON.stringify(newRiders));
+    syncSave("RIDERS_BULK", newRiders);
   };
 
   // AUTH ACTIONS
-  const login = (email: string, role: UserRole) => {
-    const cleansedEmail = email.trim().toLowerCase();
-    const user = users.find(u => u.email.toLowerCase() === cleansedEmail);
+  const login = (identifier: string, role: UserRole) => {
+    const cleansed = identifier.trim().toLowerCase();
+    const user = users.find(u => 
+      u.email.toLowerCase() === cleansed || 
+      u.phone.replace(/[\s\-\+\(\)]/g, "") === cleansed.replace(/[\s\-\+\(\)]/g, "")
+    );
     
     if (user) {
       if (user.role !== role) {
@@ -1188,7 +1300,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       }
       return { success: true };
     } else {
-      return { success: false, error: "Email not found. Please click 'Register' if you need a new account." };
+      return { success: false, error: "Account not found. Please click 'Register' if you need a new account." };
     }
   };
 
@@ -1197,6 +1309,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     email: string,
     phone: string,
     role: UserRole,
+    gender?: string,
     extra?: { businessName?: string; cuisine?: string; vehicleType?: string }
   ) => {
     const cleansedEmail = email.trim().toLowerCase();
@@ -1212,6 +1325,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       name,
       phone,
       role,
+      gender: gender || undefined,
       createdAt: new Date().toISOString()
     };
 
@@ -1327,9 +1441,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const updateProfile = (name: string, phone: string) => {
+  const updateProfile = (name: string, phone: string, gender?: string) => {
     if (!currentUser) return;
-    const updated = { ...currentUser, name, phone };
+    const updated = { ...currentUser, name, phone, gender };
     const updatedUsers = users.map(u => u.id === currentUser.id ? updated : u);
     persistUsers(updatedUsers);
     setCurrentUser(updated);
@@ -1355,6 +1469,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
   // CART ACTIONS
   const addToCart = (product: Product, selectedAddons: Addon[] = []) => {
+    const currentTotalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
+
     if (cart.length > 0 && cart[0].product.vendorId !== product.vendorId) {
       // Clear cart first if item belongs to a different vendor (standard food rule)
       const newItem: CartItem = {
@@ -1377,10 +1493,18 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       });
 
       if (index > -1) {
+        if (currentTotalQty + 1 > maxCartItems) {
+          alert(`Maximum Order Limit Reached: A dispatch bike can convey a maximum of ${maxCartItems} items per order to guarantee safe transportation.`);
+          return;
+        }
         const newCart = [...cart];
         newCart[index].quantity += 1;
         setCart(newCart);
       } else {
+        if (currentTotalQty + 1 > maxCartItems) {
+          alert(`Maximum Order Limit Reached: A dispatch bike can convey a maximum of ${maxCartItems} items per order to guarantee safe transportation.`);
+          return;
+        }
         const newItem: CartItem = {
           id: "cart-" + generateId(),
           product,
@@ -1406,6 +1530,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       removeFromCart(id);
       return;
     }
+
+    const itemToUpdate = cart.find(item => item.id === id) || cart.find(item => item.product.id === id);
+    if (itemToUpdate) {
+      const otherItemsQty = cart
+        .filter(item => item.id !== itemToUpdate.id)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      const prospectiveTotalQty = otherItemsQty + quantity;
+      
+      if (prospectiveTotalQty > maxCartItems) {
+        alert(`Maximum Order Limit Reached: A dispatch bike can convey a maximum of ${maxCartItems} items per order to guarantee safe transportation.`);
+        return;
+      }
+    }
+
     if (cart.some(item => item.id === id)) {
       setCart(cart.map(item => item.id === id ? { ...item, quantity } : item));
     } else {
@@ -1470,6 +1608,44 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     clearCart();
 
     return { success: true, orderId: newOrder.id };
+  };
+
+  const addReview = (vendorId: string, rating: number, comment: string) => {
+    if (!currentUser) return;
+
+    const newReview: Review = {
+      id: "rev-" + generateId(),
+      vendorId,
+      customerId: currentUser.id,
+      author: currentUser.name || "Anonymous",
+      rating,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+
+    // 1. Persist the reviews state
+    const updatedReviews = [newReview, ...reviews];
+    setReviews(updatedReviews);
+    localStorage.setItem("fd_reviews", JSON.stringify(updatedReviews));
+    syncSave("REVIEW_UPSERT", newReview);
+
+    // 2. Recalculate vendor's average rating
+    const vendorReviews = updatedReviews.filter(r => r.vendorId === vendorId);
+    const avgRating = vendorReviews.length > 0
+      ? Number((vendorReviews.reduce((sum, r) => sum + r.rating, 0) / vendorReviews.length).toFixed(1))
+      : rating;
+
+    const updatedVendors = vendors.map(v => {
+      if (v.id === vendorId) {
+        const updatedVendor = { ...v, rating: avgRating };
+        syncSave("VENDOR_UPSERT", updatedVendor);
+        return updatedVendor;
+      }
+      return v;
+    });
+
+    setVendors(updatedVendors);
+    localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
   };
 
   // VENDOR ACTIONS
@@ -1728,6 +1904,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         vatRate,
         updateVatSettings,
 
+        // Max cart item limit
+        maxCartItems,
+        updateMaxCartItems,
+
         // Employee Management
         employees,
         addEmployee,
@@ -1772,6 +1952,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         savedAddresses,
         addSavedAddress,
         removeSavedAddress,
+        reviews,
+        addReview,
       }}
     >
       {children}

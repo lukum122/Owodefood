@@ -189,8 +189,8 @@ export const AdminOrders: React.FC = () => {
             <div className="bg-gray-50 p-5 rounded-2xl border border-gray-150 text-xs space-y-2.5">
               {(() => {
                 const subTotal = selectedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                const vat = selectedOrder.tax !== undefined ? selectedOrder.tax : (vatEnabled ? subTotal * (vatRate / 100) : 0);
-                const svc = selectedOrder.serviceFee !== undefined ? selectedOrder.serviceFee : 0;
+                const vat = selectedOrder.tax ?? (vatEnabled ? subTotal * (vatRate / 100) : 0);
+                const svc = selectedOrder.serviceFee ?? 0;
                 const del = Math.max(0, selectedOrder.totalAmount - subTotal - vat - svc);
                 
                 return (
@@ -474,7 +474,7 @@ export const AdminVendors: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 font-bold text-gray-800 font-mono">
-                          {currency}{(v.deliveryFee !== undefined ? v.deliveryFee : 750).toLocaleString()}
+                          {currency}{(v.deliveryFee ?? 750).toLocaleString()}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-gray-600 font-mono">
                           {v.prepTime || 20} mins
@@ -1445,6 +1445,10 @@ export const AdminSettings: React.FC = () => {
     vatRate,
     updateVatSettings,
 
+    // Max cart item limit
+    maxCartItems,
+    updateMaxCartItems,
+
     // Kwara coverage expansion
     coverageGuideText,
     updateCoverageGuideText,
@@ -1464,6 +1468,7 @@ export const AdminSettings: React.FC = () => {
   const [delCommission, setDelCommission] = useState(String(riderCommissionValue));
   const [localVatEnabled, setLocalVatEnabled] = useState<boolean>(vatEnabled);
   const [localVatRate, setLocalVatRate] = useState<string>(String(vatRate));
+  const [localMaxCartItems, setLocalMaxCartItems] = useState<string>(String(maxCartItems));
   const [successWord, setSuccessWord] = useState("");
   const [newLocInput, setNewLocInput] = useState("");
 
@@ -1473,7 +1478,8 @@ export const AdminSettings: React.FC = () => {
     setDelCommission(String(riderCommissionValue));
     setLocalVatEnabled(vatEnabled);
     setLocalVatRate(String(vatRate));
-  }, [platformCommissionRate, riderCommissionType, riderCommissionValue, vatEnabled, vatRate]);
+    setLocalMaxCartItems(String(maxCartItems));
+  }, [platformCommissionRate, riderCommissionType, riderCommissionValue, vatEnabled, vatRate, maxCartItems]);
 
   const [newCatName, setNewCatName] = useState("");
   const [newCatId, setNewCatId] = useState("");
@@ -1568,6 +1574,7 @@ export const AdminSettings: React.FC = () => {
     updatePlatformCommissionRate(Number(comRate) || 0);
     updateRiderCommissionSettings(riderCommType, Number(delCommission) || 0);
     updateVatSettings(localVatEnabled, Number(localVatRate) || 0);
+    updateMaxCartItems(Number(localMaxCartItems) || 12);
     setSuccessWord("Platform parameters synchronized successfully!");
     setTimeout(() => {
       setSuccessWord("");
@@ -1776,6 +1783,26 @@ export const AdminSettings: React.FC = () => {
                   }`}
                   required
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Dispatch/Item Volume Limits Row */}
+          <div className="pt-4 border-t border-gray-100 space-y-4">
+            <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-purple-600">Dispatch Bike Volume Limits</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-650 block">Max Items Allowed Per Order</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={localMaxCartItems}
+                  onChange={(e) => setLocalMaxCartItems(e.target.value)}
+                  className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-mono font-bold"
+                  required
+                />
+                <span className="text-[10px] text-gray-400 block">Prevents orders that exceed dispatch bike safe carrying capacities.</span>
               </div>
             </div>
           </div>

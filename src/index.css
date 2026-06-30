@@ -6,8 +6,9 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-body {
+html, body {
   font-family: var(--font-sans);
   background-color: #f8f9fa;
   color: #070329;
+  overflow-x: clip;
 }

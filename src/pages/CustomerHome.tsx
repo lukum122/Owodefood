@@ -1,14 +1,19 @@
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { isVendorOpen } from "../types";
 import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, LayoutGrid, Store, UtensilsCrossed, Apple, Pill, ShoppingBag, Flame, Shuffle, ArrowUpDown } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
 export const CustomerHome: React.FC = () => {
-  const { vendors, categories, products, vendorCategories, orders, selectedLocation } = useDatabase();
+  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [] } = useDatabase();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedMerchantCategory, setSelectedMerchantCategory] = useState<string | null>(null);
+  
+  // States for delivery zone search dropdown on homepage
+  const [showZoneDropdown, setShowZoneDropdown] = useState(false);
+  const [zoneSearch, setZoneSearch] = useState("");
   
   // Sorting options for top categories
   const [categoriesSortMode, setCategoriesSortMode] = useState<"popularity" | "products" | "shuffle" | "alphabetical">("popularity");
@@ -264,17 +269,70 @@ export const CustomerHome: React.FC = () => {
       
       {/* High-Fidelity Chowdeck-style Navigation & Subheader */}
       <div className="bg-white border border-gray-100 rounded-[28px] p-4 sm:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center">
-            <MapPin className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">Delivery to</span>
-            <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-              {selectedLocation || "Active Delivery Zone"}
-              <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-            </span>
-          </div>
+        <div className="relative">
+          <button 
+            onClick={() => setShowZoneDropdown(!showZoneDropdown)}
+            className="flex items-center gap-3 text-left hover:opacity-90 transition cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">Delivery to</span>
+              <span className="text-xs font-black text-[#070329] flex items-center gap-1.5">
+                {selectedLocation || "Active Delivery Zone"}
+                <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span className="text-[10px] text-gray-400 font-normal">▼</span>
+              </span>
+            </div>
+          </button>
+
+          {showZoneDropdown && (
+            <div className="absolute left-0 mt-3 w-72 bg-white border border-gray-100 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex justify-between items-center mb-2 px-1">
+                <span className="text-[10px] font-bold text-[#070329] uppercase tracking-wider">Select Delivery Zone</span>
+                <button 
+                  onClick={() => setShowZoneDropdown(false)}
+                  className="text-gray-400 hover:text-gray-600 text-[10px] font-bold"
+                >
+                  ✕ Close
+                </button>
+              </div>
+              <div className="mb-3">
+                <input
+                  type="text"
+                  placeholder="🔍 Search delivery zones..."
+                  value={zoneSearch}
+                  onChange={(e) => setZoneSearch(e.target.value)}
+                  className="w-full text-xs p-2.5 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50/50"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                {availableLocations
+                  .filter((loc) => loc.toLowerCase().includes(zoneSearch.toLowerCase()))
+                  .map((loc) => (
+                    <button
+                      key={loc}
+                      onClick={() => {
+                        setSelectedLocation(loc);
+                        setShowZoneDropdown(false);
+                        setZoneSearch("");
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition hover:bg-gray-50 ${
+                        selectedLocation === loc ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700"
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span className="truncate">{loc}</span>
+                    </button>
+                  ))}
+                {availableLocations.filter((loc) => loc.toLowerCase().includes(zoneSearch.toLowerCase())).length === 0 && (
+                  <div className="text-[10px] text-gray-400 text-center py-4">No matching zones found</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Horizontal Navigation Categories Row matching Chowdeck Mockup */}
@@ -407,7 +465,7 @@ export const CustomerHome: React.FC = () => {
       {/* Search Bar section on Mobile */}
       <section className="block md:hidden">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             id="search-input"
             type="text"
@@ -604,7 +662,7 @@ export const CustomerHome: React.FC = () => {
                   <img
                     src={vendor.image}
                     alt={vendor.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${!isVendorOpen(vendor) ? "grayscale contrast-75 brightness-75" : ""}`}
                     referrerPolicy="no-referrer"
                     loading="lazy"
                     onError={(e) => {
@@ -613,8 +671,17 @@ export const CustomerHome: React.FC = () => {
                     }}
                   />
                   
+                  {/* Closed overlay */}
+                  {!isVendorOpen(vendor) && (
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center z-10">
+                      <span className="px-3 py-1.5 bg-red-600 text-white font-black text-[10px] uppercase tracking-widest rounded-full shadow-lg border border-red-500/20">
+                        Closed
+                      </span>
+                    </div>
+                  )}
+
                   {/* Rating Badge on cover like mock */}
-                  <div className="absolute top-3 right-3 py-1 px-2 bg-white/95 backdrop-blur-md rounded-xl text-[10px] font-black text-gray-800 shadow-sm flex items-center gap-0.5">
+                  <div className="absolute top-3 right-3 py-1 px-2 bg-white/95 backdrop-blur-md rounded-xl text-[10px] font-black text-gray-800 shadow-sm flex items-center gap-0.5 z-20">
                     <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
                     <span>{vendor.rating.toFixed(1)}</span>
                   </div>
@@ -643,12 +710,18 @@ export const CustomerHome: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between font-semibold">
                       <span className="text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold">
-                        ₦{vendor.deliveryFee !== undefined ? vendor.deliveryFee.toLocaleString() : "750"} delivery
+                        ₦{(vendor.deliveryFee ?? 750).toLocaleString()} delivery
                       </span>
                       
-                      <span className="text-[#0ea5e9] font-black inline-flex items-center gap-0.5">
-                        Order <ChevronRight className="w-3 h-3" />
-                      </span>
+                      {isVendorOpen(vendor) ? (
+                        <span className="text-[#0ea5e9] font-black inline-flex items-center gap-0.5">
+                          Order <ChevronRight className="w-3 h-3" />
+                        </span>
+                      ) : (
+                        <span className="text-red-600 bg-red-50 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider">
+                          Closed
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
