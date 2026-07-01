@@ -831,7 +831,7 @@ export const AdminPOS: React.FC = () => {
             {/* Simulated Receipt paper layout */}
             <div className="bg-gray-50 border border-gray-100 p-5 rounded-2xl space-y-4 font-mono text-[11px] text-gray-700 shadow-inner">
               <div className="text-center border-b border-dashed border-gray-300 pb-3">
-                <h4 className="font-black text-xs text-gray-950 uppercase tracking-wider">NAVYBITES PLATFORM</h4>
+                <h4 className="font-black text-xs text-gray-950 uppercase tracking-wider">OWODE FOOD PLATFORM</h4>
                 <p className="text-[10px] text-gray-400">Official POS Sales Receipt</p>
                 <p className="text-[10px] text-gray-400 mt-1">{new Date(completedOrder.createdAt).toLocaleString()}</p>
               </div>

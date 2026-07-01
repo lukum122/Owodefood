@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   role: text("role").notNull(), // customer | vendor | rider | admin | employee
   gender: text("gender"),
   createdAt: text("created_at").notNull(),
+  pin: text("pin"),
 });
 
 export const vendors = pgTable("vendors", {

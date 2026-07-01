@@ -102,22 +102,22 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const location = useLocation();
 
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [surname, setSurname] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "">("");
   const [phone, setPhone] = useState("");
   const [selectedRole, setSelectedRole] = useState<UserRole>("customer");
   
-  // PIN login flow states
-  const [pinSent, setPinSent] = useState(false);
-  const [verificationPin, setVerificationPin] = useState("");
-  const [generatedPin, setGeneratedPin] = useState("");
+  // Registration and Login multi-step flow
+  // registerStep: 1 (details), 2 (create login PIN), 3 (verify OTP/verification code sent to email/phone)
+  const [registerStep, setRegisterStep] = useState<1 | 2 | 3>(1);
+  const [createdPin, setCreatedPin] = useState("");
+  const [registerOtp, setRegisterOtp] = useState("");
+  const [generatedRegisterOtp, setGeneratedRegisterOtp] = useState("");
 
-  // Registration OTP flow states
-  const [registerOtpSent, setRegisterOtpSent] = useState(false);
-  const [registerGeneratedOtp, setRegisterGeneratedOtp] = useState("");
-  const [registerInputOtp, setRegisterInputOtp] = useState("");
+  const [loginPinStep, setLoginPinStep] = useState(false);
+  const [loginPin, setLoginPin] = useState("");
+  const [storedUserPin, setStoredUserPin] = useState("");
   
   // Extra fields for vendor and riders
   const [businessName, setBusinessName] = useState("");
@@ -130,22 +130,22 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const from = (location.state as any)?.from?.pathname || "/";
 
   React.useEffect(() => {
-    setRegisterOtpSent(false);
-    setRegisterGeneratedOtp("");
-    setRegisterInputOtp("");
-    setPinSent(false);
-    setGeneratedPin("");
-    setVerificationPin("");
+    setRegisterStep(1);
+    setCreatedPin("");
+    setRegisterOtp("");
+    setGeneratedRegisterOtp("");
+    setLoginPinStep(false);
+    setLoginPin("");
+    setStoredUserPin("");
     setError("");
     setSuccess("");
   }, [isRegisterMode]);
 
   const handleEmailChange = (val: string) => {
     setEmail(val);
-    if (pinSent) {
-      setPinSent(false);
-      setGeneratedPin("");
-      setVerificationPin("");
+    if (loginPinStep) {
+      setLoginPinStep(false);
+      setLoginPin("");
       setError("");
       setSuccess("");
     }
@@ -153,63 +153,105 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role);
-    if (pinSent) {
-      setPinSent(false);
-      setGeneratedPin("");
-      setVerificationPin("");
+    if (loginPinStep) {
+      setLoginPinStep(false);
+      setLoginPin("");
       setError("");
       setSuccess("");
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
 
-    if (!email) {
-      setError(isRegisterMode ? "Please fill in your email address." : "Please fill in your phone number or email.");
-      return;
-    }
-
     if (isRegisterMode) {
-      if (!firstName.trim() || !surname.trim() || !phone) {
-        setError("Please define your first name, surname, and phone number.");
-        return;
-      }
-      if (!gender) {
-        setError("Please select your gender.");
-        return;
-      }
-
-      const cleansedEmail = email.trim().toLowerCase();
-      const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
-      if (exists) {
-        setError("An account with this email already exists.");
-        return;
-      }
-
-      if (!registerOtpSent) {
-        const otp = Math.floor(1000 + Math.random() * 9000).toString();
-        setRegisterGeneratedOtp(otp);
-        setRegisterOtpSent(true);
-        setSuccess(`OTP Code Sent! A 4-digit verification code was sent to ${cleansedEmail} and phone ${phone}. OTP: ${otp}`);
-      } else {
-        if (registerInputOtp.trim() !== registerGeneratedOtp) {
-          setError("Incorrect 4-digit verification OTP. Please try again.");
+      if (registerStep === 1) {
+        // Step 1: Validate registration info
+        if (!email.trim()) {
+          setError("Please fill in your email address.");
+          return;
+        }
+        if (!firstName.trim() || !surname.trim() || !phone.trim()) {
+          setError("Please define your first name, surname, and phone number.");
+          return;
+        }
+        if (!gender) {
+          setError("Please select your gender.");
           return;
         }
 
-        const fullName = `${firstName.trim()} ${surname.trim()}`;
-        const extraPayload = selectedRole === "vendor" 
-          ? { businessName, cuisine }
-          : selectedRole === "rider"
-          ? { vehicleType }
-          : undefined;
+        const cleansedEmail = email.trim().toLowerCase();
+        const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
+        if (exists) {
+          setError("An account with this email already exists.");
+          return;
+        }
 
-        const res = register(fullName, email, phone, selectedRole, gender, extraPayload);
+        // Proceed to PIN Creation Page/Step!
+        setRegisterStep(2);
+        setSuccess("");
+      } else if (registerStep === 2) {
+        // Step 2: Create 4-Digit Security PIN and send verification OTP
+        if (createdPin.length < 4) {
+          setError("Please enter a complete 4-digit PIN.");
+          return;
+        }
+
+        // Generate verification OTP code
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        setGeneratedRegisterOtp(code);
+        setRegisterStep(3);
+        setSuccess("Sending 4-digit verification PIN to your email address...");
+
+        try {
+          const response = await fetch("/api/email/send-pin", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              toEmail: email.trim().toLowerCase(),
+              name: `${firstName.trim()} ${surname.trim()}`,
+              pin: code,
+            }),
+          });
+          const resJson = await response.json();
+          if (resJson.success) {
+            setSuccess(`Verification PIN successfully sent to ${email.trim().toLowerCase()}! Please check your inbox.`);
+          } else {
+            setSuccess("");
+            setError(`Failed to send PIN email: ${resJson.error || "Unknown server SMTP error"}. Please enter the verification PIN to proceed.`);
+          }
+        } catch (err: any) {
+          setSuccess("");
+          setError("Network error while trying to send verification PIN: " + (err.message || String(err)));
+        }
+      } else {
+        // Step 3: Verify OTP code and actually create account
+        if (registerOtp.length < 4) {
+          setError("Please enter the complete 4-digit verification PIN.");
+          return;
+        }
+
+        if (registerOtp !== generatedRegisterOtp) {
+          setError("Incorrect 4-digit verification PIN. Please check and try again.");
+          return;
+        }
+
+        const cleansedEmail = email.trim().toLowerCase();
+        const fullName = `${firstName.trim()} ${surname.trim()}`;
+        const extraPayload = {
+          businessName: selectedRole === "vendor" ? businessName : undefined,
+          cuisine: selectedRole === "vendor" ? cuisine : undefined,
+          vehicleType: selectedRole === "rider" ? vehicleType : undefined,
+          pin: createdPin,
+        };
+
+        const res = register(fullName, cleansedEmail, phone, selectedRole, gender, extraPayload);
         if (res.success) {
-          setSuccess("Success! OTP Verified & Account Created.");
+          setSuccess("Success! Your account is created & verified. Redirecting...");
           setTimeout(() => {
             const defaultRedirects: Record<UserRole, string> = {
               customer: "/",
@@ -219,16 +261,21 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
               employee: "/admin/dashboard",
             };
             navigate(defaultRedirects[selectedRole] || "/");
-          }, 1200);
+          }, 1000);
         } else {
           setError(res.error || "Failed to create account.");
         }
       }
     } else {
       const identifier = email.trim().toLowerCase();
-      
-      // Step 1: Request code
-      if (!pinSent) {
+
+      if (!loginPinStep) {
+        // Step 1: Enter email/phone
+        if (!identifier) {
+          setError("Please fill in your phone number or email.");
+          return;
+        }
+
         const foundUser = users.find(u => 
           u.email.toLowerCase() === identifier || 
           u.phone.replace(/[\s\-\+\(\)]/g, "") === identifier.replace(/[\s\-\+\(\)]/g, "")
@@ -244,15 +291,21 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           return;
         }
 
-        // Generate 4-digit PIN
-        const code = Math.floor(1000 + Math.random() * 9000).toString();
-        setGeneratedPin(code);
-        setPinSent(true);
-        setSuccess(`Verification code sent! Your PIN: ${code}`);
+        // Proceed to login PIN entry step
+        // Default PIN to "1234" for mock users without pin setup
+        setStoredUserPin(foundUser.pin || "1234");
+        setLoginPinStep(true);
+        setError("");
+        setSuccess("");
       } else {
-        // Step 2: Verify code
-        if (verificationPin.trim() !== generatedPin) {
-          setError("Incorrect 4-digit verification PIN. Please check and try again.");
+        // Step 2: Verify login PIN
+        if (loginPin.length < 4) {
+          setError("Please enter a complete 4-digit PIN.");
+          return;
+        }
+
+        if (loginPin !== storedUserPin) {
+          setError("Incorrect 4-digit security PIN. Please try again.");
           return;
         }
 
@@ -268,7 +321,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
               employee: "/admin/dashboard",
             };
             navigate(defaultRedirects[selectedRole] || "/");
-          }, 1000);
+          }, 600);
         } else {
           setError(res.error || "Authentication process failed.");
         }
@@ -281,14 +334,19 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
       
       {/* Brand Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-6">
-        <div className="inline-flex items-center gap-2 mb-2">
-          <span className="w-10 h-10 rounded-2xl bg-[#070329] text-white flex items-center justify-center font-black text-xl shadow-lg shadow-blue-900/10">
-            N
+        <Link to="/" className="inline-flex items-center gap-3 mb-2 group cursor-pointer justify-center">
+          <span className="w-10 h-10 rounded-2xl bg-[#070329] text-white flex items-center justify-center font-black text-xl shadow-lg shadow-blue-900/10 group-hover:scale-105 transition-transform duration-200">
+            O
           </span>
-          <span className="font-bold text-2xl text-[#070329]">
-            Navy<span className="text-blue-600">Bites</span>
-          </span>
-        </div>
+          <div className="text-left">
+            <span className="font-bold text-xl tracking-wider text-[#070329] block uppercase">
+              Owode Food
+            </span>
+            <span className="text-[9px] text-blue-600 tracking-wider block font-bold uppercase font-mono">
+              Marketplace
+            </span>
+          </div>
+        </Link>
         <p className="text-xs text-gray-500 max-w-sm mx-auto">
           Multi-Vendor Food Delivery MVP Marketplace Pilot Platform
         </p>
@@ -296,7 +354,9 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md bg-white py-8 px-6 sm:px-10 rounded-2xl shadow-xl border border-gray-100">
         <h2 className="text-xl font-bold text-[#070329] tracking-tight mb-6 text-center">
-          {isRegisterMode ? "Create Your NavyBites Account" : "Sign In to NavyBites"}
+          {isRegisterMode 
+            ? (registerStep === 3 ? "Verify Your Account" : registerStep === 2 ? "Create Security PIN" : "Create Your Owode Food Account") 
+            : (loginPinStep ? "Enter Your PIN" : "Sign In to Owode Food")}
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -313,154 +373,91 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             </div>
           )}
 
-          {/* If Register Mode is active and OTP has been sent */}
-          {isRegisterMode && registerOtpSent ? (
-            <div className="animate-fade-in space-y-4">
-              <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl space-y-1">
-                <p className="text-xs font-bold text-blue-900">Verification Required</p>
-                <p className="text-[11px] text-blue-750">
-                  A 4-digit verification code has been dispatched to:
-                </p>
-                <ul className="text-[10px] text-gray-605 list-disc list-inside">
-                  <li>Email: <span className="font-semibold text-gray-850">{email}</span></li>
-                  <li>Phone: <span className="font-semibold text-gray-855">{phone}</span></li>
-                </ul>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="block text-xs font-bold text-gray-600 leading-none">
-                    Enter 4-Digit OTP Code
+          {/* REGISTRATION FLOW */}
+          {isRegisterMode ? (
+            registerStep === 1 ? (
+              // Registration Details (Step 1)
+              <>
+                {/* Select Profile Role */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    Choose Access Role
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-                      setRegisterGeneratedOtp(otp);
-                      setSuccess(`A new OTP has been sent! Code: ${otp}`);
-                    }}
-                    className="text-[10px] text-blue-600 font-extrabold hover:underline cursor-pointer"
-                  >
-                    Resend OTP
-                  </button>
-                </div>
-                
-                <SegmentedPinInput
-                  value={registerInputOtp}
-                  onChange={(val) => setRegisterInputOtp(val)}
-                  length={4}
-                />
-
-                <p className="text-[10px] text-gray-400 text-center">
-                  Type the 4-digit OTP code shown in the green success message above to verify your account.
-                </p>
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRegisterOtpSent(false);
-                    setRegisterInputOtp("");
-                    setRegisterGeneratedOtp("");
-                    setError("");
-                    setSuccess("");
-                  }}
-                  className="text-xs text-blue-600 font-bold hover:underline cursor-pointer"
-                >
-                  ← Edit Registration Details
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Select Profile Role */}
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Choose Access Role
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {(["customer", "vendor", "rider", "admin"] as UserRole[]).map((role) => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => handleRoleChange(role)}
-                      className={`py-2 px-1 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
-                        selectedRole === role
-                          ? "bg-[#070329] border-[#070329] text-white shadow-sm"
-                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* If Register Mode, get Name & Phone numbers */}
-              {isRegisterMode && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">First Name</label>
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="e.g. John"
-                        className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none font-medium text-[#070329]"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">Surname (Last Name)</label>
-                      <input
-                        type="text"
-                        value={surname}
-                        onChange={(e) => setSurname(e.target.value)}
-                        placeholder="e.g. Doe"
-                        className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none font-medium text-[#070329]"
-                        required
-                      />
-                    </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(["customer", "vendor", "rider", "admin"] as UserRole[]).map((role) => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => handleRoleChange(role)}
+                        className={`py-2 px-1 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
+                          selectedRole === role
+                            ? "bg-[#070329] border-[#070329] text-white shadow-sm"
+                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        {role}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-2 leading-none">Gender Selection</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {(["male", "female"] as const).map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setGender(g)}
-                          className={`py-2.5 px-3 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
-                            gender === g
-                              ? "bg-[#0ea5e9] border-[#0ea5e9] text-white shadow-sm"
-                              : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                          }`}
-                        >
-                          {g}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">Phone Contact</label>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">First Name</label>
                     <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. +234 803 123 4567"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="e.g. John"
                       className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none font-medium text-[#070329]"
                       required
                     />
                   </div>
-                </>
-              )}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">Surname (Last Name)</label>
+                    <input
+                      type="text"
+                      value={surname}
+                      onChange={(e) => setSurname(e.target.value)}
+                      placeholder="e.g. Doe"
+                      className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none font-medium text-[#070329]"
+                      required
+                    />
+                  </div>
+                </div>
 
-              {/* Shared Email / Phone Input Field */}
-              {isRegisterMode ? (
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-2 leading-none">Gender Selection</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(["male", "female"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setGender(g)}
+                        className={`py-2.5 px-3 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
+                          gender === g
+                            ? "bg-[#0ea5e9] border-[#0ea5e9] text-white shadow-sm"
+                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">Phone Contact</label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +234 803 123 4567"
+                    className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none font-medium text-[#070329]"
+                    required
+                  />
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">Email Credentials</label>
                   <input
@@ -472,154 +469,260 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                     required
                   />
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">
-                      Phone Number or Email Address
-                    </label>
-                    <div className="relative">
+
+                {/* Additional parameters if Vendor signup */}
+                {selectedRole === "vendor" && (
+                  <div className="space-y-3 p-3 bg-blue-50/40 rounded-xl border border-blue-100">
+                    <p className="text-[11px] text-blue-800 font-bold uppercase leading-none">Restaurant Details</p>
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Company / E-store Name</label>
                       <input
                         type="text"
-                        value={email}
-                        onChange={(e) => handleEmailChange(e.target.value)}
-                        disabled={pinSent}
-                        placeholder="e.g. you@example.com or +234 803 123 4567"
-                        className={`w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none ${
-                          pinSent ? "opacity-60 cursor-not-allowed" : ""
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        placeholder="e.g. Golden Wok Gourmet"
+                        className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Food Category/Cuisine Type</label>
+                      <select
+                        value={cuisine}
+                        onChange={(e) => setCuisine(e.target.value)}
+                        className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none"
+                      >
+                        <option value="Italian">Italian Cuisine</option>
+                        <option value="Burgers">American Burgers</option>
+                        <option value="Sushi">Traditional Sushi</option>
+                        <option value="Asian">Wok & Noodles</option>
+                        <option value="Desserts">Plated Desserts & Cakes</option>
+                        <option value="Salads">Healthy Salads</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional parameters if Rider signup */}
+                {selectedRole === "rider" && (
+                  <div className="space-y-3 p-3 bg-amber-50/40 rounded-xl border border-amber-100">
+                    <p className="text-[11px] text-amber-800 font-bold uppercase leading-none">Courier Logistics</p>
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Vehicle Dispatch Class</label>
+                      <select
+                        value={vehicleType}
+                        onChange={(e: any) => setVehicleType(e.target.value)}
+                        className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none"
+                      >
+                        <option value="motorcycle">Motorcycle / Scooter</option>
+                        <option value="bicycle">Bicycle (Eco Friendly)</option>
+                        <option value="car">Car (Heavy Cargo)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : registerStep === 2 ? (
+              // Create PIN Step (Step 2)
+              <div className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-4">
+                    Please define a highly secure 4-digit login PIN. This PIN will be used to log in to your account.
+                  </p>
+                </div>
+                
+                <SegmentedPinInput
+                  value={createdPin}
+                  onChange={(val) => setCreatedPin(val)}
+                  length={4}
+                />
+
+                <div className="flex justify-center mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setRegisterStep(1)}
+                    className="text-xs text-blue-600 font-semibold hover:underline"
+                  >
+                    ← Back to Details
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Verify Account / Enter OTP Step (Step 3)
+              <div className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-4">
+                    Please enter the 4-digit verification PIN sent to your email (<span className="font-semibold text-gray-700">{email}</span>) to verify and activate your account.
+                  </p>
+                </div>
+
+                <SegmentedPinInput
+                  value={registerOtp}
+                  onChange={(val) => setRegisterOtp(val)}
+                  length={4}
+                />
+
+                <div className="flex justify-between items-center px-1 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setRegisterStep(2)}
+                    className="text-xs text-blue-600 font-semibold hover:underline"
+                  >
+                    ← Back to PIN setup
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+                      setGeneratedRegisterOtp(otp);
+                      setRegisterOtp("");
+                      setError("");
+                      setSuccess("Sending a new verification PIN to your email...");
+                      try {
+                        const response = await fetch("/api/email/send-pin", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            toEmail: email.trim().toLowerCase(),
+                            name: `${firstName.trim()} ${surname.trim()}`,
+                            pin: otp,
+                          }),
+                        });
+                        const resJson = await response.json();
+                        if (resJson.success) {
+                          setSuccess(`A new verification PIN has been successfully sent to ${email.trim().toLowerCase()}!`);
+                        } else {
+                          setSuccess("");
+                          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}`);
+                        }
+                      } catch (err: any) {
+                        setSuccess("");
+                        setError("Network error: " + (err.message || String(err)));
+                      }
+                    }}
+                    className="text-[10px] text-blue-600 font-extrabold hover:underline"
+                  >
+                    Resend PIN
+                  </button>
+                </div>
+
+                <div className="text-center mt-2">
+                  <span className="text-[10px] text-gray-400">
+                    For testing: Verification PIN is <span className="font-bold font-mono text-gray-600">{generatedRegisterOtp}</span>
+                  </span>
+                </div>
+              </div>
+            )
+          ) : (
+            /* LOGIN FLOW */
+            !loginPinStep ? (
+              // Enter Identifier (Step 1)
+              <>
+                {/* Select Profile Role */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    Choose Access Role
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(["customer", "vendor", "rider", "admin"] as UserRole[]).map((role) => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => handleRoleChange(role)}
+                        className={`py-2 px-1 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
+                          selectedRole === role
+                            ? "bg-[#070329] border-[#070329] text-white shadow-sm"
+                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
                         }`}
-                        required
-                      />
-                      {pinSent && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPinSent(false);
-                            setVerificationPin("");
-                            setGeneratedPin("");
-                            setError("");
-                            setSuccess("");
-                          }}
-                          className="absolute right-3 top-3 text-xs text-blue-650 font-extrabold hover:underline"
-                        >
-                          Change
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {pinSent && (
-                    <div className="animate-fade-in space-y-2">
-                      <div className="flex justify-between items-center">
-                        <label className="block text-xs font-bold text-gray-600 leading-none">
-                          Enter 4-Digit PIN
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const code = Math.floor(1000 + Math.random() * 9000).toString();
-                            setGeneratedPin(code);
-                            setSuccess(`A new PIN code has been sent! Code: ${code}`);
-                          }}
-                          className="text-[10px] text-blue-600 font-extrabold hover:underline"
-                        >
-                          Resend PIN
-                        </button>
-                      </div>
-                      
-                      <SegmentedPinInput
-                        value={verificationPin}
-                        onChange={(val) => setVerificationPin(val)}
-                        length={4}
-                      />
-
-                      <p className="text-[10px] text-gray-400 text-center">
-                        Please type the 4-digit verification code sent to your phone or email.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Additional parameters if Vendor / Rider signup */}
-              {isRegisterMode && selectedRole === "vendor" && (
-                <div className="space-y-3 p-3 bg-blue-50/40 rounded-xl border border-blue-100">
-                  <p className="text-[11px] text-blue-800 font-bold uppercase leading-none">Restaurant Details</p>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Company / E-store Name</label>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g. Golden Wok Gourmet"
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Food Category/Cuisine Type</label>
-                    <select
-                      value={cuisine}
-                      onChange={(e) => setCuisine(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none"
-                    >
-                      <option value="Italian">Italian Cuisine</option>
-                      <option value="Burgers">American Burgers</option>
-                      <option value="Sushi">Traditional Sushi</option>
-                      <option value="Asian">Wok & Noodles</option>
-                      <option value="Desserts">Plated Desserts & Cakes</option>
-                      <option value="Salads">Helthy Salads</option>
-                    </select>
+                      >
+                        {role}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
 
-              {isRegisterMode && selectedRole === "rider" && (
-                <div className="space-y-3 p-3 bg-amber-50/40 rounded-xl border border-amber-100">
-                  <p className="text-[11px] text-amber-800 font-bold uppercase leading-none">Courier Logistics</p>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Vehicle Dispatch Class</label>
-                    <select
-                      value={vehicleType}
-                      onChange={(e: any) => setVehicleType(e.target.value)}
-                      className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none"
-                    >
-                      <option value="motorcycle">Motorcycle / Scooter</option>
-                      <option value="bicycle">Bicycle (Eco Friendly)</option>
-                      <option value="car">Car (Heavy Cargo)</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">
+                    Phone Number or Email Address
+                  </label>
+                  <input
+                    type="text"
+                    value={email}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    placeholder="e.g. you@example.com or +234 803 123 4567"
+                    className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none"
+                    required
+                  />
                 </div>
-              )}
-            </>
+              </>
+            ) : (
+              // Enter PIN (Step 2)
+              <div className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-4">
+                    Please enter the 4-digit security PIN for your account to gain access.
+                  </p>
+                </div>
+
+                <SegmentedPinInput
+                  value={loginPin}
+                  onChange={(val) => setLoginPin(val)}
+                  length={4}
+                />
+
+                <div className="flex justify-between items-center px-1 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setLoginPinStep(false)}
+                    className="text-xs text-blue-600 font-semibold hover:underline"
+                  >
+                    ← Change Email/Phone
+                  </button>
+
+                  <span className="text-[10px] text-gray-400">
+                    Default PIN for mock users is <span className="font-bold font-mono text-gray-600">1234</span>
+                  </span>
+                </div>
+              </div>
+            )
           )}
 
-          {/* Login button */}
+          {/* Action Button */}
           <button
             type="submit"
             className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#070329] hover:bg-[#0d074e] text-white text-sm font-bold rounded-xl transition duration-200 shadow-lg cursor-pointer mt-4"
           >
             {isRegisterMode ? (
-              registerOtpSent ? (
+              registerStep === 1 ? (
                 <>
-                  <LogIn className="w-4 h-4" />
-                  Verify OTP & Create Account
+                  <UserPlus className="w-4 h-4" />
+                  Proceed to Create PIN
+                </>
+              ) : registerStep === 2 ? (
+                <>
+                  <Smartphone className="w-4 h-4" />
+                  Send Verification PIN
                 </>
               ) : (
                 <>
-                  <UserPlus className="w-4 h-4" />
-                  Send Verification OTP & Sign Up
+                  <LogIn className="w-4 h-4" />
+                  Verify PIN & Create Account
                 </>
               )
-            ) : pinSent ? (
-              <>
-                <LogIn className="w-4 h-4" />
-                Verify PIN & Sign In
-              </>
             ) : (
-              <>
-                <Smartphone className="w-4 h-4" />
-                Send Verification PIN
-              </>
+              !loginPinStep ? (
+                <>
+                  <Smartphone className="w-4 h-4" />
+                  Continue to Enter PIN
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  Verify PIN & Sign In
+                </>
+              )
             )}
           </button>
         </form>
@@ -635,7 +738,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             </p>
           ) : (
             <p className="text-xs text-gray-500">
-              New to NavyBites?{" "}
+              New to Owode Food?{" "}
               <Link to="/register" className="font-semibold text-blue-600 hover:underline">
                 Create an Account
               </Link>

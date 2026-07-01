@@ -125,6 +125,305 @@ const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined
 // Helper to generate UUIDs when needed (or simple unique string IDs)
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
+const getInitialUsersSeed = (): User[] => [
+  { id: "cust-1", email: "customer@gmail.com", name: "Sarah Collins", phone: "+234 803 123 4567", role: "customer", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vend-id1", email: "vendor@gmail.com", name: "Mama Cass", phone: "+234 812 345 6789", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vend-id2", email: "burger@gmail.com", name: "Chicken Republic", phone: "+234 815 555 1212", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vendor3-id", email: "domino@gmail.com", name: "Domino's Pizza", phone: "+234 813 111 2222", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vendor4-id", email: "kfc@gmail.com", name: "KFC Ilorin", phone: "+234 814 333 4444", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vendor5-id", email: "megaplaza@gmail.com", name: "Mega Plaza", phone: "+234 815 555 6666", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vendor6-id", email: "medplus@gmail.com", name: "Medplus Pharmacy", phone: "+234 816 777 8888", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "vendor7-id", email: "chowstore@gmail.com", name: "Chowstore Ilorin", phone: "+234 817 999 0000", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "ride-1", email: "rider@gmail.com", name: "Rider Daniel", phone: "+234 905 987 6543", role: "rider", createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "admin-1", email: "admin@gmail.com", name: "Platform Admin", phone: "+234 809 999 0000", role: "admin", createdAt: "2026-06-23T04:54:01.156Z" },
+];
+
+const getInitialVendorsSeed = (): Vendor[] => [
+  {
+    id: "v-1",
+    userId: "vend-id1",
+    name: "Mama Cass",
+    description: "Traditional Nigerian dishes, rich aromatic Jollof Rice, Swallow, and delicious side delicacies.",
+    cuisine: "Desserts",
+    image: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?w=600&auto=format&fit=crop&q=60",
+    rating: 4.7,
+    address: "Fate Road, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "restaurant",
+    prepTime: 25,
+    deliveryFee: 750,
+    openingTime: "08:00",
+    closingTime: "22:00"
+  },
+  {
+    id: "v-2",
+    userId: "vend-id2",
+    name: "Chicken Republic",
+    description: "Home of the famous Soulfully Spiced chicken, crunchy tenders, and legendary Jollof meals.",
+    cuisine: "Chicken",
+    image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60",
+    rating: 4.6,
+    address: "GRA, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "restaurant",
+    prepTime: 15,
+    deliveryFee: 600,
+    openingTime: "09:00",
+    closingTime: "21:30"
+  },
+  {
+    id: "v-3",
+    userId: "vendor3-id",
+    name: "Domino's Pizza",
+    description: "Hot, fresh, oven-baked pizzas, delicious chicken sides, and sweet dessert treats.",
+    cuisine: "Pizza",
+    image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60",
+    rating: 4.5,
+    address: "GRA, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "restaurant",
+    prepTime: 20,
+    deliveryFee: 900,
+    openingTime: "09:00",
+    closingTime: "23:00"
+  },
+  {
+    id: "v-4",
+    userId: "vendor4-id",
+    name: "KFC",
+    description: "Crispy fried chicken buckets, spicy Zinger burgers, and golden fries.",
+    cuisine: "Burgers",
+    image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60",
+    rating: 4.4,
+    address: "Challenge Area, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "restaurant",
+    prepTime: 20,
+    deliveryFee: 800,
+    openingTime: "10:00",
+    closingTime: "22:00"
+  },
+  {
+    id: "v-5",
+    userId: "vendor5-id",
+    name: "Mega Plaza Supermarket",
+    description: "Household groceries, premium imported products, electronics, snacks, cold beverages, laundry essentials, and personal toiletries.",
+    cuisine: "Groceries",
+    image: "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=600&auto=format&fit=crop&q=60",
+    rating: 4.6,
+    address: "Tanke Road, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "shop",
+    prepTime: 40,
+    deliveryFee: 1200,
+    openingTime: "08:00",
+    closingTime: "21:00"
+  },
+  {
+    id: "v-6",
+    userId: "vendor6-id",
+    name: "Medplus Pharmacy",
+    description: "Prescription medicines, daily vitamins, first aid kits, skin care products, and essential sanitizers.",
+    cuisine: "Drinks",
+    image: "https://images.unsplash.com/photo-1586015555751-63bb77f4322a?w=600&auto=format&fit=crop&q=60",
+    rating: 4.8,
+    address: "GRA, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "pharmacy",
+    prepTime: 10,
+    deliveryFee: 500,
+    openingTime: "07:00",
+    closingTime: "23:00"
+  },
+  {
+    id: "v-7",
+    userId: "vendor7-id",
+    name: "Chowstore Ilorin",
+    description: "Fresh farm-to-table produce, local spices, cooking oil, fresh tomatoes, green vegetables, grains, and kitchen condiments.",
+    cuisine: "Salads",
+    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=60",
+    rating: 4.9,
+    address: "Adewole Estate, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "groceries",
+    prepTime: 30,
+    deliveryFee: 1000,
+    openingTime: "08:00",
+    closingTime: "20:00"
+  }
+];
+
+const getInitialProductsSeed = (): Product[] => {
+  const productsList: Product[] = [
+    { id: "p-1", vendorId: "v-1", name: "Jollof Rice", description: "Smoky party Jollof rice with fried plantains and sliced salad.", price: 4500, image: "https://images.unsplash.com/photo-1628294895950-9805353123bc?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-2", vendorId: "v-1", name: "Fried Rice", description: "Special fried rice with fresh vegetables.", price: 4000, image: "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-3", vendorId: "v-1", name: "Grilled Chicken", description: "Spicy grilled chicken thigh marinated in local spices.", price: 3500, image: "https://images.unsplash.com/photo-1598902108854-10e335adac99?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-4", vendorId: "v-1", name: "Coca Cola (50cl)", description: "Ice cold refreshing Cola beverage in plastic bottle.", price: 500, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=60", category: "Drinks", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-5", vendorId: "v-2", name: "Citizens Meal", description: "Standard meal package containing Jollof rice, 1 fried chicken and drink.", price: 3200, image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-6", vendorId: "v-2", name: "Crunchy Chicken (2 pcs)", description: "Crispy and spicy original recipe fried chicken pieces.", price: 2800, image: "https://images.unsplash.com/photo-1562967914-608f82629710?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-7", vendorId: "v-3", name: "Pepperoni Supreme Pizza", description: "Loaded with pepperoni, mozzarella cheese and pizza sauce.", price: 6500, image: "https://images.unsplash.com/photo-1628840042765-356cda07504e?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-8", vendorId: "v-3", name: "Chicken Supreme Pizza", description: "Oven-grilled chicken breast slices, sweet corn, green peppers.", price: 7200, image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-9", vendorId: "v-4", name: "Zinger Burger", description: "A hot & crispy chicken fillet inside a warm toasted sesame bun.", price: 3800, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=60", category: "Burgers", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-10", vendorId: "v-4", name: "Fried Chicken Bucket", description: "5 pieces of signature original recipe fried chicken.", price: 6800, image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-11", vendorId: "v-5", name: "Brand New Hardcover Notebook", description: "Standard ruled 80-sheet hardcover study/business journal.", price: 1500, image: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&auto=format&fit=crop&q=60", category: "Stationery", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-12", vendorId: "v-5", name: "Premium Salted Potato Crisps", description: "Crunchy golden potato crisps seasoned with light sea salt.", price: 950, image: "https://images.unsplash.com/photo-1566478989037-eec170784d20?w=600&auto=format&fit=crop&q=60", category: "Snacks", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-13", vendorId: "v-6", name: "Vitamin C Chewable Boosters", description: "High potency Vitamin C tablets (1000mg) for strong immunity.", price: 3200, image: "https://images.unsplash.com/photo-1616679911721-fe6eec14f7e9?w=600&auto=format&fit=crop&q=60", category: "Wellness", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-14", vendorId: "v-6", name: "Aloe Hand Sanitizer Gel", description: "Kills 99.9% of germs while keeping skin moisturized with organic Aloe Vera.", price: 1200, image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60", category: "Hygiene", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-15", vendorId: "v-7", name: "Farm Fresh Tomatoes Basket", description: "Freshly harvested, organic and juicy red tomatoes (1kg).", price: 2800, image: "https://images.unsplash.com/photo-1595855759920-86582396756a?w=600&auto=format&fit=crop&q=60", category: "Produce", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-16", vendorId: "v-7", name: "Golden Penny Spaghetti Pasta", description: "Rich in fiber, quick-cooking premium semolina wheat spaghetti pack (500g).", price: 1100, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" }
+  ];
+
+  const defaultAddonsMap: Record<string, { id: string; name: string; price: number }[]> = {
+    "p-1": [
+      { id: "a-1", name: "Grilled Chicken Thigh", price: 1500 },
+      { id: "a-2", name: "Fried Plantain Portion", price: 500 },
+      { id: "a-3", name: "Extra Coleslaw", price: 400 }
+    ],
+    "p-2": [
+      { id: "a-4", name: "Peppered Gizzard", price: 1200 },
+      { id: "a-2", name: "Fried Plantain Portion", price: 500 },
+      { id: "a-13", name: "Boiled Egg Side", price: 300 }
+    ],
+    "p-5": [
+      { id: "a-5", name: "Moimoi Option", price: 600 },
+      { id: "a-6", name: "Extra Chicken Piece", price: 1800 }
+    ],
+    "p-7": [
+      { id: "a-7", name: "Extra Mozzarella Cheese", price: 1000 },
+      { id: "a-8", name: "BBQ Drizzle Cup", price: 300 }
+    ],
+    "p-8": [
+      { id: "a-7", name: "Extra Mozzarella Cheese", price: 1000 },
+      { id: "a-9", name: "Extra Sweetcorn", price: 400 }
+    ],
+    "p-9": [
+      { id: "a-10", name: "Double Beef Upgrade", price: 1500 },
+      { id: "a-11", name: "Fried Egg Side", price: 300 },
+      { id: "a-12", name: "Cheddar Cheese Slice", price: 400 }
+    ]
+  };
+
+  return productsList.map(p => {
+    if (defaultAddonsMap[p.id]) {
+      return { ...p, addons: defaultAddonsMap[p.id] };
+    }
+    return p;
+  });
+};
+
+const getInitialRidersSeed = (): Rider[] => [
+  {
+    id: "r-1",
+    userId: "ride-1",
+    name: "Rider Daniel",
+    phone: "+234 905 987 6543",
+    vehicleType: "motorcycle",
+    status: "approved",
+    isAvailable: true,
+    createdAt: "2026-06-23T04:54:01.156Z"
+  }
+];
+
+const getInitialOrdersSeed = (): Order[] => [
+  {
+    id: "1253",
+    customerId: "cust-1",
+    customerName: "Sarah Collins",
+    customerPhone: "+234 803 123 4567",
+    vendorId: "v-1",
+    vendorName: "Mama Cass",
+    riderId: "r-1",
+    riderName: "Rider Daniel",
+    status: "delivered",
+    totalAmount: 15000,
+    deliveryAddress: "Tanke Road, Ilorin, Kwara",
+    paymentMethod: "Cash on Delivery",
+    createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
+    items: [
+      { id: "oi-1", orderId: "1253", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 2 },
+      { id: "oi-4", orderId: "1253", productId: "p-4", name: "Coca Cola (50cl)", price: 500, quantity: 2 }
+    ]
+  },
+  {
+    id: "1254",
+    customerId: "cust-1",
+    customerName: "Sarah Collins",
+    customerPhone: "+234 803 123 4567",
+    vendorId: "v-2",
+    vendorName: "Chicken Republic",
+    riderId: "r-1",
+    riderName: "Rider Daniel",
+    status: "ready",
+    totalAmount: 4500,
+    deliveryAddress: "Fate Road, Ilorin, Kwara",
+    paymentMethod: "Paystack (Card)",
+    createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
+    items: [
+      { id: "oi-2", orderId: "1254", productId: "p-5", name: "Citizens Meal", price: 3200, quantity: 1 }
+    ]
+  },
+  {
+    id: "1255",
+    customerId: "cust-1",
+    customerName: "Sarah Collins",
+    customerPhone: "+234 803 123 4567",
+    vendorId: "v-1",
+    vendorName: "Mama Cass",
+    status: "preparing",
+    totalAmount: 12000,
+    deliveryAddress: "Fate Road, Ilorin, Kwara",
+    paymentMethod: "Paystack (Card)",
+    createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
+    items: [
+      { id: "oi-3", orderId: "1255", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 3 }
+    ]
+  },
+  {
+    id: "1256",
+    customerId: "cust-1",
+    customerName: "Sarah Collins",
+    customerPhone: "+234 803 123 4567",
+    vendorId: "v-1",
+    vendorName: "Mama Cass",
+    status: "pending",
+    totalAmount: 8500,
+    deliveryAddress: "Fate Road, Ilorin, Kwara",
+    paymentMethod: "Paystack (Card)",
+    createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
+    items: [
+      { id: "oi-5", orderId: "1256", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 1 },
+      { id: "oi-6", orderId: "1256", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 1 }
+    ]
+  }
+];
+
+const getInitialPaymentGatewaysSeed = (): PaymentGateway[] => [
+  { id: "credit_card", name: "Credit Card", desc: "Pay with VISA / Mastercard / Verve", isEnabled: true, apiKey: "pk_live_51O..." },
+  { id: "cash_on_delivery", name: "Cash on Delivery", desc: "Pay with cash or bank transfer on arrival", isEnabled: true },
+  { id: "wallet", name: "Owode Food Wallet", desc: "Instantly settle using your balance wallet", isEnabled: true },
+  { id: "monnify", name: "Monnify (Bank & Card)", desc: "Secure automated payments via Monnify API", isEnabled: true, apiKey: "MK_prod_x94k...", secretKey: "sk_prod_948j...", contractCode: "1234567890" },
+  { id: "bank_transfer", name: "Local Bank Transfer", desc: "Direct transfer with automated receipt uploading", isEnabled: true, bankName: "GTBank", accountNumber: "0123456789", accountName: "Owode Food Marketplace LTD" }
+];
+
+const getInitialEmployeesSeed = (): Employee[] => [
+  { id: "emp-1", name: "Adewale Banjo", email: "adewale@owodefood.com", phone: "+234 812 345 6789", department: "dispatcher", status: "active", permissions: ["manage_orders", "manage_riders"], createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "emp-2", name: "Chidi Okafor", email: "chidi@owodefood.com", phone: "+234 803 111 2222", department: "finance", status: "active", permissions: ["view_settings"], createdAt: "2026-06-23T04:54:01.156Z" },
+  { id: "emp-3", name: "Fatima Yusuf", email: "fatima@owodefood.com", phone: "+234 705 999 8888", department: "support", status: "active", permissions: ["manage_orders", "manage_vendors"], createdAt: "2026-06-23T04:54:01.156Z" },
+];
+
+const getInitialReviewsSeed = (): Review[] => [
+  { id: "rev-1", vendorId: "v-1", customerId: "cust-1", author: "Adebayo O.", rating: 5, comment: "Smoky Jollof of dreams! Highly recommend Mama Cass, original flavor is preserved.", createdAt: "2026-06-27T10:00:00.000Z" },
+  { id: "rev-2", vendorId: "v-1", customerId: "cust-1", author: "Chinedu E.", rating: 4, comment: "Crispy grilled chicken is excellent. Perfectly packed and came hot.", createdAt: "2026-06-25T14:30:00.000Z" },
+  { id: "rev-3", vendorId: "v-2", customerId: "cust-1", author: "Fatima Y.", rating: 5, comment: "Authentic taste. Fast checkout setup, we will order again on Friday!", createdAt: "2026-06-20T12:00:00.000Z" }
+];
+
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentVendor, setCurrentVendor] = useState<Vendor | null>(null);
@@ -283,24 +582,43 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
         if (data.users && data.users.length > 0) {
           // Found data in Cloud SQL! Let's load it and synchronize local states.
-          setUsers(data.users);
-          localStorage.setItem("fd_users", JSON.stringify(data.users));
+          const loadedUsers = data.users;
+          setUsers(loadedUsers);
+          localStorage.setItem("fd_users", JSON.stringify(loadedUsers));
 
-          setVendors(data.vendors);
-          localStorage.setItem("fd_vendors", JSON.stringify(data.vendors));
+          const loadedVendors = (data.vendors && data.vendors.length > 0) ? data.vendors : getInitialVendorsSeed();
+          setVendors(loadedVendors);
+          localStorage.setItem("fd_vendors", JSON.stringify(loadedVendors));
+          if (!data.vendors || data.vendors.length === 0) {
+            syncSave("VENDORS_BULK", loadedVendors);
+          }
 
-          setProducts(data.products);
-          localStorage.setItem("fd_products", JSON.stringify(data.products));
+          const loadedProducts = (data.products && data.products.length > 0) ? data.products : getInitialProductsSeed();
+          setProducts(loadedProducts);
+          localStorage.setItem("fd_products", JSON.stringify(loadedProducts));
+          if (!data.products || data.products.length === 0) {
+            syncSave("PRODUCTS_BULK", loadedProducts);
+          }
 
-          setRiders(data.riders);
-          localStorage.setItem("fd_riders", JSON.stringify(data.riders));
+          const loadedRiders = (data.riders && data.riders.length > 0) ? data.riders : getInitialRidersSeed();
+          setRiders(loadedRiders);
+          localStorage.setItem("fd_riders", JSON.stringify(loadedRiders));
+          if (!data.riders || data.riders.length === 0) {
+            syncSave("RIDERS_BULK", loadedRiders);
+          }
 
-          setOrders(data.orders);
-          localStorage.setItem("fd_orders", JSON.stringify(data.orders));
+          const loadedOrders = (data.orders && data.orders.length > 0) ? data.orders : getInitialOrdersSeed();
+          setOrders(loadedOrders);
+          localStorage.setItem("fd_orders", JSON.stringify(loadedOrders));
+          if (!data.orders || data.orders.length === 0) {
+            syncSave("ORDERS_BULK", loadedOrders);
+          }
 
-          if (data.paymentGateways && data.paymentGateways.length > 0) {
-            setPaymentGateways(data.paymentGateways);
-            localStorage.setItem("fd_payment_gateways", JSON.stringify(data.paymentGateways));
+          const loadedPaymentGateways = (data.paymentGateways && data.paymentGateways.length > 0) ? data.paymentGateways : getInitialPaymentGatewaysSeed();
+          setPaymentGateways(loadedPaymentGateways);
+          localStorage.setItem("fd_payment_gateways", JSON.stringify(loadedPaymentGateways));
+          if (!data.paymentGateways || data.paymentGateways.length === 0) {
+            syncSave("PAYMENT_GATEWAYS_BULK", loadedPaymentGateways);
           }
 
           if (data.savedAddresses) {
@@ -311,21 +629,48 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           if (data.extremeLocationTiers && data.extremeLocationTiers.length > 0) {
             setExtremeLocationTiers(data.extremeLocationTiers);
             localStorage.setItem("fd_extreme_tiers", JSON.stringify(data.extremeLocationTiers));
+          } else {
+            const tiers = [
+              { id: "tier-1", name: "Tier 1: Outer Suburbs", surcharge: 1000 },
+              { id: "tier-2", name: "Tier 2: Extreme Outskirts", surcharge: 2000 },
+              { id: "tier-3", name: "Tier 3: Ultra Remote / Borders", surcharge: 3500 }
+            ];
+            setExtremeLocationTiers(tiers);
+            localStorage.setItem("fd_extreme_tiers", JSON.stringify(tiers));
+            syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
           }
 
-          if (data.extremeLocations) {
+          if (data.extremeLocations && data.extremeLocations.length > 0) {
             setExtremeLocations(data.extremeLocations);
             localStorage.setItem("fd_extreme_locations", JSON.stringify(data.extremeLocations));
+          } else {
+            const extreme = [
+              { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
+              { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
+              { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
+              { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
+              { id: "ex-5", name: "Shao", tierId: "tier-2" },
+              { id: "ex-6", name: "Oke-Oyi", tierId: "tier-2" },
+              { id: "ex-7", name: "Ganmo Outer Bounds", tierId: "tier-3" },
+              { id: "ex-8", name: "Afono", tierId: "tier-3" }
+            ];
+            setExtremeLocations(extreme);
+            localStorage.setItem("fd_extreme_locations", JSON.stringify(extreme));
+            syncSave("EXTREME_LOCATIONS_BULK", extreme);
           }
 
-          if (data.employees && data.employees.length > 0) {
-            setEmployees(data.employees);
-            localStorage.setItem("fd_employees", JSON.stringify(data.employees));
+          const loadedEmployees = (data.employees && data.employees.length > 0) ? data.employees : getInitialEmployeesSeed();
+          setEmployees(loadedEmployees);
+          localStorage.setItem("fd_employees", JSON.stringify(loadedEmployees));
+          if (!data.employees || data.employees.length === 0) {
+            syncSave("EMPLOYEES_BULK", loadedEmployees);
           }
 
-          if (data.reviews) {
-            setReviews(data.reviews);
-            localStorage.setItem("fd_reviews", JSON.stringify(data.reviews));
+          const loadedReviews = (data.reviews && data.reviews.length > 0) ? data.reviews : getInitialReviewsSeed();
+          setReviews(loadedReviews);
+          localStorage.setItem("fd_reviews", JSON.stringify(loadedReviews));
+          if (!data.reviews || data.reviews.length === 0) {
+            syncSave("REVIEWS_BULK", loadedReviews);
           }
 
           if (data.systemSettings) {
@@ -1310,7 +1655,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     phone: string,
     role: UserRole,
     gender?: string,
-    extra?: { businessName?: string; cuisine?: string; vehicleType?: string }
+    extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string }
   ) => {
     const cleansedEmail = email.trim().toLowerCase();
     const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
@@ -1326,7 +1671,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       phone,
       role,
       gender: gender || undefined,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      pin: extra?.pin || undefined
     };
 
     const updatedUsers = [...users, newUser];

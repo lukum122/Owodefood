@@ -19,15 +19,164 @@ import {
   reviews,
 } from "./src/db/schema.ts";
 import { eq, sql } from "drizzle-orm";
+import nodemailer from "nodemailer";
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
 
+// -------------------------------------------------------------
+// SECURE LAZY SMTP EMAIL SENDER (ZEPTOMAIL SUPPORTED)
+// -------------------------------------------------------------
+let transporter: any = null;
+
+function getMailTransporter() {
+  if (!transporter) {
+    const host = process.env.SMTP_HOST || "smtp.zeptomail.com";
+    const port = Number(process.env.SMTP_PORT) || 587;
+    // Secure is true for 465, false for 587 or other ports
+    const secure = process.env.SMTP_SECURE === "true" || port === 465;
+    const user = process.env.SMTP_USER || "emailapikey";
+    const pass = process.env.SMTP_PASS;
+
+    if (!pass) {
+      console.warn("SMTP_PASS is not configured. Email notifications will operate in STDOUT simulation mode.");
+      return null;
+    }
+
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+    });
+  }
+  return transporter;
+}
+
+async function sendEmailNotification(to: string, subject: string, htmlContent: string) {
+  try {
+    const mailer = getMailTransporter();
+    const fromName = process.env.SMTP_FROM_NAME || "Owode Food";
+    const fromEmail = process.env.SMTP_FROM_EMAIL || "noreply@owodefood.com";
+
+    if (!mailer) {
+      console.log(`[SMTP SIMULATION] TO: ${to}\nSUBJECT: ${subject}\nHTML:\n${htmlContent}\n====================`);
+      return { success: true, simulated: true };
+    }
+
+    const info = await mailer.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to,
+      subject,
+      html: htmlContent,
+    });
+
+    console.log(`[SMTP SUCCESS] Message sent successfully to ${to}. ID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (err: any) {
+    console.error("[SMTP ERROR] Failed to deliver secure email:", err.message || err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
 // 1. Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", database: "connected" });
+});
+
+// SMTP Connection Test Endpoint
+app.post("/api/email/test", async (req, res) => {
+  const { toEmail } = req.body;
+  if (!toEmail) {
+    return res.status(400).json({ error: "Missing recipient email address ('toEmail')" });
+  }
+
+  const result = await sendEmailNotification(
+    toEmail,
+    "Owode Food - Live SMTP Connection Verification",
+    `
+    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <span style="font-size: 32px;">🍔</span>
+        <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food Marketplace</h2>
+        <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">SMTP Secure Relay Connected</span>
+      </div>
+      <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello,</p>
+      <p style="font-size: 14px; color: #374151; line-height: 1.6;">This is a test notification confirming that your <strong>ZeptoMail SMTP server connection</strong> has been successfully integrated and is fully operational on your <strong>Owode Food Multi-Vendor Platform</strong>.</p>
+      
+      <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; margin: 24px 0;">
+        <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; display: block; margin-bottom: 8px;">Technical Handshake Metadata</span>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #334155;">
+          <tr>
+            <td style="padding: 4px 0; font-weight: bold; width: 120px;">SMTP Gateway:</td>
+            <td style="padding: 4px 0; font-family: monospace;">${process.env.SMTP_HOST || "smtp.zeptomail.com"}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; font-weight: bold;">Handshake Port:</td>
+            <td style="padding: 4px 0; font-family: monospace;">${process.env.SMTP_PORT || "587"}</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; font-weight: bold;">Verified Recipient:</td>
+            <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">${toEmail}</td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="font-size: 14px; color: #374151; line-height: 1.6;">Real-time automated emails will now trigger securely for registration approvals, instant wallets funding receipting, and multi-vendor dispatch trackings.</p>
+      
+      <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+      <div style="text-align: center;">
+        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Core Infrastructure Services</p>
+        <p style="font-size: 10px; color: #cbd5e1; margin: 4px 0 0 0;">Do not reply to this automated transaction payload.</p>
+      </div>
+    </div>
+    `
+  );
+
+  res.json(result);
+});
+
+// SMTP Secure Pin Delivery Endpoint
+app.post("/api/email/send-pin", async (req, res) => {
+  const { toEmail, name, pin } = req.body;
+  if (!toEmail || !pin) {
+    return res.status(400).json({ error: "Missing recipient email address ('toEmail') or PIN code ('pin')" });
+  }
+
+  const result = await sendEmailNotification(
+    toEmail,
+    `Owode Food - ${pin} is your secure login verification PIN`,
+    `
+    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <span style="font-size: 32px;">🍔</span>
+        <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food</h2>
+        <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Secure Account Verification</span>
+      </div>
+      <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello ${name || "User"},</p>
+      <p style="font-size: 14px; color: #374151; line-height: 1.6;">To complete your sign in on <strong>Owode Food</strong>, please use the following secure 4-digit verification PIN:</p>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <span style="display: inline-block; background-color: #f1f5f9; color: #070329; font-size: 32px; font-weight: 800; padding: 12px 30px; border-radius: 12px; letter-spacing: 8px; font-family: monospace; border: 1px solid #e2e8f0;">${pin}</span>
+      </div>
+
+      <p style="font-size: 12px; color: #64748b; line-height: 1.6; text-align: center;">This PIN is valid for 10 minutes. Please do not share this code with anyone.</p>
+      
+      <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+      <div style="text-align: center;">
+        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Secure Services</p>
+        <p style="font-size: 10px; color: #cbd5e1; margin: 4px 0 0 0;">If you did not request this, please ignore this email.</p>
+      </div>
+    </div>
+    `
+  );
+
+  res.json(result);
 });
 
 // 2. Database Synchronization Endpoint: LOAD
@@ -93,6 +242,7 @@ app.post("/api/sync/save", async (req, res) => {
             role: u.role,
             gender: u.gender || null,
             createdAt: u.createdAt,
+            pin: u.pin || null,
           }).onConflictDoUpdate({
             target: users.id,
             set: {
@@ -101,12 +251,16 @@ app.post("/api/sync/save", async (req, res) => {
               phone: u.phone,
               role: u.role,
               gender: u.gender || null,
+              pin: u.pin || null,
             },
           });
         }
         break;
 
-      case "USER_UPSERT":
+      case "USER_UPSERT": {
+        const existing = await db.select().from(users).where(eq(users.id, payload.id)).limit(1);
+        const isNew = existing.length === 0;
+
         await db.insert(users).values({
           id: payload.id,
           email: payload.email,
@@ -115,6 +269,7 @@ app.post("/api/sync/save", async (req, res) => {
           role: payload.role,
           gender: payload.gender || null,
           createdAt: payload.createdAt || new Date().toISOString(),
+          pin: payload.pin || null,
         }).onConflictDoUpdate({
           target: users.id,
           set: {
@@ -123,9 +278,54 @@ app.post("/api/sync/save", async (req, res) => {
             phone: payload.phone,
             role: payload.role,
             gender: payload.gender || null,
+            pin: payload.pin || null,
           },
         });
+
+        if (isNew && payload.email) {
+          sendEmailNotification(
+            payload.email,
+            `Welcome to Owode Food, ${payload.name}! 🌟`,
+            `
+            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <span style="font-size: 32px;">🌟</span>
+                <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Welcome to Owode Food!</h2>
+                <span style="font-size: 10px; color: #10b981; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Account Successfully Registered</span>
+              </div>
+              <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello <strong>${payload.name}</strong>,</p>
+              <p style="font-size: 14px; color: #374151; line-height: 1.6;">Thank you for registering on the <strong>Owode Food Multi-Vendor Marketplace Platform</strong> as a <strong>${payload.role}</strong>. Your account has been provisioned and is ready for use!</p>
+              
+              <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; margin: 24px 0;">
+                <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; display: block; margin-bottom: 8px;">Profile Credentials</span>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #334155;">
+                  <tr>
+                    <td style="padding: 4px 0; font-weight: bold; width: 120px;">Email Profile:</td>
+                    <td style="padding: 4px 0; font-family: monospace;">${payload.email}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 4px 0; font-weight: bold;">User Role:</td>
+                    <td style="padding: 4px 0; text-transform: uppercase; font-weight: bold; color: #3b82f6;">${payload.role}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 4px 0; font-weight: bold;">Registered Phone:</td>
+                    <td style="padding: 4px 0; font-family: monospace;">${payload.phone || "Not provided"}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <p style="font-size: 14px; color: #374151; line-height: 1.6;">You can now fund your secure sandbox <strong>Owode Food Wallet</strong>, configure delivery addresses, browse local food vendors, and track your orders in real-time.</p>
+              
+              <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+              <div style="text-align: center;">
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Core Platform Services</p>
+              </div>
+            </div>
+            `
+          ).catch(err => console.error("Error sending registration welcome email:", err));
+        }
         break;
+      }
 
       case "VENDORS_BULK":
         for (const v of payload) {
@@ -347,7 +547,12 @@ app.post("/api/sync/save", async (req, res) => {
         }
         break;
 
-      case "ORDER_UPSERT":
+      case "ORDER_UPSERT": {
+        const existingOrder = await db.select().from(orders).where(eq(orders.id, payload.id)).limit(1);
+        const isNew = existingOrder.length === 0;
+        const oldStatus = isNew ? null : existingOrder[0].status;
+        const statusChanged = oldStatus !== payload.status;
+
         await db.insert(orders).values({
           id: payload.id,
           customerId: payload.customerId,
@@ -391,7 +596,110 @@ app.post("/api/sync/save", async (req, res) => {
             });
           }
         }
+
+        // Automated Order Email Notification Hook
+        if (payload.customerId) {
+          const customerRecords = await db.select().from(users).where(eq(users.id, payload.customerId)).limit(1);
+          if (customerRecords.length > 0 && customerRecords[0].email) {
+            const customerEmail = customerRecords[0].email;
+            
+            if (isNew) {
+              sendEmailNotification(
+                customerEmail,
+                `Order Placed Successfully! #${payload.id.substring(0, 8)} 🛍️`,
+                `
+                <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <span style="font-size: 32px;">🛍️</span>
+                    <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Order Placed Successfully!</h2>
+                    <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Awaiting Vendor Acceptance</span>
+                  </div>
+                  <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello <strong>${payload.customerName || "Customer"}</strong>,</p>
+                  <p style="font-size: 14px; color: #374151; line-height: 1.6;">Your order at <strong>${payload.vendorName}</strong> has been received and is currently being prepared for the kitchen.</p>
+                  
+                  <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; margin: 24px 0;">
+                    <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; display: block; margin-bottom: 8px;">Order Details</span>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #334155;">
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold; width: 120px;">Order ID:</td>
+                        <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">#${payload.id}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold;">Vendor:</td>
+                        <td style="padding: 4px 0; font-weight: bold; color: #070329;">${payload.vendorName}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold;">Total Amount:</td>
+                        <td style="padding: 4px 0; font-weight: bold; color: #10b981;">₦${payload.totalAmount.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold;">Delivery To:</td>
+                        <td style="padding: 4px 0;">${payload.deliveryAddress}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold;">Payment Mode:</td>
+                        <td style="padding: 4px 0; font-family: monospace;">${payload.paymentMethod}</td>
+                      </tr>
+                    </table>
+                  </div>
+
+                  <p style="font-size: 14px; color: #374151; line-height: 1.6;">You can track the live preparation status and courier delivery tracking of your order directly from your Owode Food customer panel.</p>
+                  
+                  <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+                  <div style="text-align: center;">
+                    <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Core Platform Services</p>
+                  </div>
+                </div>
+                `
+              ).catch(err => console.error("Error sending order placement email:", err));
+            } else if (statusChanged) {
+              sendEmailNotification(
+                customerEmail,
+                `Order #${payload.id.substring(0, 8)} Status Update: ${payload.status.toUpperCase()} ⚡`,
+                `
+                <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <span style="font-size: 32px;">⚡</span>
+                    <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Order Status Update!</h2>
+                    <span style="font-size: 10px; color: #0ea5e9; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; background-color: #f0f9ff; padding: 4px 12px; border-radius: 20px;">${payload.status}</span>
+                  </div>
+                  <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello <strong>${payload.customerName || "Customer"}</strong>,</p>
+                  <p style="font-size: 14px; color: #374151; line-height: 1.6;">The status of your order at <strong>${payload.vendorName}</strong> has been updated.</p>
+                  
+                  <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; margin: 24px 0;">
+                    <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; display: block; margin-bottom: 8px;">Update Details</span>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #334155;">
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold; width: 120px;">Order ID:</td>
+                        <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">#${payload.id}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold;">Current Status:</td>
+                        <td style="padding: 4px 0; font-weight: bold; color: #0ea5e9; text-transform: uppercase;">${payload.status}</td>
+                      </tr>
+                      ${payload.riderName ? `
+                      <tr>
+                        <td style="padding: 4px 0; font-weight: bold;">Courier Rider:</td>
+                        <td style="padding: 4px 0; font-weight: bold; color: #3b82f6;">${payload.riderName}</td>
+                      </tr>
+                      ` : ""}
+                    </table>
+                  </div>
+
+                  <p style="font-size: 14px; color: #374151; line-height: 1.6;">Your tracking feed will reflect this update immediately. Thank you for choosing Owode Food!</p>
+                  
+                  <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+                  <div style="text-align: center;">
+                    <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Core Platform Services</p>
+                  </div>
+                </div>
+                `
+              ).catch(err => console.error("Error sending order status change email:", err));
+            }
+          }
+        }
         break;
+      }
 
       case "RIDERS_BULK":
         for (const r of payload) {

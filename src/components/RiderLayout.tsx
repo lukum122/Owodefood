@@ -30,15 +30,15 @@ export const RiderLayout: React.FC = () => {
     <div className="flex flex-col h-full bg-slate-900 text-white">
       {/* Rider Application Header */}
       <div className="p-5 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <div className="w-8 h-8 rounded-full bg-yellow-500 text-slate-950 flex items-center justify-center shadow-md">
             <Bike className="w-4 h-4 text-slate-900 fill-slate-900" />
           </div>
-          <div>
-            <h1 className="font-bold text-sm tracking-tight leading-none text-white">NavyBites Courier</h1>
-            <span className="text-[10px] text-gray-400 font-mono">Mobile Dispatch v1.2</span>
+          <div className="text-left">
+            <h1 className="font-bold text-sm tracking-tight leading-none text-white">Owode Food Courier</h1>
+            <span className="text-[10px] text-gray-400 font-mono block">Mobile Dispatch v1.2</span>
           </div>
-        </div>
+        </Link>
 
         {/* Close Button only visible in mobile sidebar drawer */}
         <button 

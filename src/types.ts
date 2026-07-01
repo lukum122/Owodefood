@@ -19,6 +19,7 @@ export interface User {
   role: UserRole;
   gender?: string;
   createdAt: string;
+  pin?: string;
 }
 
 export type VendorStatus = "pending" | "approved" | "suspended";

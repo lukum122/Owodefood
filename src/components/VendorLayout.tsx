@@ -24,15 +24,15 @@ export const VendorLayout: React.FC = () => {
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-[#070329]">
       {/* Brand Banner */}
-      <div className="p-6 border-b border-blue-950/70 flex items-center gap-3 shrink-0">
+      <Link to="/" className="p-6 border-b border-blue-950/70 flex items-center gap-3 shrink-0 hover:opacity-90 transition-opacity">
         <div className="w-8 h-8 rounded-lg bg-green-500 text-white flex items-center justify-center font-bold text-sm">
-          V
+          O
         </div>
         <div>
-          <h1 className="font-bold tracking-tight text-sm leading-none text-white">NavyBites</h1>
+          <h1 className="font-bold tracking-tight text-sm leading-none text-white">Owode Food</h1>
           <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-wider font-mono">Kitchen Terminal</p>
         </div>
-      </div>
+      </Link>
 
       {/* Current Active Vendor Details Container */}
       {currentVendor ? (

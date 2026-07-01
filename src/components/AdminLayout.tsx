@@ -31,15 +31,15 @@ export const AdminLayout: React.FC = () => {
     <>
       {/* Brand Banner */}
       <div className="p-6 border-b border-slate-900 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
           <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-purple-900/30">
             <Shield className="w-4 h-4 text-white fill-white" />
           </div>
-          <div>
-            <h1 className="font-bold tracking-tight text-sm leading-none text-white">NavyBites Admin</h1>
-            <span className="text-[9px] text-purple-400 mt-1 uppercase font-semibold font-mono tracking-wider">Superintendent</span>
+          <div className="text-left">
+            <h1 className="font-bold tracking-tight text-sm leading-none text-white">Owode Food Admin</h1>
+            <span className="text-[9px] text-purple-400 mt-1 uppercase font-semibold font-mono tracking-wider block">Operations HQ</span>
           </div>
-        </div>
+        </Link>
         
         {/* Close Button only visible in mobile sidebar drawer */}
         <button 
