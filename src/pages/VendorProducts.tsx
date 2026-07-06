@@ -19,6 +19,17 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   const [addons, setAddons] = useState<{ id: string; name: string; price: number; }[]>([]);
   const [maxAddons, setMaxAddons] = useState("");
   
+  // Addon Groups & builder states
+  const [addonGroups, setAddonGroups] = useState<any[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupRequired, setNewGroupRequired] = useState(false);
+  const [newGroupMin, setNewGroupMin] = useState("1");
+  const [newGroupMax, setNewGroupMax] = useState("");
+  const [newGroupAllowMulti, setNewGroupAllowMulti] = useState(false);
+  const [newGroupMaxPerAddon, setNewGroupMaxPerAddon] = useState("");
+  const [selectedAddonIdsForGroup, setSelectedAddonIdsForGroup] = useState<string[]>([]);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  
   // Temporary addon creation state
   const [addonName, setAddonName] = useState("");
   const [addonPrice, setAddonPrice] = useState("");
@@ -47,12 +58,13 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     if (mode === "edit" && editingProduct) {
       setName(editingProduct.name);
       setDescription(editingProduct.description);
-      setPrice(editingProduct.price.toString());
+      setPrice(editingProduct.price != null ? editingProduct.price.toString() : "");
       setImage(editingProduct.image);
       setCategory(editingProduct.category);
       setIsAvailable(editingProduct.isAvailable);
       setAddons(editingProduct.addons || []);
-      setMaxAddons(editingProduct.maxAddons !== undefined ? editingProduct.maxAddons.toString() : "");
+      setMaxAddons(editingProduct.maxAddons != null ? editingProduct.maxAddons.toString() : "");
+      setAddonGroups(editingProduct.addonGroups || []);
     } else if (mode === "new") {
       setName("");
       setDescription("");
@@ -62,8 +74,96 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setIsAvailable(true);
       setAddons([]);
       setMaxAddons("");
+      setAddonGroups([]);
     }
   }, [mode, id, editingProduct]);
+
+  // Addon Group Builder Handlers
+  const handleAddGroup = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) return;
+    if (selectedAddonIdsForGroup.length === 0) {
+      alert("Please select at least one addon to include in this group.");
+      return;
+    }
+
+    const groupAddons = addons.filter(a => selectedAddonIdsForGroup.includes(a.id));
+    
+    if (editingGroupId) {
+      // Edit mode
+      setAddonGroups(addonGroups.map(g => g.id === editingGroupId ? {
+        ...g,
+        name: newGroupName.trim(),
+        isRequired: newGroupRequired,
+        minSelections: newGroupRequired ? parseInt(newGroupMin) || 1 : 0,
+        maxSelections: newGroupMax ? parseInt(newGroupMax) || undefined : undefined,
+        allowMultipleQuantity: newGroupAllowMulti,
+        maxQuantityPerAddon: newGroupMaxPerAddon ? parseInt(newGroupMaxPerAddon) || undefined : undefined,
+        addons: groupAddons
+      } : g));
+      setEditingGroupId(null);
+    } else {
+      // Create mode
+      const newGroup = {
+        id: "group-" + Date.now(),
+        name: newGroupName.trim(),
+        isRequired: newGroupRequired,
+        minSelections: newGroupRequired ? parseInt(newGroupMin) || 1 : 0,
+        maxSelections: newGroupMax ? parseInt(newGroupMax) || undefined : undefined,
+        allowMultipleQuantity: newGroupAllowMulti,
+        maxQuantityPerAddon: newGroupMaxPerAddon ? parseInt(newGroupMaxPerAddon) || undefined : undefined,
+        addons: groupAddons
+      };
+      setAddonGroups([...addonGroups, newGroup]);
+    }
+
+    setNewGroupName("");
+    setNewGroupRequired(false);
+    setNewGroupMin("1");
+    setNewGroupMax("");
+    setNewGroupAllowMulti(false);
+    setNewGroupMaxPerAddon("");
+    setSelectedAddonIdsForGroup([]);
+  };
+
+  const handleCancelEditGroup = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setEditingGroupId(null);
+    setNewGroupName("");
+    setNewGroupRequired(false);
+    setNewGroupMin("1");
+    setNewGroupMax("");
+    setNewGroupAllowMulti(false);
+    setNewGroupMaxPerAddon("");
+    setSelectedAddonIdsForGroup([]);
+  };
+
+  const startEditGroup = (g: any, e: React.MouseEvent) => {
+    e.preventDefault();
+    setEditingGroupId(g.id);
+    setNewGroupName(g.name);
+    setNewGroupRequired(g.isRequired);
+    setNewGroupMin(g.minSelections != null ? g.minSelections.toString() : "1");
+    setNewGroupMax(g.maxSelections != null ? g.maxSelections.toString() : "");
+    setNewGroupAllowMulti(g.allowMultipleQuantity || false);
+    setNewGroupMaxPerAddon(g.maxQuantityPerAddon != null ? g.maxQuantityPerAddon.toString() : "");
+    setSelectedAddonIdsForGroup(g.addons.map((a: any) => a.id));
+  };
+
+  const handleRemoveGroup = (groupId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setAddonGroups(addonGroups.filter(g => g.id !== groupId));
+    if (editingGroupId === groupId) {
+      setEditingGroupId(null);
+      setNewGroupName("");
+      setNewGroupRequired(false);
+      setNewGroupMin("1");
+      setNewGroupMax("");
+      setNewGroupAllowMulti(false);
+      setNewGroupMaxPerAddon("");
+      setSelectedAddonIdsForGroup([]);
+    }
+  };
 
   // Helper functions for inline addons editing
   const handleAddAddon = (e: React.MouseEvent) => {
@@ -95,7 +195,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     e.preventDefault();
     setEditingAddonId(addon.id);
     setEditingAddonName(addon.name);
-    setEditingAddonPrice(addon.price.toString());
+    setEditingAddonPrice(addon.price != null ? addon.price.toString() : "");
   };
 
   const handleSaveAddonEdit = (e: React.MouseEvent) => {
@@ -200,7 +300,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         category,
         isAvailable,
         addons,
-        maxAddons: parsedMaxAddons
+        maxAddons: parsedMaxAddons,
+        addonGroups
       });
       setSuccessStr("Fabulous! Your new culinary item was successfully minted in the system.");
       setTimeout(() => navigate("/vendor/products"), 1200);
@@ -214,7 +315,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         category,
         isAvailable,
         addons,
-        maxAddons: parsedMaxAddons
+        maxAddons: parsedMaxAddons,
+        addonGroups
       });
       setSuccessStr("Success! Product details were hot-swapped and saved.");
       setTimeout(() => navigate("/vendor/products"), 1200);
@@ -569,13 +671,13 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                     <div key={addon.id} className="p-3 bg-white flex items-center justify-between gap-4">
                       <div>
                         <span className="font-extrabold text-[#070329]">{addon.name}</span>
-                        <span className="text-gray-400 text-[11px] font-mono ml-2 font-bold">(+{currency}{addon.price.toLocaleString()})</span>
+                        <span className="text-gray-400 text-[11px] font-mono ml-2 font-bold">(+{currency}{(addon.price ?? 0).toLocaleString()})</span>
                       </div>
                       <div className="flex gap-1.5">
                         <button
                           type="button"
                           onClick={(e) => startEditAddon(addon, e)}
-                          className="py-1 px-3.5 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-705 font-bold rounded-lg cursor-pointer"
+                          className="py-1 px-3.5 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer"
                         >
                           Edit
                         </button>
@@ -593,6 +695,217 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
               ) : (
                 <div className="text-center py-5 bg-white rounded-2xl border border-dashed border-gray-150 text-gray-400 text-xs">
                   No custom addon modifiers set yet for this menu item.
+                </div>
+              )}
+            </div>
+
+            {/* ADDON GROUPS (CHOWDECK STYLE) BUILDER */}
+            <div className="pt-4 border-t border-gray-100 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-gray-950 tracking-tight">Structured Addon Groups (Multi-Quantity & Required Selection)</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Group your addons above into required structures, single choice (radio style), or limit the quantity customers can buy.</p>
+              </div>
+
+              {addons.length > 0 ? (
+                <div className="bg-[#070329]/5 p-5 rounded-2xl border border-gray-200/60 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Group Name</label>
+                      <input
+                        type="text"
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value)}
+                        placeholder="e.g. Choose Rice Style / Extra Protein"
+                        className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Selection Requirements</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewGroupRequired(true)}
+                          className={`flex-1 py-2.5 text-center border font-bold text-xs rounded-xl cursor-pointer transition ${
+                            newGroupRequired ? "bg-[#070329] text-white border-[#070329]" : "bg-white text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          Mandatory Selection
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewGroupRequired(false)}
+                          className={`flex-1 py-2.5 text-center border font-bold text-xs rounded-xl cursor-pointer transition ${
+                            !newGroupRequired ? "bg-[#070329] text-white border-[#070329]" : "bg-white text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          Optional Choices
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    {newGroupRequired && (
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Min Choices Required</label>
+                        <input
+                          type="number"
+                          value={newGroupMin}
+                          onChange={(e) => setNewGroupMin(e.target.value)}
+                          placeholder="e.g. 1"
+                          min="1"
+                          className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 font-mono"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Max Choices Allowed</label>
+                      <input
+                        type="number"
+                        value={newGroupMax}
+                        onChange={(e) => setNewGroupMax(e.target.value)}
+                        placeholder="e.g. 1 (For single select radio style)"
+                        min="1"
+                        className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Max Qty Per Addon Option</label>
+                      <input
+                        type="number"
+                        value={newGroupMaxPerAddon}
+                        disabled={!newGroupAllowMulti}
+                        onChange={(e) => setNewGroupMaxPerAddon(e.target.value)}
+                        placeholder={newGroupAllowMulti ? "e.g. 5" : "No multiple quantity allowed"}
+                        min="1"
+                        className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white disabled:bg-gray-100/60 disabled:text-gray-400 outline-none focus:ring-2 focus:ring-blue-100 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs py-1">
+                    <input
+                      type="checkbox"
+                      id="allow-multi"
+                      checked={newGroupAllowMulti}
+                      onChange={(e) => setNewGroupAllowMulti(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <label htmlFor="allow-multi" className="font-bold text-gray-700 cursor-pointer select-none">
+                      Allow customers to select more than 1 of each addon option in this group
+                    </label>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Select Addons to include in this Group:</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-32 overflow-y-auto pr-1">
+                      {addons.map((a) => {
+                        const isSelected = selectedAddonIdsForGroup.includes(a.id);
+                        return (
+                          <div
+                            key={a.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedAddonIdsForGroup(selectedAddonIdsForGroup.filter(id => id !== a.id));
+                              } else {
+                                setSelectedAddonIdsForGroup([...selectedAddonIdsForGroup, a.id]);
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition select-none cursor-pointer text-left ${
+                              isSelected ? "bg-indigo-50 border-indigo-300 font-bold text-indigo-950" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                              isSelected ? "bg-indigo-600 border-indigo-600" : "border-gray-300"
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 text-white stroke-[3px]" />}
+                            </div>
+                            <span className="truncate">{a.name} (+{currency}{a.price})</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {editingGroupId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditGroup}
+                        className="flex-1 py-2.5 px-4 bg-gray-150 hover:bg-gray-200 text-gray-750 font-extrabold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer"
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleAddGroup}
+                      className="flex-[2] py-2.5 px-4 bg-[#070329] hover:bg-[#0ea5e9] text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                    >
+                      {editingGroupId ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                      {editingGroupId ? "Update Addon Group" : "Create Addon Group"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-5 bg-white rounded-2xl border border-dashed border-gray-150 text-gray-400 text-xs">
+                  Please add custom Addons first in the section above before grouping them.
+                </div>
+              )}
+
+              {/* Render Current Added Groups list */}
+              {addonGroups.length > 0 && (
+                <div className="space-y-2 text-xs">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Configured Addon Groups ({addonGroups.length})</span>
+                  <div className="space-y-2.5">
+                    {addonGroups.map((g) => (
+                      <div key={g.id} className="p-4 bg-white border border-gray-200 rounded-2xl flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-gray-900">{g.name}</span>
+                            {g.isRequired ? (
+                              <span className="text-[8px] bg-red-50 text-red-600 border border-red-150 px-1.5 py-0.5 rounded font-bold uppercase leading-none">Required</span>
+                            ) : (
+                              <span className="text-[8px] bg-gray-50 text-gray-500 border border-gray-150 px-1.5 py-0.5 rounded font-bold uppercase leading-none">Optional</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-gray-500 space-x-2 font-medium">
+                            <span>Min: {g.minSelections ?? 0}</span>
+                            <span>•</span>
+                            <span>Max: {g.maxSelections || "No limit"}</span>
+                            <span>•</span>
+                            <span>Allow Quantity: {g.allowMultipleQuantity ? "Yes" : "No"}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {g.addons.map((addon: any) => (
+                              <span key={addon.id} className="text-[9px] bg-gray-100 text-gray-650 rounded px-1.5 py-0.5 font-bold uppercase">
+                                {addon.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => startEditGroup(g, e)}
+                            className="py-1 px-3.5 text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold rounded-lg cursor-pointer text-center"
+                          >
+                            Edit Group
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleRemoveGroup(g.id, e)}
+                            className="py-1 px-3.5 text-[10px] bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-lg cursor-pointer text-center"
+                          >
+                            Remove Group
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -721,7 +1034,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                     <div className="pt-2 flex flex-wrap gap-1 border-t border-gray-100">
                       {p.addons.map((a) => (
                         <span key={a.id} className="text-[9px] bg-sky-50 text-[#0ea5e9] border border-sky-100 px-2 py-0.5 rounded font-bold uppercase font-mono tracking-tight">
-                          + {a.name} (+{currency}{a.price.toLocaleString()})
+                          + {a.name} (+{currency}{(a.price ?? 0).toLocaleString()})
                         </span>
                       ))}
                     </div>
@@ -729,7 +1042,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                 </div>
 
                 <div className="pt-3 border-t border-gray-50 flex items-center justify-between text-xs">
-                  <span className="font-extrabold text-[#070329] text-sm font-mono">{currency}{p.price.toLocaleString()}</span>
+                  <span className="font-extrabold text-[#070329] text-sm font-mono">{currency}{(p.price ?? 0).toLocaleString()}</span>
                   
                   <div className="flex gap-1">
                     <button

@@ -17,7 +17,7 @@ export const AdminDashboard: React.FC = () => {
   const totalDeliveredOrders = orders.filter(o => o.status === "delivered");
   
   // Calculate Gross Merchandise Value (GMV)
-  const gmv = totalDeliveredOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const gmv = totalDeliveredOrders.reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   
   // Calculate system commission dynamically: corporate platform fee + rider courier commissions
   const vendorCommission = gmv * (platformCommissionRate / 100);
@@ -79,7 +79,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Platform Fee (15%)</span>
-            <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">{currency}{commission.toLocaleString()}</h3>
+            <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">{currency}{(commission ?? 0).toLocaleString()}</h3>
           </div>
         </div>
 
@@ -90,7 +90,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Platform GMV</span>
-            <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">{currency}{gmv.toLocaleString()}</h3>
+            <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">{currency}{(gmv ?? 0).toLocaleString()}</h3>
           </div>
         </div>
 

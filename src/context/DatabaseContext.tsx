@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review } from "../types";
+import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder } from "../types";
 
 export interface CartItem {
   id: string;
@@ -70,7 +70,11 @@ interface DatabaseContextType {
   register: (name: string, email: string, phone: string, role: UserRole, gender?: string, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
   logout: () => void;
   overrideUserRole: (role: UserRole) => void; // Development booster
-  updateProfile: (name: string, phone: string, gender?: string) => void;
+  updateProfile: (name: string, phone: string, gender?: string, profileImage?: string) => void;
+  resetUserPin: (userId: string, newPin: string) => void;
+  switchRole: (role: UserRole) => void;
+  applyForVendor: (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => { success: boolean; error?: string };
+  applyForRider: (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => { success: boolean; error?: string };
   
   // Cart Actions
   addToCart: (product: Product, selectedAddons?: Addon[]) => void;
@@ -79,7 +83,7 @@ interface DatabaseContextType {
   clearCart: () => void;
   
   // Checkout & Customer Actions
-  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string) => { success: boolean; orderId?: string };
+  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => { success: boolean; orderId?: string };
   
   // Vendor Actions
   updateVendorOrder: (orderId: string, status: OrderStatus) => void;
@@ -99,7 +103,8 @@ interface DatabaseContextType {
   deleteUser: (userId: string) => void;
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => void;
   adminCreateOrder: (order: Order) => void;
-  adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
+  adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => { success: boolean; error?: string };
+  adminUpdateUser: (userId: string, fields: { name: string; email: string; phone: string; role: UserRole; pin: string; roles?: UserRole[] }) => { success: boolean; error?: string };
   adminUpdateUserRole: (userId: string, role: UserRole) => void;
 
   // Coverage Guide & Extreme Locations & Saved Addresses (Kwara coverage expansion)
@@ -118,6 +123,33 @@ interface DatabaseContextType {
   // Reviews System
   reviews: Review[];
   addReview: (vendorId: string, rating: number, comment: string) => void;
+
+  // Notifications System
+  notifications: AppNotification[];
+  addNotification: (userId: string, title: string, message: string, type: AppNotification["type"], relatedId?: string) => void;
+  markNotificationAsRead: (notificationId: string) => void;
+  markAllNotificationsAsRead: (userId: string) => void;
+  clearAllNotifications: (userId: string) => void;
+  deleteNotification: (notificationId: string) => void;
+
+  // Wallet System Management
+  walletTransactions: WalletTransaction[];
+  getUserWalletBalance: (userId: string) => number;
+  updateUserWalletBalance: (userId: string, amount: number, type: WalletTransaction["type"], note?: string) => void;
+  walletFundingBankTransferEnabled: boolean;
+  walletFundingMonnifyEnabled: boolean;
+  walletFundingPaystackEnabled: boolean;
+  updateWalletFundingModes: (bankTransfer: boolean, monnify: boolean, paystack: boolean) => void;
+  requestWalletFunding: (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => string;
+  approveWalletFunding: (transactionId: string) => void;
+  declineWalletFunding: (transactionId: string) => void;
+
+  // Receipt Pickup & Delivery System (Strictly for pre-purchased items from listed vendors)
+  receiptPickupOrders: ReceiptPickupOrder[];
+  createReceiptPickupOrder: (order: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => { success: boolean; error?: string; orderId?: string };
+  acceptReceiptPickupDelivery: (orderId: string, riderId: string) => void;
+  updateReceiptPickupStatus: (orderId: string, status: ReceiptPickupOrder["status"]) => void;
+  cancelReceiptPickupOrder: (orderId: string) => void;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
@@ -125,53 +157,105 @@ const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined
 // Helper to generate UUIDs when needed (or simple unique string IDs)
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
-const getInitialUsersSeed = (): User[] => [
-  { id: "cust-1", email: "customer@gmail.com", name: "Sarah Collins", phone: "+234 803 123 4567", role: "customer", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vend-id1", email: "vendor@gmail.com", name: "Mama Cass", phone: "+234 812 345 6789", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vend-id2", email: "burger@gmail.com", name: "Chicken Republic", phone: "+234 815 555 1212", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vendor3-id", email: "domino@gmail.com", name: "Domino's Pizza", phone: "+234 813 111 2222", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vendor4-id", email: "kfc@gmail.com", name: "KFC Ilorin", phone: "+234 814 333 4444", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vendor5-id", email: "megaplaza@gmail.com", name: "Mega Plaza", phone: "+234 815 555 6666", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vendor6-id", email: "medplus@gmail.com", name: "Medplus Pharmacy", phone: "+234 816 777 8888", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "vendor7-id", email: "chowstore@gmail.com", name: "Chowstore Ilorin", phone: "+234 817 999 0000", role: "vendor", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "ride-1", email: "rider@gmail.com", name: "Rider Daniel", phone: "+234 905 987 6543", role: "rider", createdAt: "2026-06-23T04:54:01.156Z" },
-  { id: "admin-1", email: "admin@gmail.com", name: "Platform Admin", phone: "+234 809 999 0000", role: "admin", createdAt: "2026-06-23T04:54:01.156Z" },
-];
+const ensureSuperAdminsOnly = (usersList: User[]): User[] => {
+  let updated = [...usersList];
+  const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+
+  // Ensure specified emails exist as super admins with PIN 9880
+  superAdminEmails.forEach((email) => {
+    const index = updated.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+    if (index >= 0) {
+      const existingRoles = updated[index].roles || [updated[index].role];
+      const nextRoles = [...existingRoles];
+      if (!nextRoles.includes("super_admin")) nextRoles.push("super_admin");
+      if (!nextRoles.includes("admin")) nextRoles.push("admin");
+      if (!nextRoles.includes("customer")) nextRoles.unshift("customer");
+      
+      updated[index] = {
+        ...updated[index],
+        role: "super_admin",
+        roles: nextRoles,
+        pin: updated[index].pin || "9880"
+      };
+    } else {
+      const id = email.toLowerCase() === "azeezlukman122@gmail.com" 
+        ? "super-admin-azeez" 
+        : email.toLowerCase() === "omotayo111111@gmail.com"
+        ? "super-admin-omotayo"
+        : "super-admin-dev";
+      updated.push({
+        id,
+        email: email.toLowerCase(),
+        name: email.toLowerCase() === "azeezlukman122@gmail.com" 
+          ? "Azeez Lukman" 
+          : email.toLowerCase() === "omotayo111111@gmail.com"
+          ? "Omotayo Admin"
+          : "Developer Admin",
+        phone: "+234 803 123 4567",
+        role: "super_admin",
+        roles: ["customer", "admin", "super_admin"],
+        pin: "9880",
+        createdAt: "2026-07-03T03:39:56-07:00"
+      });
+    }
+  });
+
+  return updated;
+};
+
+const getInitialUsersSeed = (): User[] => {
+  const seeds: User[] = [
+    { id: "cust-1", email: "sarah@gmail.com", name: "Sarah Collins", phone: "+234 803 123 4567", role: "customer", roles: ["customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor1-id", email: "mamacass@gmail.com", name: "Mama Cass Admin", phone: "+234 811 111 2222", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor2-id", email: "chickenrepublic@gmail.com", name: "Chicken Republic Admin", phone: "+234 812 222 3333", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "ride-1", email: "daniel@gmail.com", name: "Rider Daniel", phone: "+234 803 999 0000", role: "rider", roles: ["rider", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor3-id", email: "domino@gmail.com", name: "Domino's Pizza", phone: "+234 813 111 2222", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor4-id", email: "kfc@gmail.com", name: "KFC Ilorin", phone: "+234 814 333 4444", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor5-id", email: "megaplaza@gmail.com", name: "Mega Plaza", phone: "+234 815 555 6666", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor6-id", email: "medplus@gmail.com", name: "Medplus Pharmacy", phone: "+234 816 777 8888", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor7-id", email: "chowstore@gmail.com", name: "Chowstore Ilorin", phone: "+234 817 999 0000", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "admin-1", email: "admin@gmail.com", name: "Platform Admin", phone: "+234 809 999 0000", role: "admin", roles: ["admin", "customer"], createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "vendor8-id", email: "value_mart@owodefood.com", name: "Value Mart Admin", phone: "+234 815 111 2222", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z", pin: "1234" },
+    { id: "vendor9-id", email: "safco@owodefood.com", name: "Safco Admin", phone: "+234 816 222 3333", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z", pin: "1234" },
+    { id: "vendor10-id", email: "farm_direct@owodefood.com", name: "Farm Direct Admin", phone: "+234 817 333 4444", role: "vendor", roles: ["vendor", "customer"], createdAt: "2026-06-23T04:54:01.156Z", pin: "1234" }
+  ];
+  return ensureSuperAdminsOnly(seeds);
+};
 
 const getInitialVendorsSeed = (): Vendor[] => [
   {
     id: "v-1",
-    userId: "vend-id1",
+    userId: "vendor1-id",
     name: "Mama Cass",
-    description: "Traditional Nigerian dishes, rich aromatic Jollof Rice, Swallow, and delicious side delicacies.",
-    cuisine: "Desserts",
-    image: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?w=600&auto=format&fit=crop&q=60",
+    description: "Authentic local delicacies, Jollof rice, soups, and traditional Nigerian meals.",
+    cuisine: "Local",
+    image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=60",
     rating: 4.7,
-    address: "Fate Road, Ilorin, Kwara",
+    address: "Tanke Road, Ilorin, Kwara",
     status: "approved",
     createdAt: "2026-06-23T04:54:01.156Z",
     category: "restaurant",
     prepTime: 25,
-    deliveryFee: 750,
+    deliveryFee: 600,
     openingTime: "08:00",
     closingTime: "22:00"
   },
   {
     id: "v-2",
-    userId: "vend-id2",
+    userId: "vendor2-id",
     name: "Chicken Republic",
-    description: "Home of the famous Soulfully Spiced chicken, crunchy tenders, and legendary Jollof meals.",
-    cuisine: "Chicken",
-    image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60",
-    rating: 4.6,
-    address: "GRA, Ilorin, Kwara",
+    description: "Sizzling fried chicken, Citizens meal, and spicy Nigerian rice dishes.",
+    cuisine: "Local",
+    image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60",
+    rating: 4.3,
+    address: "Fate Road, Ilorin, Kwara",
     status: "approved",
     createdAt: "2026-06-23T04:54:01.156Z",
     category: "restaurant",
     prepTime: 15,
-    deliveryFee: 600,
-    openingTime: "09:00",
-    closingTime: "21:30"
+    deliveryFee: 500,
+    openingTime: "08:00",
+    closingTime: "22:00"
   },
   {
     id: "v-3",
@@ -257,6 +341,57 @@ const getInitialVendorsSeed = (): Vendor[] => [
     deliveryFee: 1000,
     openingTime: "08:00",
     closingTime: "20:00"
+  },
+  {
+    id: "v-8",
+    userId: "vendor8-id",
+    name: "Value Mart Supermarket",
+    description: "Premium lifestyle, household items, grocery selection, toiletries, snacks, and cosmetics.",
+    cuisine: "Groceries",
+    image: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=60",
+    rating: 4.5,
+    address: "Challenge, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "shop",
+    prepTime: 30,
+    deliveryFee: 800,
+    openingTime: "08:00",
+    closingTime: "22:00"
+  },
+  {
+    id: "v-9",
+    userId: "vendor9-id",
+    name: "Safco Pharmacy",
+    description: "Prescription medicines, local drugs, vitamins, daily supplements, first-aid tools, and sanitizer.",
+    cuisine: "Drinks",
+    image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=600&auto=format&fit=crop&q=60",
+    rating: 4.7,
+    address: "GRA, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "pharmacy",
+    prepTime: 15,
+    deliveryFee: 500,
+    openingTime: "08:00",
+    closingTime: "22:00"
+  },
+  {
+    id: "v-10",
+    userId: "vendor10-id",
+    name: "Farm Direct Groceries",
+    description: "Fresh farm-direct vegetables, yams, local spices, grains, plantains, and healthy produce.",
+    cuisine: "Salads",
+    image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600&auto=format&fit=crop&q=60",
+    rating: 4.8,
+    address: "Tanke, Ilorin, Kwara",
+    status: "approved",
+    createdAt: "2026-06-23T04:54:01.156Z",
+    category: "groceries",
+    prepTime: 25,
+    deliveryFee: 700,
+    openingTime: "07:30",
+    closingTime: "20:30"
   }
 ];
 
@@ -277,7 +412,13 @@ const getInitialProductsSeed = (): Product[] => {
     { id: "p-13", vendorId: "v-6", name: "Vitamin C Chewable Boosters", description: "High potency Vitamin C tablets (1000mg) for strong immunity.", price: 3200, image: "https://images.unsplash.com/photo-1616679911721-fe6eec14f7e9?w=600&auto=format&fit=crop&q=60", category: "Wellness", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
     { id: "p-14", vendorId: "v-6", name: "Aloe Hand Sanitizer Gel", description: "Kills 99.9% of germs while keeping skin moisturized with organic Aloe Vera.", price: 1200, image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60", category: "Hygiene", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
     { id: "p-15", vendorId: "v-7", name: "Farm Fresh Tomatoes Basket", description: "Freshly harvested, organic and juicy red tomatoes (1kg).", price: 2800, image: "https://images.unsplash.com/photo-1595855759920-86582396756a?w=600&auto=format&fit=crop&q=60", category: "Produce", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
-    { id: "p-16", vendorId: "v-7", name: "Golden Penny Spaghetti Pasta", description: "Rich in fiber, quick-cooking premium semolina wheat spaghetti pack (500g).", price: 1100, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" }
+    { id: "p-16", vendorId: "v-7", name: "Golden Penny Spaghetti Pasta", description: "Rich in fiber, quick-cooking premium semolina wheat spaghetti pack (500g).", price: 1100, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-17", vendorId: "v-8", name: "Premium Orange Juice 1L", description: "100% freshly squeezed pulp-free orange juice.", price: 2200, image: "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=600&auto=format&fit=crop&q=60", category: "Beverages", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-18", vendorId: "v-8", name: "Organic Lavender Body Wash", description: "Deep moisturizing skin wash with lavender extract.", price: 3500, image: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=600&auto=format&fit=crop&q=60", category: "Toiletries", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-19", vendorId: "v-9", name: "Paracetamol Extra Pack", description: "Rapid relief tablets for headache and mild pain relief.", price: 800, image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60", category: "Medicines", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-20", vendorId: "v-9", name: "Multivitamin Gummies", description: "Daily multivitamin gummies with vitamins A, C, D, and Zinc.", price: 4500, image: "https://images.unsplash.com/photo-1616679911721-fe6eec14f7e9?w=600&auto=format&fit=crop&q=60", category: "Vitamins", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-21", vendorId: "v-10", name: "Ilorin Sweet Yam (Medium)", description: "Freshly harvested local yam tuber, sweet and easy to boil.", price: 3800, image: "https://images.unsplash.com/photo-1595855759920-86582396756a?w=600&auto=format&fit=crop&q=60", category: "Produce", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" },
+    { id: "p-22", vendorId: "v-10", name: "Wholesale Rice Bag 5kg", description: "High quality clean local parboiled stone-free rice.", price: 7500, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: "2026-06-23T04:54:01.156Z" }
   ];
 
   const defaultAddonsMap: Record<string, { id: string; name: string; price: number }[]> = {
@@ -311,6 +452,73 @@ const getInitialProductsSeed = (): Product[] => {
   };
 
   return productsList.map(p => {
+    let addons = defaultAddonsMap[p.id] || [];
+    let addonGroups: any[] = [];
+
+    if (p.id === "p-1") {
+      addonGroups = [
+        {
+          id: "g-1-protein",
+          name: "Required Protein Choice",
+          isRequired: true,
+          minSelections: 1,
+          maxSelections: 1,
+          addons: [
+            { id: "a-1", name: "Grilled Chicken Thigh", price: 1500 },
+            { id: "a-14", name: "Spicy Fried Beef (1pc)", price: 1200 },
+            { id: "a-15", name: "Grilled Fish Portion", price: 1800 }
+          ]
+        },
+        {
+          id: "g-1-sides",
+          name: "Extra Sides (Up to 4 total, max 2 of each)",
+          isRequired: false,
+          minSelections: 0,
+          maxSelections: 4,
+          allowMultipleQuantity: true,
+          maxQuantityPerAddon: 2,
+          addons: [
+            { id: "a-2", name: "Fried Plantain Portion", price: 500 },
+            { id: "a-3", name: "Extra Coleslaw", price: 400 },
+            { id: "a-5", name: "Moimoi Option", price: 600 },
+            { id: "a-13", name: "Boiled Egg Side", price: 300 }
+          ]
+        }
+      ];
+    } else if (p.id === "p-5") {
+      addonGroups = [
+        {
+          id: "g-5-rice",
+          name: "Required Rice Base Selection",
+          isRequired: true,
+          minSelections: 1,
+          maxSelections: 1,
+          addons: [
+            { id: "a-5-jollof", name: "Classic smoky Jollof Rice", price: 0 },
+            { id: "a-5-fried", name: "Signature Fried Rice", price: 200 },
+            { id: "a-5-mixed", name: "Half Jollof, Half Fried Rice", price: 300 }
+          ]
+        },
+        {
+          id: "g-5-extras",
+          name: "Add Extra Toppings (Max 3 total, max 3 of each)",
+          isRequired: false,
+          minSelections: 0,
+          maxSelections: 3,
+          allowMultipleQuantity: true,
+          maxQuantityPerAddon: 3,
+          addons: [
+            { id: "a-5-egg", name: "Fried Egg Side", price: 300 },
+            { id: "a-6", name: "Extra Chicken Piece", price: 1800 },
+            { id: "a-2", name: "Fried Plantain Portion", price: 500 }
+          ]
+        }
+      ];
+    }
+
+    if (addonGroups.length > 0) {
+      return { ...p, addons, addonGroups };
+    }
     if (defaultAddonsMap[p.id]) {
       return { ...p, addons: defaultAddonsMap[p.id] };
     }
@@ -345,10 +553,10 @@ const getInitialOrdersSeed = (): Order[] => [
     totalAmount: 15000,
     deliveryAddress: "Tanke Road, Ilorin, Kwara",
     paymentMethod: "Cash on Delivery",
-    createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
+    createdAt: "2026-07-05T09:00:00Z",
     items: [
-      { id: "oi-1", orderId: "1253", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 2 },
-      { id: "oi-4", orderId: "1253", productId: "p-4", name: "Coca Cola (50cl)", price: 500, quantity: 2 }
+      { id: "oi-1", orderId: "ord-1253", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 2 },
+      { id: "oi-4", orderId: "ord-1253", productId: "p-4", name: "Coca Cola (50cl)", price: 500, quantity: 2 }
     ]
   },
   {
@@ -364,9 +572,9 @@ const getInitialOrdersSeed = (): Order[] => [
     totalAmount: 4500,
     deliveryAddress: "Fate Road, Ilorin, Kwara",
     paymentMethod: "Paystack (Card)",
-    createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
+    createdAt: "2026-07-05T09:15:00Z",
     items: [
-      { id: "oi-2", orderId: "1254", productId: "p-5", name: "Citizens Meal", price: 3200, quantity: 1 }
+      { id: "oi-2", orderId: "ord-1254", productId: "p-5", name: "Citizens Meal", price: 3200, quantity: 1 }
     ]
   },
   {
@@ -380,9 +588,9 @@ const getInitialOrdersSeed = (): Order[] => [
     totalAmount: 12000,
     deliveryAddress: "Fate Road, Ilorin, Kwara",
     paymentMethod: "Paystack (Card)",
-    createdAt: new Date(Date.now() - 20 * 60000).toISOString(),
+    createdAt: "2026-07-05T09:25:00Z",
     items: [
-      { id: "oi-3", orderId: "1255", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 3 }
+      { id: "oi-3", orderId: "ord-1255", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 3 }
     ]
   },
   {
@@ -396,10 +604,10 @@ const getInitialOrdersSeed = (): Order[] => [
     totalAmount: 8500,
     deliveryAddress: "Fate Road, Ilorin, Kwara",
     paymentMethod: "Paystack (Card)",
-    createdAt: new Date(Date.now() - 10 * 60000).toISOString(),
+    createdAt: "2026-07-05T09:30:00Z",
     items: [
-      { id: "oi-5", orderId: "1256", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 1 },
-      { id: "oi-6", orderId: "1256", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 1 }
+      { id: "oi-5", orderId: "ord-1256", productId: "p-1", name: "Jollof Rice", price: 4500, quantity: 1 },
+      { id: "oi-6", orderId: "ord-1256", productId: "p-3", name: "Grilled Chicken", price: 3500, quantity: 1 }
     ]
   }
 ];
@@ -418,11 +626,7 @@ const getInitialEmployeesSeed = (): Employee[] => [
   { id: "emp-3", name: "Fatima Yusuf", email: "fatima@owodefood.com", phone: "+234 705 999 8888", department: "support", status: "active", permissions: ["manage_orders", "manage_vendors"], createdAt: "2026-06-23T04:54:01.156Z" },
 ];
 
-const getInitialReviewsSeed = (): Review[] => [
-  { id: "rev-1", vendorId: "v-1", customerId: "cust-1", author: "Adebayo O.", rating: 5, comment: "Smoky Jollof of dreams! Highly recommend Mama Cass, original flavor is preserved.", createdAt: "2026-06-27T10:00:00.000Z" },
-  { id: "rev-2", vendorId: "v-1", customerId: "cust-1", author: "Chinedu E.", rating: 4, comment: "Crispy grilled chicken is excellent. Perfectly packed and came hot.", createdAt: "2026-06-25T14:30:00.000Z" },
-  { id: "rev-3", vendorId: "v-2", customerId: "cust-1", author: "Fatima Y.", rating: 5, comment: "Authentic taste. Fast checkout setup, we will order again on Friday!", createdAt: "2026-06-20T12:00:00.000Z" }
-];
+const getInitialReviewsSeed = (): Review[] => [];
 
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -433,15 +637,123 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [receiptPickupOrders, setReceiptPickupOrders] = useState<ReceiptPickupOrder[]>(() => {
+    try {
+      const saved = localStorage.getItem("fd_receipt_pickup_orders");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(receiptPickupOrders));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [receiptPickupOrders]);
   const [riders, setRiders] = useState<Rider[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem("fd_notifications");
+      return saved ? JSON.parse(saved) : [
+        {
+          id: "notif-init-1",
+          userId: "cust-1",
+          title: "Welcome to Owode Food! 🍲",
+          message: "Experience swift meal deliveries and convenient cashless payments across Owode Food and Ilorin.",
+          type: "system",
+          read: false,
+          createdAt: new Date().toISOString()
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_notifications", JSON.stringify(notifications));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [notifications]);
+
+  const [userBalances, setUserBalances] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("fd_user_balances");
+      if (saved) return JSON.parse(saved);
+      
+      const initialBalances: Record<string, number> = {
+        "cust-1": 15000,
+        "ride-1": 2500,
+        "vend-id1": 50000,
+        "vend-id2": 35000,
+      };
+      
+      const oldBalance = localStorage.getItem("fd_wallet_balance");
+      if (oldBalance) {
+        initialBalances["cust-1"] = Number(oldBalance);
+      }
+      return initialBalances;
+    } catch {
+      return {};
+    }
+  });
+
+  const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>(() => {
+    try {
+      const saved = localStorage.getItem("fd_wallet_transactions");
+      return saved ? JSON.parse(saved) : [
+        {
+          id: "tx-init-1",
+          userId: "cust-1",
+          userName: "Sarah Collins",
+          amount: 15000,
+          type: "deposit" as const,
+          note: "Initial activation deposit",
+          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_user_balances", JSON.stringify(userBalances));
+      if (userBalances["cust-1"] !== undefined) {
+        localStorage.setItem("fd_wallet_balance", String(userBalances["cust-1"]));
+        window.dispatchEvent(new Event("wallet-balance-updated"));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [userBalances]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_wallet_transactions", JSON.stringify(walletTransactions));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [walletTransactions]);
+
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
 
   // Coverage guide & extreme locations states
   const [coverageGuideText, setCoverageGuideText] = useState<string>(() => {
-    const saved = localStorage.getItem("fd_coverage_guide");
-    return saved || `### 📍 Kwara & Ilorin Marketplace Coverage Reference Guide
+    let saved = localStorage.getItem("fd_coverage_guide");
+    if (saved && saved.includes("Kwara & Ilorin Marketplace")) {
+      saved = saved.replace("Kwara & Ilorin Marketplace Coverage Reference Guide", "Owode Food Coverage Reference Guide");
+      localStorage.setItem("fd_coverage_guide", saved);
+    }
+    return saved || `### 📍 Owode Food Coverage Reference Guide
 
 We provide express local delivery to the following key zones in Ilorin, Kwara State:
 - **Tanke Zone**: covers Tanke, University Road, Fate Area, Oke-Odo, and environs.
@@ -541,6 +853,55 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   }, [availableLocations, selectedLocation]);
 
+  const [walletFundingBankTransferEnabled, setWalletFundingBankTransferEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("fd_funding_bank_transfer");
+      return saved ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+  const [walletFundingMonnifyEnabled, setWalletFundingMonnifyEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("fd_funding_monnify");
+      return saved ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+  const [walletFundingPaystackEnabled, setWalletFundingPaystackEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("fd_funding_paystack");
+      return saved ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_funding_bank_transfer", String(walletFundingBankTransferEnabled));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [walletFundingBankTransferEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_funding_monnify", String(walletFundingMonnifyEnabled));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [walletFundingMonnifyEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("fd_funding_paystack", String(walletFundingPaystackEnabled));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [walletFundingPaystackEnabled]);
+
   const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
   const [categoryServiceFees, setCategoryServiceFees] = useState<Record<string, number>>({
     restaurant: 350,
@@ -582,43 +943,121 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
         if (data.users && data.users.length > 0) {
           // Found data in Cloud SQL! Let's load it and synchronize local states.
-          const loadedUsers = data.users;
+          // Users merging
+          const initialUsers = getInitialUsersSeed();
+          const mergedUsers = [...data.users];
+          let usersUpdated = false;
+          for (const u of initialUsers) {
+            if (!mergedUsers.some(mu => mu.id === u.id)) {
+              mergedUsers.push(u);
+              usersUpdated = true;
+            }
+          }
+          const loadedUsers = ensureSuperAdminsOnly(mergedUsers);
           setUsers(loadedUsers);
           localStorage.setItem("fd_users", JSON.stringify(loadedUsers));
-
-          const loadedVendors = (data.vendors && data.vendors.length > 0) ? data.vendors : getInitialVendorsSeed();
-          setVendors(loadedVendors);
-          localStorage.setItem("fd_vendors", JSON.stringify(loadedVendors));
-          if (!data.vendors || data.vendors.length === 0) {
-            syncSave("VENDORS_BULK", loadedVendors);
+          if (usersUpdated) {
+            await syncSave("USERS_BULK", loadedUsers);
           }
 
-          const loadedProducts = (data.products && data.products.length > 0) ? data.products : getInitialProductsSeed();
-          setProducts(loadedProducts);
-          localStorage.setItem("fd_products", JSON.stringify(loadedProducts));
-          if (!data.products || data.products.length === 0) {
-            syncSave("PRODUCTS_BULK", loadedProducts);
+          // Vendors merging
+          const initialVendors = getInitialVendorsSeed();
+          let mergedVendors = [...(data.vendors || [])];
+          let vendorsUpdated = false;
+          for (const v of initialVendors) {
+            if (!mergedVendors.some(mv => mv.id === v.id)) {
+              mergedVendors.push(v);
+              vendorsUpdated = true;
+            }
+          }
+          if (mergedVendors.length === 0) {
+            mergedVendors = initialVendors;
+            vendorsUpdated = true;
+          }
+          setVendors(mergedVendors);
+          localStorage.setItem("fd_vendors", JSON.stringify(mergedVendors));
+          if (vendorsUpdated) {
+            await syncSave("VENDORS_BULK", mergedVendors);
           }
 
-          const loadedRiders = (data.riders && data.riders.length > 0) ? data.riders : getInitialRidersSeed();
-          setRiders(loadedRiders);
-          localStorage.setItem("fd_riders", JSON.stringify(loadedRiders));
-          if (!data.riders || data.riders.length === 0) {
-            syncSave("RIDERS_BULK", loadedRiders);
+          // Products merging
+          const initialProducts = getInitialProductsSeed();
+          let mergedProducts = [...(data.products || [])];
+          let productsUpdated = false;
+          for (const p of initialProducts) {
+            if (!mergedProducts.some(mp => mp.id === p.id)) {
+              mergedProducts.push(p);
+              productsUpdated = true;
+            }
+          }
+          if (mergedProducts.length === 0) {
+            mergedProducts = initialProducts;
+            productsUpdated = true;
+          }
+          setProducts(mergedProducts);
+          localStorage.setItem("fd_products", JSON.stringify(mergedProducts));
+          if (productsUpdated) {
+            await syncSave("PRODUCTS_BULK", mergedProducts);
           }
 
-          const loadedOrders = (data.orders && data.orders.length > 0) ? data.orders : getInitialOrdersSeed();
-          setOrders(loadedOrders);
-          localStorage.setItem("fd_orders", JSON.stringify(loadedOrders));
-          if (!data.orders || data.orders.length === 0) {
-            syncSave("ORDERS_BULK", loadedOrders);
+          // Riders merging
+          const initialRiders = getInitialRidersSeed();
+          let mergedRiders = [...(data.riders || [])];
+          let ridersUpdated = false;
+          for (const r of initialRiders) {
+            if (!mergedRiders.some(mr => mr.id === r.id)) {
+              mergedRiders.push(r);
+              ridersUpdated = true;
+            }
+          }
+          if (mergedRiders.length === 0) {
+            mergedRiders = initialRiders;
+            ridersUpdated = true;
+          }
+          setRiders(mergedRiders);
+          localStorage.setItem("fd_riders", JSON.stringify(mergedRiders));
+          if (ridersUpdated) {
+            await syncSave("RIDERS_BULK", mergedRiders);
           }
 
-          const loadedPaymentGateways = (data.paymentGateways && data.paymentGateways.length > 0) ? data.paymentGateways : getInitialPaymentGatewaysSeed();
-          setPaymentGateways(loadedPaymentGateways);
-          localStorage.setItem("fd_payment_gateways", JSON.stringify(loadedPaymentGateways));
-          if (!data.paymentGateways || data.paymentGateways.length === 0) {
-            syncSave("PAYMENT_GATEWAYS_BULK", loadedPaymentGateways);
+          // Orders merging
+          const initialOrders = getInitialOrdersSeed();
+          let mergedOrders = [...(data.orders || [])];
+          let ordersUpdated = false;
+          for (const o of initialOrders) {
+            if (!mergedOrders.some(mo => mo.id === o.id)) {
+              mergedOrders.push(o);
+              ordersUpdated = true;
+            }
+          }
+          if (mergedOrders.length === 0) {
+            mergedOrders = initialOrders;
+            ordersUpdated = true;
+          }
+          setOrders(mergedOrders);
+          localStorage.setItem("fd_orders", JSON.stringify(mergedOrders));
+          if (ordersUpdated) {
+            await syncSave("ORDERS_BULK", mergedOrders);
+          }
+
+          // Payment Gateways merging
+          const initialPaymentGateways = getInitialPaymentGatewaysSeed();
+          let mergedPaymentGateways = [...(data.paymentGateways || [])];
+          let paymentGatewaysUpdated = false;
+          for (const pg of initialPaymentGateways) {
+            if (!mergedPaymentGateways.some(mpg => mpg.id === pg.id)) {
+              mergedPaymentGateways.push(pg);
+              paymentGatewaysUpdated = true;
+            }
+          }
+          if (mergedPaymentGateways.length === 0) {
+            mergedPaymentGateways = initialPaymentGateways;
+            paymentGatewaysUpdated = true;
+          }
+          setPaymentGateways(mergedPaymentGateways);
+          localStorage.setItem("fd_payment_gateways", JSON.stringify(mergedPaymentGateways));
+          if (paymentGatewaysUpdated) {
+            await syncSave("PAYMENT_GATEWAYS_BULK", mergedPaymentGateways);
           }
 
           if (data.savedAddresses) {
@@ -637,7 +1076,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             ];
             setExtremeLocationTiers(tiers);
             localStorage.setItem("fd_extreme_tiers", JSON.stringify(tiers));
-            syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
+            await syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
           }
 
           if (data.extremeLocations && data.extremeLocations.length > 0) {
@@ -656,21 +1095,21 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             ];
             setExtremeLocations(extreme);
             localStorage.setItem("fd_extreme_locations", JSON.stringify(extreme));
-            syncSave("EXTREME_LOCATIONS_BULK", extreme);
+            await syncSave("EXTREME_LOCATIONS_BULK", extreme);
           }
 
           const loadedEmployees = (data.employees && data.employees.length > 0) ? data.employees : getInitialEmployeesSeed();
           setEmployees(loadedEmployees);
           localStorage.setItem("fd_employees", JSON.stringify(loadedEmployees));
           if (!data.employees || data.employees.length === 0) {
-            syncSave("EMPLOYEES_BULK", loadedEmployees);
+            await syncSave("EMPLOYEES_BULK", loadedEmployees);
           }
 
           const loadedReviews = (data.reviews && data.reviews.length > 0) ? data.reviews : getInitialReviewsSeed();
           setReviews(loadedReviews);
           localStorage.setItem("fd_reviews", JSON.stringify(loadedReviews));
           if (!data.reviews || data.reviews.length === 0) {
-            syncSave("REVIEWS_BULK", loadedReviews);
+            await syncSave("REVIEWS_BULK", loadedReviews);
           }
 
           if (data.systemSettings) {
@@ -680,6 +1119,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             if (data.systemSettings.vatEnabled) setVatEnabled(data.systemSettings.vatEnabled === "true");
             if (data.systemSettings.vatRate) setVatRate(Number(data.systemSettings.vatRate));
             if (data.systemSettings.maxCartItems) setMaxCartItems(Number(data.systemSettings.maxCartItems));
+            if (data.systemSettings.walletFundingBankTransferEnabled) setWalletFundingBankTransferEnabled(data.systemSettings.walletFundingBankTransferEnabled === "true");
+            if (data.systemSettings.walletFundingMonnifyEnabled) setWalletFundingMonnifyEnabled(data.systemSettings.walletFundingMonnifyEnabled === "true");
+            if (data.systemSettings.walletFundingPaystackEnabled) setWalletFundingPaystackEnabled(data.systemSettings.walletFundingPaystackEnabled === "true");
           }
 
           // Compute and set available locations
@@ -749,20 +1191,27 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           const savedSession = sessionStorage.getItem("fd_session_user");
           if (savedSession) {
             const u = JSON.parse(savedSession);
-            setCurrentUser(u);
-            if (u.role === "vendor") {
-              const v = data.vendors.find((vendor: any) => vendor.userId === u.id);
+            const latestDbUser = data.users.find((user: any) => user.id === u.id || user.email.toLowerCase() === u.email.toLowerCase());
+            let activeUser = u;
+            if (latestDbUser) {
+              const authorizedRoles = latestDbUser.roles || [latestDbUser.role];
+              const activeRole = authorizedRoles.includes(u.role) ? u.role : (latestDbUser.role || "customer");
+              activeUser = {
+                ...latestDbUser,
+                role: activeRole
+              };
+              sessionStorage.setItem("fd_session_user", JSON.stringify(activeUser));
+            }
+            setCurrentUser(activeUser);
+            if (activeUser.role === "vendor") {
+              const v = data.vendors.find((vendor: any) => vendor.userId === activeUser.id);
               setCurrentVendor(v || null);
-            } else if (u.role === "rider") {
-              const r = data.riders.find((rider: any) => rider.userId === u.id);
+            } else if (activeUser.role === "rider") {
+              const r = data.riders.find((rider: any) => rider.userId === activeUser.id);
               setCurrentRider(r || null);
             }
           } else {
-            const defaultCust = data.users.find((u: any) => u.role === "customer") || null;
-            if (defaultCust) {
-              setCurrentUser(defaultCust);
-              sessionStorage.setItem("fd_session_user", JSON.stringify(defaultCust));
-            }
+            setCurrentUser(null);
           }
           return;
         }
@@ -777,15 +1226,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       const savedUsers = localStorage.getItem("fd_users");
       let initialUsers: User[] = [];
       if (savedUsers) {
-        initialUsers = JSON.parse(savedUsers);
+        initialUsers = ensureSuperAdminsOnly(JSON.parse(savedUsers));
       } else {
-        initialUsers = [
-          { id: "cust-1", email: "customer@gmail.com", name: "Sarah Collins", phone: "+234 803 123 4567", role: "customer", createdAt: new Date().toISOString() },
-          { id: "vend-id1", email: "vendor@gmail.com", name: "Mama Cass", phone: "+234 812 345 6789", role: "vendor", createdAt: new Date().toISOString() },
-          { id: "vend-id2", email: "burger@gmail.com", name: "Chicken Republic", phone: "+234 815 555 1212", role: "vendor", createdAt: new Date().toISOString() },
-          { id: "ride-1", email: "rider@gmail.com", name: "Rider Daniel", phone: "+234 905 987 6543", role: "rider", createdAt: new Date().toISOString() },
-          { id: "admin-1", email: "admin@gmail.com", name: "Platform Admin", phone: "+234 809 999 0000", role: "admin", createdAt: new Date().toISOString() },
-        ];
+        initialUsers = getInitialUsersSeed();
         localStorage.setItem("fd_users", JSON.stringify(initialUsers));
       }
       setUsers(initialUsers);
@@ -799,7 +1242,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         initialVendors = [
           {
             id: "v-1",
-            userId: "vend-id1",
+            userId: "vendor1-id",
             name: "Mama Cass",
             description: "Traditional Nigerian dishes, rich aromatic Jollof Rice, Swallow, and delicious side delicacies.",
             cuisine: "Desserts",
@@ -816,7 +1259,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           },
           {
             id: "v-2",
-            userId: "vend-id2",
+            userId: "vendor2-id",
             name: "Chicken Republic",
             description: "Home of the famous Soulfully Spiced chicken, crunchy tenders, and legendary Jollof meals.",
             cuisine: "Chicken",
@@ -957,34 +1400,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       if (savedProducts) {
         initialProducts = JSON.parse(savedProducts);
       } else {
-        initialProducts = [
-          { id: "p-1", vendorId: "v-1", name: "Jollof Rice", description: "Smoky party Jollof rice with fried plantains and sliced salad.", price: 4500, image: "https://images.unsplash.com/photo-1628294895950-9805353123bc?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-2", vendorId: "v-1", name: "Fried Rice", description: "Special fried rice with fresh vegetables.", price: 4000, image: "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-3", vendorId: "v-1", name: "Grilled Chicken", description: "Spicy grilled chicken thigh marinated in local spices.", price: 3500, image: "https://images.unsplash.com/photo-1598902108854-10e335adac99?w=600&auto=format&fit=crop&q=60", category: "Desserts", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-4", vendorId: "v-1", name: "Coca Cola (50cl)", description: "Ice cold refreshing Cola beverage in plastic bottle.", price: 500, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&auto=format&fit=crop&q=60", category: "Drinks", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-5", vendorId: "v-2", name: "Citizens Meal", description: "Standard meal package containing Jollof rice, 1 fried chicken and drink.", price: 3200, image: "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-6", vendorId: "v-2", name: "Crunchy Chicken (2 pcs)", description: "Crispy and spicy original recipe fried chicken pieces.", price: 2800, image: "https://images.unsplash.com/photo-1562967914-608f82629710?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-7", vendorId: "v-3", name: "Pepperoni Supreme Pizza", description: "Loaded with pepperoni, mozzarella cheese and pizza sauce.", price: 6500, image: "https://images.unsplash.com/photo-1628840042765-356cda07504e?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-8", vendorId: "v-3", name: "Chicken Supreme Pizza", description: "Oven-grilled chicken breast slices, sweet corn, green peppers.", price: 7200, image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=60", category: "Pizza", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-9", vendorId: "v-4", name: "Zinger Burger", description: "A hot & crispy chicken fillet inside a warm toasted sesame bun.", price: 3800, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=60", category: "Burgers", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-10", vendorId: "v-4", name: "Fried Chicken Bucket", description: "5 pieces of signature original recipe fried chicken.", price: 6800, image: "https://images.unsplash.com/photo-1513639776629-7b61b0ac49cb?w=600&auto=format&fit=crop&q=60", category: "Chicken", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-11", vendorId: "v-5", name: "Brand New Hardcover Notebook", description: "Standard ruled 80-sheet hardcover study/business journal.", price: 1500, image: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&auto=format&fit=crop&q=60", category: "Stationery", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-12", vendorId: "v-5", name: "Premium Salted Potato Crisps", description: "Crunchy golden potato crisps seasoned with light sea salt.", price: 950, image: "https://images.unsplash.com/photo-1566478989037-eec170784d20?w=600&auto=format&fit=crop&q=60", category: "Snacks", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-13", vendorId: "v-6", name: "Vitamin C Chewable Boosters", description: "High potency Vitamin C tablets (1000mg) for strong immunity.", price: 3200, image: "https://images.unsplash.com/photo-1616679911721-fe6eec14f7e9?w=600&auto=format&fit=crop&q=60", category: "Wellness", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-14", vendorId: "v-6", name: "Aloe Hand Sanitizer Gel", description: "Kills 99.9% of germs while keeping skin moisturized with organic Aloe Vera.", price: 1200, image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=60", category: "Hygiene", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-15", vendorId: "v-7", name: "Farm Fresh Tomatoes Basket", description: "Freshly harvested, organic and juicy red tomatoes (1kg).", price: 2800, image: "https://images.unsplash.com/photo-1595855759920-86582396756a?w=600&auto=format&fit=crop&q=60", category: "Produce", isAvailable: true, createdAt: new Date().toISOString() },
-          { id: "p-16", vendorId: "v-7", name: "Golden Penny Spaghetti Pasta", description: "Rich in fiber, quick-cooking premium semolina wheat spaghetti pack (500g).", price: 1100, image: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=600&auto=format&fit=crop&q=60", category: "Grains", isAvailable: true, createdAt: new Date().toISOString() }
-        ];
+        initialProducts = getInitialProductsSeed();
         localStorage.setItem("fd_products", JSON.stringify(initialProducts));
       }
 
-      const productsWithAddons = initialProducts.map(p => {
-        if (defaultAddonsMap[p.id]) {
-          return { ...p, addons: defaultAddonsMap[p.id] };
-        }
-        return p;
-      });
-      setProducts(productsWithAddons);
+      setProducts(initialProducts);
 
       // 4. Riders
       const savedRiders = localStorage.getItem("fd_riders");
@@ -1094,20 +1514,27 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       const savedSessionUser = sessionStorage.getItem("fd_session_user");
       if (savedSessionUser) {
         const u: User = JSON.parse(savedSessionUser);
-        setCurrentUser(u);
-        if (u.role === "vendor") {
-          const v = initialVendors.find(vendor => vendor.userId === u.id);
+        const latestDbUser = initialUsers.find(user => user.id === u.id || user.email.toLowerCase() === u.email.toLowerCase());
+        let activeUser = u;
+        if (latestDbUser) {
+          const authorizedRoles = latestDbUser.roles || [latestDbUser.role];
+          const activeRole = authorizedRoles.includes(u.role) ? u.role : (latestDbUser.role || "customer");
+          activeUser = {
+            ...latestDbUser,
+            role: activeRole
+          };
+          sessionStorage.setItem("fd_session_user", JSON.stringify(activeUser));
+        }
+        setCurrentUser(activeUser);
+        if (activeUser.role === "vendor") {
+          const v = initialVendors.find(vendor => vendor.userId === activeUser.id);
           setCurrentVendor(v || null);
-        } else if (u.role === "rider") {
-          const r = initialRiders.find(rider => rider.userId === u.id);
+        } else if (activeUser.role === "rider") {
+          const r = initialRiders.find(rider => rider.userId === activeUser.id);
           setCurrentRider(r || null);
         }
       } else {
-        const defaultCust = initialUsers.find(u => u.role === "customer") || null;
-        if (defaultCust) {
-          setCurrentUser(defaultCust);
-          sessionStorage.setItem("fd_session_user", JSON.stringify(defaultCust));
-        }
+        setCurrentUser(null);
       }
 
       // 7. Available Locations Seed
@@ -1274,7 +1701,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       try {
         await syncSave("USERS_BULK", initialUsers);
         await syncSave("VENDORS_BULK", initialVendors);
-        await syncSave("PRODUCTS_BULK", productsWithAddons);
+        await syncSave("PRODUCTS_BULK", initialProducts);
         await syncSave("RIDERS_BULK", initialRiders);
         await syncSave("ORDERS_BULK", initialOrders);
         await syncSave("PAYMENT_GATEWAYS_BULK", initialPaymentGateways);
@@ -1293,6 +1720,57 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     loadFromCloudSQL();
   }, []);
+
+  // Automatically synchronize currentUser's roles if they have approved vendor/rider profiles or if their roles changed in the main users list.
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Find the latest user record in the active users list
+    const latestDbUser = users.find(u => u.id === currentUser.id);
+    const myVendor = vendors.find(v => v.userId === currentUser.id);
+    const myRider = riders.find(r => r.userId === currentUser.id);
+    
+    // Determine what roles the user should have
+    const baseRoles = latestDbUser ? (latestDbUser.roles || [latestDbUser.role]) : (currentUser.roles || [currentUser.role]);
+    const unionRoles = Array.from(new Set([...baseRoles, ...(currentUser.roles || [])]));
+    const updatedRoles = [...unionRoles];
+    
+    if (myVendor && myVendor.status === "approved" && !updatedRoles.includes("vendor")) {
+      updatedRoles.push("vendor");
+    }
+    if (myRider && myRider.status === "approved" && !updatedRoles.includes("rider")) {
+      updatedRoles.push("rider");
+    }
+    
+    // Also, if latestDbUser is different in core profile fields (name, phone, pin, roles)
+    const rolesChanged = JSON.stringify(currentUser.roles) !== JSON.stringify(updatedRoles);
+    const nameChanged = latestDbUser && currentUser.name !== latestDbUser.name;
+    const phoneChanged = latestDbUser && currentUser.phone !== latestDbUser.phone;
+    const pinChanged = latestDbUser && currentUser.pin !== latestDbUser.pin;
+    
+    if (rolesChanged || nameChanged || phoneChanged || pinChanged) {
+      const updatedUser = {
+        ...currentUser,
+        name: latestDbUser ? latestDbUser.name : currentUser.name,
+        phone: latestDbUser ? latestDbUser.phone : currentUser.phone,
+        pin: latestDbUser ? latestDbUser.pin : currentUser.pin,
+        roles: updatedRoles
+      };
+      
+      setCurrentUser(updatedUser);
+      sessionStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+      
+      // Keep the users list in sync as well
+      if (latestDbUser) {
+        const updatedDbUser = { ...latestDbUser, roles: updatedRoles };
+        const updatedUsersList = users.map(u => u.id === currentUser.id ? updatedDbUser : u);
+        // Only trigger users list persist if it actually changed
+        if (JSON.stringify(latestDbUser.roles) !== JSON.stringify(updatedRoles)) {
+          persistUsers(updatedUsersList);
+        }
+      }
+    }
+  }, [currentUser, users, vendors, riders]);
 
   const updateAvailableLocations = (locations: string[]) => {
     setAvailableLocations(locations);
@@ -1447,7 +1925,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     if (!vendorObj) return 0;
 
     // 1. Vendor level override has highest priority
-    if (vendorObj.serviceFeeType !== undefined && vendorObj.serviceFeeValue !== undefined) {
+    if (vendorObj.serviceFeeType !== undefined && vendorObj.serviceFeeType !== null && vendorObj.serviceFeeValue !== undefined && vendorObj.serviceFeeValue !== null) {
       if (vendorObj.serviceFeeType === "percentage") {
         return Math.round((subtotal * vendorObj.serviceFeeValue) / 100);
       } else {
@@ -1456,7 +1934,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
 
     // Fallback to legacy field serviceFee
-    if (vendorObj.serviceFee !== undefined) {
+    if (vendorObj.serviceFee !== undefined && vendorObj.serviceFee !== null) {
       return vendorObj.serviceFee;
     }
 
@@ -1469,7 +1947,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     // 3. Category level (default fallback)
     const cat = vendorObj.category || "restaurant";
-    return categoryServiceFees[cat] !== undefined ? categoryServiceFees[cat] : 300;
+    return (categoryServiceFees[cat] !== undefined && categoryServiceFees[cat] !== null) ? categoryServiceFees[cat] : 300;
   };
 
   const getRegion = (address: string): string => {
@@ -1492,7 +1970,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     if (vendorObj.freeDelivery) return 0;
 
-    const baseFee = vendorObj.deliveryFee !== undefined ? vendorObj.deliveryFee : 750;
+    const baseFee = (vendorObj.deliveryFee !== undefined && vendorObj.deliveryFee !== null) ? vendorObj.deliveryFee : 750;
 
     // Search for extreme location match in the deliveryAddress
     let extremeSurcharge = 0;
@@ -1540,6 +2018,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       name: newEmp.name,
       phone: newEmp.phone,
       role: "employee" as UserRole,
+      roles: ["customer", "employee" as UserRole],
       createdAt: newEmp.createdAt
     }];
     persistUsers(updatedUsers);
@@ -1591,9 +2070,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
   // Update localStorage whenever values change and sync to Cloud SQL
   const persistUsers = (newUsers: User[]) => {
-    setUsers(newUsers);
-    localStorage.setItem("fd_users", JSON.stringify(newUsers));
-    syncSave("USERS_BULK", newUsers);
+    const checkedUsers = ensureSuperAdminsOnly(newUsers);
+    setUsers(checkedUsers);
+    localStorage.setItem("fd_users", JSON.stringify(checkedUsers));
+    syncSave("USERS_BULK", checkedUsers);
   };
 
   const persistVendors = (newVendors: Vendor[]) => {
@@ -1629,12 +2109,14 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     );
     
     if (user) {
-      if (user.role !== role) {
-        return { success: false, error: `This account is registered as a ${user.role}, not a ${role}.` };
+      const userRoles = user.roles || [user.role];
+      if (!userRoles.includes(role)) {
+        return { success: false, error: `This account does not have the ${role} role. Available roles: ${userRoles.join(", ")}.` };
       }
       
-      setCurrentUser(user);
-      sessionStorage.setItem("fd_session_user", JSON.stringify(user));
+      const loggedInUser = { ...user, role, roles: userRoles };
+      setCurrentUser(loggedInUser);
+      sessionStorage.setItem("fd_session_user", JSON.stringify(loggedInUser));
       
       if (role === "vendor") {
         const v = vendors.find(vend => vend.userId === user.id);
@@ -1670,6 +2152,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       name,
       phone,
       role,
+      roles: role === "customer" ? ["customer"] : ["customer", role],
       gender: gender || undefined,
       createdAt: new Date().toISOString(),
       pin: extra?.pin || undefined
@@ -1728,6 +2211,112 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     sessionStorage.removeItem("fd_session_user");
   };
 
+  const switchRole = (newRole: UserRole) => {
+    if (!currentUser) return;
+    const userRoles = currentUser.roles || [currentUser.role];
+    if (!userRoles.includes(newRole)) {
+      console.warn("User does not have role:", newRole);
+      return;
+    }
+    const updated = { ...currentUser, role: newRole, roles: userRoles };
+    setCurrentUser(updated);
+    sessionStorage.setItem("fd_session_user", JSON.stringify(updated));
+
+    if (newRole === "vendor") {
+      const v = vendors.find(vend => vend.userId === currentUser.id);
+      setCurrentVendor(v || null);
+    } else if (newRole === "rider") {
+      const r = riders.find(rid => rid.userId === currentUser.id);
+      setCurrentRider(r || null);
+    } else {
+      setCurrentVendor(null);
+      setCurrentRider(null);
+    }
+  };
+
+  const applyForVendor = (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => {
+    if (!currentUser) return { success: false, error: "Not logged in" };
+    
+    const existingV = vendors.find(v => v.userId === currentUser.id);
+    if (existingV) {
+      if (existingV.status === "approved") {
+        return { success: false, error: "You are already an approved vendor." };
+      } else if (existingV.status === "pending") {
+        return { success: false, error: "Your vendor application is already pending approval." };
+      }
+    }
+
+    const newVendor: Vendor = {
+      id: "v-" + generateId(),
+      userId: currentUser.id,
+      name: businessName,
+      description: `Freshly prepared ${cuisine} food.`,
+      cuisine: cuisine,
+      image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=60",
+      rating: 5.0,
+      address: "Food Street Market, District 1",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      businessRegNo: extra?.businessRegNo,
+      foodPermitNo: extra?.foodPermitNo,
+      verificationDoc: extra?.verificationDoc,
+    };
+
+    // Filter out previously rejected vendor profile to allow re-application
+    const updatedVendors = vendors.filter(v => v.userId !== currentUser.id || v.status !== "rejected").concat(newVendor);
+    persistVendors(updatedVendors);
+
+    addNotification(
+      "admin",
+      "New Vendor Application 🏪",
+      `${currentUser.name} has submitted a vendor application for '${businessName}' (${cuisine}).`,
+      "system"
+    );
+
+    return { success: true };
+  };
+
+  const applyForRider = (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => {
+    if (!currentUser) return { success: false, error: "Not logged in" };
+
+    const existingR = riders.find(r => r.userId === currentUser.id);
+    if (existingR) {
+      if (existingR.status === "approved") {
+        return { success: false, error: "You are already an approved rider." };
+      } else if (existingR.status === "pending") {
+        return { success: false, error: "Your rider application is already pending approval." };
+      }
+    }
+
+    const newRider: Rider = {
+      id: "r-" + generateId(),
+      userId: currentUser.id,
+      name: currentUser.name,
+      phone: currentUser.phone,
+      vehicleType,
+      status: "pending",
+      isAvailable: true,
+      createdAt: new Date().toISOString(),
+      licenseNo: extra?.licenseNo,
+      plateNo: extra?.plateNo,
+      nationalIdNo: extra?.nationalIdNo,
+      verificationDoc: extra?.verificationDoc,
+    };
+
+    // Filter out previously rejected rider profile to allow re-application
+    const updatedRiders = riders.filter(r => r.userId !== currentUser.id || r.status !== "rejected").concat(newRider);
+    persistRiders(updatedRiders);
+
+    addNotification(
+      "admin",
+      "New Rider Application 🚴",
+      `${currentUser.name} has applied to become a rider using a ${vehicleType}.`,
+      "system"
+    );
+
+    return { success: true };
+  };
+
   // Helper designed for review to switch roles seamlessly
   const overrideUserRole = (role: UserRole) => {
     // Finds or creates a sample user for that role
@@ -1741,9 +2330,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         name: `Sample ${role.charAt(0).toUpperCase() + role.slice(1)}`,
         phone: "+234 803 123 4567",
         role,
+        roles: role === "customer" ? ["customer"] : ["customer", role],
         createdAt: new Date().toISOString()
       };
       persistUsers([...users, targetUser]);
+    } else {
+      // Ensure roles is initialized with at least customer and their current role
+      const currentRoles = targetUser.roles || [targetUser.role];
+      if (!currentRoles.includes("customer")) {
+        currentRoles.unshift("customer");
+      }
+      if (!currentRoles.includes(role)) {
+        currentRoles.push(role);
+      }
+      targetUser = {
+        ...targetUser,
+        roles: currentRoles
+      };
+      persistUsers(users.map(u => u.id === targetUser?.id ? targetUser! : u));
     }
 
     setCurrentUser(targetUser);
@@ -1787,9 +2391,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const updateProfile = (name: string, phone: string, gender?: string) => {
+  const updateProfile = (name: string, phone: string, gender?: string, profileImage?: string) => {
     if (!currentUser) return;
-    const updated = { ...currentUser, name, phone, gender };
+    const updated = { ...currentUser, name, phone, gender, profileImage };
     const updatedUsers = users.map(u => u.id === currentUser.id ? updated : u);
     persistUsers(updatedUsers);
     setCurrentUser(updated);
@@ -1813,6 +2417,16 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
+  const resetUserPin = (userId: string, newPin: string) => {
+    const updatedUsers = users.map(u => u.id === userId ? { ...u, pin: newPin } : u);
+    persistUsers(updatedUsers);
+    if (currentUser && currentUser.id === userId) {
+      const updatedUser = { ...currentUser, pin: newPin };
+      setCurrentUser(updatedUser);
+      sessionStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+    }
+  };
+
   // CART ACTIONS
   const addToCart = (product: Product, selectedAddons: Addon[] = []) => {
     const currentTotalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -1832,10 +2446,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         if (item.product.id !== product.id) return false;
         const itemAddons = item.selectedAddons || [];
         if (itemAddons.length !== selectedAddons.length) return false;
-        // Check that all selectedAddons are in itemAddons
-        const sAddonKeys = selectedAddons.map(sa => sa.id).sort();
-        const iAddonKeys = itemAddons.map(ia => ia.id).sort();
-        return sAddonKeys.every((val, i) => val === iAddonKeys[i]);
+        // Check that all selectedAddons are in itemAddons with exact same quantities
+        const sSorted = [...selectedAddons].sort((a, b) => a.id.localeCompare(b.id));
+        const iSorted = [...itemAddons].sort((a, b) => a.id.localeCompare(b.id));
+        return sSorted.every((sa, i) => sa.id === iSorted[i].id && (sa.quantity || 1) === (iSorted[i].quantity || 1));
       });
 
       if (index > -1) {
@@ -1901,8 +2515,17 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const clearCart = () => setCart([]);
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string) => {
-    if (!currentUser || cart.length === 0) return { success: false };
+  const placeOrder = (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => {
+    let activeUser = currentUser;
+    if (!activeUser) {
+      const savedSession = sessionStorage.getItem("fd_session_user");
+      if (savedSession) {
+        try {
+          activeUser = JSON.parse(savedSession);
+        } catch {}
+      }
+    }
+    if (!activeUser || cart.length === 0) return { success: false };
     
     const firstProduct = cart[0].product;
     const vendorObj = vendors.find(v => v.id === firstProduct.vendorId);
@@ -1912,7 +2535,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
 
     const total = cart.reduce((sum, item) => {
-      const addonCost = (item.selectedAddons || []).reduce((acc, ad) => acc + ad.price, 0);
+      const addonCost = (item.selectedAddons || []).reduce((acc, ad) => acc + ((ad.price ?? 0) * (ad.quantity ?? 1)), 0);
       return sum + ((item.product.price + addonCost) * item.quantity);
     }, 0);
     const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
@@ -1922,9 +2545,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     const newOrder: Order = {
       id: "ord-" + Math.floor(100 + Math.random() * 900),
-      customerId: currentUser.id,
-      customerName: currentUser.name,
-      customerPhone: deliveryPhone || currentUser.phone || "N/A",
+      customerId: activeUser.id,
+      customerName: activeUser.name,
+      customerPhone: deliveryPhone || activeUser.phone || "N/A",
       vendorId: vendorObj.id,
       vendorName: vendorObj.name,
       status: "pending",
@@ -1935,8 +2558,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       serviceFee,
       deliveryFee,
       tax,
+      receiptImage,
       items: cart.map(item => {
-        const addonCost = (item.selectedAddons || []).reduce((acc, ad) => acc + ad.price, 0);
+        const addonCost = (item.selectedAddons || []).reduce((acc, ad) => acc + ((ad.price ?? 0) * (ad.quantity ?? 1)), 0);
         return {
           id: "oi-" + generateId(),
           orderId: "", // will be referenced
@@ -1952,6 +2576,33 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updatedOrders = [newOrder, ...orders];
     persistOrders(updatedOrders);
     clearCart();
+
+    // Trigger role-based notifications
+    addNotification(
+      activeUser.id,
+      "Order Placed Successfully! 🍲",
+      `Your order #${newOrder.id} with ${vendorObj.name} has been placed for ${currency}${finalAmount.toLocaleString()}.`,
+      "order",
+      newOrder.id
+    );
+
+    if (vendorObj.userId) {
+      addNotification(
+        vendorObj.userId,
+        "New Order Received! 🍳",
+        `Order #${newOrder.id} has been received from ${activeUser.name}. Total: ${currency}${finalAmount.toLocaleString()}.`,
+        "order",
+        newOrder.id
+      );
+    }
+
+    addNotification(
+      "admin-1",
+      "New Marketplace Order! 📈",
+      `Order #${newOrder.id} for ${currency}${finalAmount.toLocaleString()} was placed at ${vendorObj.name} by ${activeUser.name}.`,
+      "order",
+      newOrder.id
+    );
 
     return { success: true, orderId: newOrder.id };
   };
@@ -1994,6 +2645,206 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
   };
 
+  // NOTIFICATION ACTIONS
+  const addNotification = (userId: string, title: string, message: string, type: AppNotification["type"], relatedId?: string) => {
+    const newNotif: AppNotification = {
+      id: "notif-" + generateId(),
+      userId,
+      title,
+      message,
+      type,
+      read: false,
+      createdAt: new Date().toISOString(),
+      relatedId
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const markNotificationAsRead = (notificationId: string) => {
+    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+  };
+
+  const markAllNotificationsAsRead = (userId: string) => {
+    setNotifications(prev => prev.map(n => n.userId === userId || userId === "all" ? { ...n, read: true } : n));
+  };
+
+  const clearAllNotifications = (userId: string) => {
+    setNotifications(prev => prev.filter(n => n.userId !== userId && userId !== "all"));
+  };
+
+  const deleteNotification = (notificationId: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+  };
+
+  // WALLET SYSTEM MANAGEMENT ACTIONS
+  const getUserWalletBalance = (userId: string) => {
+    return userBalances[userId] || 0;
+  };
+
+  const updateUserWalletBalance = (userId: string, amount: number, type: WalletTransaction["type"], note?: string) => {
+    setUserBalances(prev => {
+      const current = prev[userId] || 0;
+      const next = current + amount;
+      return { ...prev, [userId]: Math.max(0, next) };
+    });
+
+    const userObj = users.find(u => u.id === userId);
+    const userName = userObj ? userObj.name : "System User";
+    const newTx: WalletTransaction = {
+      id: "tx-" + generateId(),
+      userId,
+      userName,
+      amount,
+      type,
+      note: note || `${type.charAt(0).toUpperCase() + type.slice(1)} transaction`,
+      createdAt: new Date().toISOString()
+    };
+    setWalletTransactions(prev => [newTx, ...prev]);
+
+    // Role-specific wallet notification
+    const direction = amount >= 0 ? "credited with" : "debited by";
+    const absAmount = Math.abs(amount);
+    addNotification(
+      userId,
+      amount >= 0 ? "Wallet Credited! 💰" : "Wallet Debited 💸",
+      `Your wallet balance has been ${direction} ${currency}${absAmount.toLocaleString()}. Note: ${note || 'System adjustment'}.`,
+      "wallet"
+    );
+  };
+
+  const updateWalletFundingModes = (bankTransfer: boolean, monnify: boolean, paystack: boolean) => {
+    setWalletFundingBankTransferEnabled(bankTransfer);
+    setWalletFundingMonnifyEnabled(monnify);
+    setWalletFundingPaystackEnabled(paystack);
+    try {
+      localStorage.setItem("fd_funding_bank_transfer", String(bankTransfer));
+      localStorage.setItem("fd_funding_monnify", String(monnify));
+      localStorage.setItem("fd_funding_paystack", String(paystack));
+      syncSave("SYSTEM_SETTING_UPSERT", { key: "walletFundingBankTransferEnabled", value: String(bankTransfer) });
+      syncSave("SYSTEM_SETTING_UPSERT", { key: "walletFundingMonnifyEnabled", value: String(monnify) });
+      syncSave("SYSTEM_SETTING_UPSERT", { key: "walletFundingPaystackEnabled", value: String(paystack) });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const requestWalletFunding = (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => {
+    const txId = "tx-" + generateId();
+    const userObj = users.find(u => u.id === userId);
+    const userName = userObj ? userObj.name : "System User";
+    
+    const isInstant = gateway === "paystack" || gateway === "monnify";
+    const status = isInstant ? "approved" as const : "pending" as const;
+
+    const newTx: WalletTransaction = {
+      id: txId,
+      userId,
+      userName,
+      amount,
+      type: "deposit",
+      note: `Wallet recharge via ${gateway === "bank_transfer" ? "Local Bank Transfer" : gateway === "paystack" ? "Paystack Gateway" : "Monnify Gateway"}`,
+      createdAt: new Date().toISOString(),
+      status,
+      gateway,
+      reference: reference || `OWD-TX-${Math.floor(100000 + Math.random() * 900000)}`
+    };
+
+    setWalletTransactions(prev => [newTx, ...prev]);
+
+    if (isInstant) {
+      setUserBalances(prev => {
+        const current = prev[userId] || 0;
+        return { ...prev, [userId]: current + amount };
+      });
+
+      addNotification(
+        userId,
+        "Wallet Funded! 💰",
+        `Your wallet balance has been credited with ${currency}${amount.toLocaleString()} via ${gateway === "paystack" ? "Paystack" : "Monnify"}.`,
+        "wallet"
+      );
+    } else {
+      addNotification(
+        "admin-1",
+        "Pending Wallet Funding Request ⏳",
+        `User ${userName} submitted a wallet funding request of ${currency}${amount.toLocaleString()} via Bank Transfer. Reference: ${newTx.reference}. Approval required!`,
+        "wallet",
+        txId
+      );
+      addNotification(
+        "admin",
+        "New Funding Request 💰",
+        `${userName} requested wallet crediting of ${currency}${amount.toLocaleString()} via Bank Transfer. Check Wallet Management HQ.`,
+        "wallet",
+        txId
+      );
+    }
+
+    return txId;
+  };
+
+  const approveWalletFunding = (transactionId: string) => {
+    setWalletTransactions(prev => {
+      const targetTx = prev.find(t => t.id === transactionId);
+      if (!targetTx || targetTx.status !== "pending") return prev;
+
+      const userId = targetTx.userId;
+      const amount = targetTx.amount;
+
+      // Credit balance
+      setUserBalances(curr => {
+        const current = curr[userId] || 0;
+        return { ...curr, [userId]: current + amount };
+      });
+
+      // Notify user
+      addNotification(
+        userId,
+        "Wallet Credited! 💰",
+        `Your wallet funding request of ${currency}${amount.toLocaleString()} has been APPROVED and credited to your available balance!`,
+        "wallet"
+      );
+
+      // Notify admin
+      addNotification(
+        "admin",
+        "Funding Request Approved ✅",
+        `Funding request ${targetTx.reference} for ${targetTx.userName} (${currency}${amount.toLocaleString()}) has been approved.`,
+        "wallet"
+      );
+
+      return prev.map(t => t.id === transactionId ? { ...t, status: "approved" as const } : t);
+    });
+  };
+
+  const declineWalletFunding = (transactionId: string) => {
+    setWalletTransactions(prev => {
+      const targetTx = prev.find(t => t.id === transactionId);
+      if (!targetTx || targetTx.status !== "pending") return prev;
+
+      const userId = targetTx.userId;
+      const amount = targetTx.amount;
+
+      // Notify user
+      addNotification(
+        userId,
+        "Wallet Funding Declined ❌",
+        `Your wallet funding request of ${currency}${amount.toLocaleString()} has been declined. Please contact support if this is an error.`,
+        "wallet"
+      );
+
+      // Notify admin
+      addNotification(
+        "admin",
+        "Funding Request Declined ❌",
+        `Funding request ${targetTx.reference} for ${targetTx.userName} (${currency}${amount.toLocaleString()}) was declined.`,
+        "wallet"
+      );
+
+      return prev.map(t => t.id === transactionId ? { ...t, status: "declined" as const } : t);
+    });
+  };
+
   // VENDOR ACTIONS
   const updateVendorOrder = (orderId: string, status: OrderStatus) => {
     let orderToUpdate = orders.find(o => o.id === orderId);
@@ -2007,6 +2858,30 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       return o;
     });
     persistOrders(updatedOrders);
+
+    // Notify Customer about status change
+    let statusText = status as string;
+    if (status === "preparing") statusText = "is being prepared 🍳";
+    else if (status === "ready") statusText = "is ready for delivery! 📦";
+    else if (status === "delivered") statusText = "has been completed! 🎉";
+    else if (status === "cancelled") statusText = "has been cancelled. ❌";
+
+    addNotification(
+      orderToUpdate.customerId,
+      `Order Update: ${orderToUpdate.vendorName}`,
+      `Your order #${orderId} from ${orderToUpdate.vendorName} ${statusText}.`,
+      "order",
+      orderId
+    );
+
+    // Notify Admin about status change
+    addNotification(
+      "admin-1",
+      `Order #${orderId} Updated`,
+      `Order #${orderId} status has been updated to ${status} by ${orderToUpdate.vendorName}.`,
+      "order",
+      orderId
+    );
   };
 
   const addProduct = (product: Omit<Product, "id" | "createdAt">) => {
@@ -2040,6 +2915,36 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     persistOrders(orders.map(o => {
       if (o.id === orderId) {
+        // Trigger customer notification
+        addNotification(
+          o.customerId,
+          "Rider Assigned! 🚴",
+          `Rider ${rider.name} has accepted your order #${orderId} and is out for delivery!`,
+          "delivery",
+          orderId
+        );
+
+        // Notify vendor as well
+        const vendorObj = vendors.find(v => v.id === o.vendorId);
+        if (vendorObj && vendorObj.userId) {
+          addNotification(
+            vendorObj.userId,
+            "Rider Assigned to Delivery 🚴",
+            `Rider ${rider.name} has accepted order #${orderId} for delivery.`,
+            "delivery",
+            orderId
+          );
+        }
+
+        // Notify Admin
+        addNotification(
+          "admin-1",
+          "Rider Assigned to Order",
+          `Rider ${rider.name} has accepted delivery for order #${orderId}.`,
+          "delivery",
+          orderId
+        );
+
         return {
           ...o,
           riderId,
@@ -2052,8 +2957,49 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   const updateDeliveryStatus = (orderId: string, status: OrderStatus) => {
+    let orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return;
+
     persistOrders(orders.map(o => {
       if (o.id === orderId) {
+        if (status === "delivered") {
+          // Notify customer
+          addNotification(
+            o.customerId,
+            "Order Delivered! 🍲🎉",
+            `Your order #${orderId} from ${o.vendorName} has been delivered. Enjoy your meal!`,
+            "delivery",
+            orderId
+          );
+          // Notify vendor
+          const vObj = vendors.find(v => v.id === o.vendorId);
+          if (vObj && vObj.userId) {
+            addNotification(
+              vObj.userId,
+              "Delivery Confirmed! 💸",
+              `Order #${orderId} has been successfully delivered by ${o.riderName || 'Rider'}. Payout processed.`,
+              "delivery",
+              orderId
+            );
+          }
+          // Notify Admin
+          addNotification(
+            "admin-1",
+            "Order Completed",
+            `Order #${orderId} from ${o.vendorName} has been successfully delivered by ${o.riderName || 'Rider'}.`,
+            "delivery",
+            orderId
+          );
+        } else {
+          // General status update
+          addNotification(
+            o.customerId,
+            "Delivery Status Update",
+            `Your delivery for order #${orderId} is now: ${status.replace(/_/g, " ")}.`,
+            "delivery",
+            orderId
+          );
+        }
         return { ...o, status };
       }
       return o;
@@ -2069,11 +3015,69 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
   // ADMIN ACTIONS
   const toggleVendorStatus = (vendorId: string, status: Vendor["status"]) => {
-    persistVendors(vendors.map(v => v.id === vendorId ? { ...v, status } : v));
+    const updatedVendors = vendors.map(v => v.id === vendorId ? { ...v, status } : v);
+    persistVendors(updatedVendors);
+
+    if (status === "approved") {
+      const vendorObj = vendors.find(v => v.id === vendorId);
+      if (vendorObj && vendorObj.userId) {
+        const updatedUsers = users.map(u => {
+          if (u.id === vendorObj.userId) {
+            const currentRoles = u.roles || [u.role];
+            const updatedRoles = currentRoles.includes("vendor") ? currentRoles : [...currentRoles, "vendor" as UserRole];
+            const updatedUser = { ...u, roles: updatedRoles };
+            if (currentUser && currentUser.id === u.id) {
+              const updatedSession = { ...currentUser, roles: updatedRoles };
+              setCurrentUser(updatedSession);
+              sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+            }
+            return updatedUser;
+          }
+          return u;
+        });
+        persistUsers(updatedUsers);
+
+        addNotification(
+          vendorObj.userId,
+          "Vendor Account Approved! 🏪🎉",
+          `Congratulations! Your vendor profile for '${vendorObj.name}' has been approved. You can now switch to the Vendor dashboard!`,
+          "system"
+        );
+      }
+    }
   };
 
   const toggleRiderStatus = (riderId: string, status: Rider["status"]) => {
-    persistRiders(riders.map(r => r.id === riderId ? { ...r, status } : r));
+    const updatedRiders = riders.map(r => r.id === riderId ? { ...r, status } : r);
+    persistRiders(updatedRiders);
+
+    if (status === "approved") {
+      const riderObj = riders.find(r => r.id === riderId);
+      if (riderObj && riderObj.userId) {
+        const updatedUsers = users.map(u => {
+          if (u.id === riderObj.userId) {
+            const currentRoles = u.roles || [u.role];
+            const updatedRoles = currentRoles.includes("rider") ? currentRoles : [...currentRoles, "rider" as UserRole];
+            const updatedUser = { ...u, roles: updatedRoles };
+            if (currentUser && currentUser.id === u.id) {
+              const updatedSession = { ...currentUser, roles: updatedRoles };
+              setCurrentUser(updatedSession);
+              sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+            }
+            return updatedUser;
+          }
+          return u;
+        });
+        persistUsers(updatedUsers);
+
+        addNotification(
+          riderObj.userId,
+          "Rider Account Approved! 🚴🎉",
+          `Congratulations! Your rider profile has been approved. You can now switch to the Rider dashboard!`,
+          "system"
+        );
+      }
+    }
   };
 
   const deleteUser = (userId: string) => {
@@ -2096,7 +3100,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     email: string,
     phone: string,
     role: UserRole,
-    extra?: { businessName?: string; cuisine?: string; vehicleType?: string }
+    extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }
   ) => {
     const cleansedEmail = email.trim().toLowerCase();
     const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
@@ -2105,20 +3109,44 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
 
     const newUserId = generateId();
+    const userRoles = extra?.roles || [role];
+    if (!userRoles.includes("customer")) {
+      userRoles.unshift("customer");
+    }
     const newUser: User = {
       id: newUserId,
       email: cleansedEmail,
       name,
       phone,
-      role,
+      role: userRoles.includes(role) ? role : (userRoles[userRoles.length - 1] || "customer"),
+      roles: userRoles,
+      pin: extra?.pin || "1234",
       createdAt: new Date().toISOString()
     };
 
     const updatedUsers = [...users, newUser];
     persistUsers(updatedUsers);
 
-    // If role is vendor, register a vendor profile as well
-    if (role === "vendor") {
+    // If roles list includes employee, register an employee profile as well
+    if (userRoles.includes("employee")) {
+      const newEmp: Employee = {
+        id: newUserId,
+        name: name,
+        email: cleansedEmail,
+        phone: phone,
+        department: "support",
+        status: "active",
+        permissions: ["manage_orders"],
+        createdAt: new Date().toISOString()
+      };
+      const updated = [...employees, newEmp];
+      setEmployees(updated);
+      localStorage.setItem("fd_employees", JSON.stringify(updated));
+      syncSave("EMPLOYEES_BULK", updated);
+    }
+
+    // If roles list includes vendor, register a vendor profile as well
+    if (userRoles.includes("vendor")) {
       const newVendor: Vendor = {
         id: "v-" + generateId(),
         userId: newUserId,
@@ -2135,8 +3163,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       persistVendors(updatedVendors);
     } 
 
-    // If role is rider, register a rider profile
-    else if (role === "rider") {
+    // If roles list includes rider, register a rider profile
+    if (userRoles.includes("rider")) {
       const vType = (extra?.vehicleType || "motorcycle") as Rider["vehicleType"];
       const newRider: Rider = {
         id: "r-" + generateId(),
@@ -2158,10 +3186,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const adminUpdateUserRole = (userId: string, role: UserRole) => {
     const updatedUsers = users.map(u => {
       if (u.id === userId) {
-        const updatedUser = { ...u, role };
+        const currentRoles = u.roles || [u.role];
+        const updatedRoles = currentRoles.includes(role) ? currentRoles : [...currentRoles, role];
+        const updatedUser = { ...u, role, roles: updatedRoles };
         if (currentUser && currentUser.id === userId) {
-          setCurrentUser(updatedUser);
-          sessionStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+          const updatedSession = { ...currentUser, role, roles: updatedRoles };
+          setCurrentUser(updatedSession);
+          sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
         }
         return updatedUser;
       }
@@ -2197,8 +3228,262 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           createdAt: new Date().toISOString()
         };
         persistRiders([...riders, newRider]);
+      } else if (role === "employee" && !employees.some(emp => emp.id === userId)) {
+        const newEmp: Employee = {
+          id: userId,
+          name: targetUser.name,
+          email: targetUser.email,
+          phone: targetUser.phone,
+          department: "support",
+          status: "active",
+          permissions: ["manage_orders"],
+          createdAt: new Date().toISOString()
+        };
+        const updated = [...employees, newEmp];
+        setEmployees(updated);
+        localStorage.setItem("fd_employees", JSON.stringify(updated));
+        syncSave("EMPLOYEES_BULK", updated);
       }
     }
+  };
+
+  const adminUpdateUser = (
+    userId: string,
+    fields: { name: string; email: string; phone: string; role: UserRole; pin: string; roles?: UserRole[] }
+  ) => {
+    const cleansedEmail = fields.email.trim().toLowerCase();
+    const otherExists = users.some(u => u.id !== userId && u.email.toLowerCase() === cleansedEmail);
+    if (otherExists) {
+      return { success: false, error: "An account with this email already exists." };
+    }
+
+    const updatedUsers = users.map(u => {
+      if (u.id === userId) {
+        const updatedRoles = fields.roles || u.roles || [fields.role];
+        if (!updatedRoles.includes("customer")) {
+          updatedRoles.unshift("customer");
+        }
+        const activeRole = updatedRoles.includes(fields.role) ? fields.role : (updatedRoles[updatedRoles.length - 1] || "customer");
+        const updatedUser = {
+          ...u,
+          name: fields.name.trim(),
+          email: cleansedEmail,
+          phone: fields.phone.trim(),
+          role: activeRole,
+          roles: updatedRoles,
+          pin: fields.pin
+        };
+        if (currentUser && currentUser.id === userId) {
+          const updatedSession = { ...currentUser, ...updatedUser };
+          setCurrentUser(updatedSession);
+          sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+        }
+        return updatedUser;
+      }
+      return u;
+    });
+
+    persistUsers(updatedUsers);
+
+    const targetRoles = fields.roles || [fields.role];
+    if (!targetRoles.includes("customer")) {
+      targetRoles.unshift("customer");
+    }
+
+    // If role includes vendor, onboard them automatically if they don't exist
+    if (targetRoles.includes("vendor") && !vendors.some(v => v.userId === userId)) {
+      const newVendor: Vendor = {
+        id: "v-" + generateId(),
+        userId,
+        name: `${fields.name.trim()}'s Eatery`,
+        description: "Premium platform vendor.",
+        cuisine: "Continental",
+        image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=60",
+        rating: 5.0,
+        address: "Kwara Delivery Zone",
+        status: "approved",
+        createdAt: new Date().toISOString()
+      };
+      persistVendors([...vendors, newVendor]);
+    }
+    
+    if (targetRoles.includes("rider") && !riders.some(r => r.userId === userId)) {
+      const newRider: Rider = {
+        id: "r-" + generateId(),
+        userId,
+        name: fields.name.trim(),
+        phone: fields.phone.trim(),
+        vehicleType: "motorcycle",
+        status: "approved",
+        isAvailable: true,
+        createdAt: new Date().toISOString()
+      };
+      persistRiders([...riders, newRider]);
+    }
+
+    // If roles include employee, onboard them automatically if they don't exist
+    if (targetRoles.includes("employee") && !employees.some(emp => emp.id === userId)) {
+      const newEmp: Employee = {
+        id: userId,
+        name: fields.name.trim(),
+        email: cleansedEmail,
+        phone: fields.phone.trim(),
+        department: "support",
+        status: "active",
+        permissions: ["manage_orders"],
+        createdAt: new Date().toISOString()
+      };
+      const updated = [...employees, newEmp];
+      setEmployees(updated);
+      localStorage.setItem("fd_employees", JSON.stringify(updated));
+      syncSave("EMPLOYEES_BULK", updated);
+    } else if (employees.some(emp => emp.id === userId)) {
+      // Sync or remove
+      if (!targetRoles.includes("employee")) {
+        // Remove employee
+        const updated = employees.filter(emp => emp.id !== userId);
+        setEmployees(updated);
+        localStorage.setItem("fd_employees", JSON.stringify(updated));
+        syncSave("EMPLOYEES_BULK", updated);
+      } else {
+        // Sync profile fields
+        const updated = employees.map(emp => emp.id === userId ? {
+          ...emp,
+          name: fields.name.trim(),
+          email: cleansedEmail,
+          phone: fields.phone.trim()
+        } : emp);
+        setEmployees(updated);
+        localStorage.setItem("fd_employees", JSON.stringify(updated));
+        syncSave("EMPLOYEES_BULK", updated);
+      }
+    }
+
+    return { success: true };
+  };
+
+  // --- RECEIPT PICKUP & DELIVERY FUNCTIONS ---
+  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => {
+    const orderId = "rcpt-" + generateId();
+    
+    if (orderData.paymentMethod === "wallet") {
+      const balance = getUserWalletBalance(orderData.customerId);
+      if (balance < orderData.deliveryFee) {
+        return { success: false, error: "Insufficient wallet balance to pay for delivery." };
+      }
+      updateUserWalletBalance(
+        orderData.customerId,
+        orderData.deliveryFee,
+        "purchase",
+        `Receipt Pickup Delivery Fee to ${orderData.vendorName} - Ref: #${orderId}`
+      );
+    }
+
+    const newOrder: ReceiptPickupOrder = {
+      ...orderData,
+      id: orderId,
+      status: "pending",
+      paymentStatus: orderData.paymentMethod === "wallet" ? "paid" : "unpaid",
+      createdAt: new Date().toISOString()
+    };
+
+    const nextOrders = [newOrder, ...receiptPickupOrders];
+    setReceiptPickupOrders(nextOrders);
+
+    addNotification(
+      "admin",
+      "New Receipt Pickup & Delivery Request",
+      `${orderData.customerName} requested pickup from ${orderData.vendorName} for delivery to ${orderData.deliveryAddress}.`,
+      "delivery",
+      orderId
+    );
+
+    addNotification(
+      orderData.vendorId,
+      "Receipt Pickup Scheduled",
+      `A customer (${orderData.customerName}) has scheduled a receipt/QR-code pickup at your store. Ref: #${orderId}`,
+      "delivery",
+      orderId
+    );
+
+    return { success: true, orderId };
+  };
+
+  const acceptReceiptPickupDelivery = (orderId: string, riderId: string) => {
+    const rider = riders.find(r => r.id === riderId);
+    if (!rider) return;
+
+    const updated = receiptPickupOrders.map(o => {
+      if (o.id === orderId) {
+        addNotification(
+          o.customerId,
+          "Rider Assigned to Receipt Pickup",
+          `Rider ${rider.name} is on the way to pick up your pre-purchased items from ${o.vendorName}.`,
+          "delivery",
+          orderId
+        );
+        addNotification(
+          o.vendorId,
+          "Rider Dispatched for Pickup",
+          `Rider ${rider.name} has accepted the pickup for #${orderId} and is on their way to your store.`,
+          "delivery",
+          orderId
+        );
+        return {
+          ...o,
+          riderId: rider.id,
+          riderName: rider.name,
+          status: "accepted" as const
+        };
+      }
+      return o;
+    });
+    setReceiptPickupOrders(updated);
+  };
+
+  const updateReceiptPickupStatus = (orderId: string, status: ReceiptPickupOrder["status"]) => {
+    const updated = receiptPickupOrders.map(o => {
+      if (o.id === orderId) {
+        let title = "";
+        let msg = "";
+        if (status === "picked_up") {
+          title = "Receipt Order Picked Up";
+          msg = `Rider has verified the receipt at ${o.vendorName} and picked up your items!`;
+        } else if (status === "delivered") {
+          title = "Receipt Order Delivered";
+          msg = `Your pre-purchased items from ${o.vendorName} have been delivered successfully!`;
+        } else if (status === "cancelled") {
+          title = "Receipt Order Cancelled";
+          msg = `Your receipt pickup and delivery order #${orderId} was cancelled.`;
+          
+          if (o.paymentMethod === "wallet" && o.paymentStatus === "paid") {
+            updateUserWalletBalance(
+              o.customerId,
+              o.deliveryFee,
+              "refund",
+              `Refund of delivery fee for cancelled receipt order #${orderId}`
+            );
+          }
+        }
+
+        if (title && msg) {
+          addNotification(o.customerId, title, msg, "delivery", orderId);
+          addNotification(o.vendorId, title, msg, "delivery", orderId);
+        }
+
+        return {
+          ...o,
+          status,
+          paymentStatus: status === "delivered" ? "paid" as const : o.paymentStatus
+        };
+      }
+      return o;
+    });
+    setReceiptPickupOrders(updated);
+  };
+
+  const cancelReceiptPickupOrder = (orderId: string) => {
+    updateReceiptPickupStatus(orderId, "cancelled");
   };
 
   return (
@@ -2263,8 +3548,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         login,
         register,
         logout,
+        switchRole,
         overrideUserRole,
         updateProfile,
+        resetUserPin,
         addToCart,
         removeFromCart,
         updateCartQuantity,
@@ -2284,6 +3571,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         adminUpdateVendor,
         adminCreateOrder,
         adminCreateUser,
+        adminUpdateUser,
         adminUpdateUserRole,
 
         // Kwara Coverage expansion fields
@@ -2300,6 +3588,33 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         removeSavedAddress,
         reviews,
         addReview,
+
+        // Notifications System
+        notifications,
+        addNotification,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
+        clearAllNotifications,
+        deleteNotification,
+
+        // Wallet System Management
+        walletTransactions,
+        getUserWalletBalance,
+        updateUserWalletBalance,
+        walletFundingBankTransferEnabled,
+        walletFundingMonnifyEnabled,
+        walletFundingPaystackEnabled,
+        updateWalletFundingModes,
+        requestWalletFunding,
+        approveWalletFunding,
+        declineWalletFunding,
+
+        // Receipt Pickup & Delivery System
+        receiptPickupOrders,
+        createReceiptPickupOrder,
+        acceptReceiptPickupDelivery,
+        updateReceiptPickupStatus,
+        cancelReceiptPickupOrder,
       }}
     >
       {children}

@@ -243,6 +243,7 @@ app.post("/api/sync/save", async (req, res) => {
             gender: u.gender || null,
             createdAt: u.createdAt,
             pin: u.pin || null,
+            roles: u.roles || null,
           }).onConflictDoUpdate({
             target: users.id,
             set: {
@@ -252,6 +253,7 @@ app.post("/api/sync/save", async (req, res) => {
               role: u.role,
               gender: u.gender || null,
               pin: u.pin || null,
+              roles: u.roles || null,
             },
           });
         }
@@ -270,6 +272,7 @@ app.post("/api/sync/save", async (req, res) => {
           gender: payload.gender || null,
           createdAt: payload.createdAt || new Date().toISOString(),
           pin: payload.pin || null,
+          roles: payload.roles || null,
         }).onConflictDoUpdate({
           target: users.id,
           set: {
@@ -279,6 +282,7 @@ app.post("/api/sync/save", async (req, res) => {
             role: payload.role,
             gender: payload.gender || null,
             pin: payload.pin || null,
+            roles: payload.roles || null,
           },
         });
 
@@ -449,6 +453,7 @@ app.post("/api/sync/save", async (req, res) => {
             createdAt: p.createdAt,
             addons: p.addons,
             maxAddons: p.maxAddons,
+            addonGroups: p.addonGroups || null,
           }).onConflictDoUpdate({
             target: products.id,
             set: {
@@ -461,6 +466,7 @@ app.post("/api/sync/save", async (req, res) => {
               isAvailable: p.isAvailable,
               addons: p.addons,
               maxAddons: p.maxAddons,
+              addonGroups: p.addonGroups || null,
             },
           });
         }
@@ -479,6 +485,7 @@ app.post("/api/sync/save", async (req, res) => {
           createdAt: payload.createdAt || new Date().toISOString(),
           addons: payload.addons,
           maxAddons: payload.maxAddons,
+          addonGroups: payload.addonGroups || null,
         }).onConflictDoUpdate({
           target: products.id,
           set: {
@@ -491,6 +498,7 @@ app.post("/api/sync/save", async (req, res) => {
             isAvailable: payload.isAvailable,
             addons: payload.addons,
             maxAddons: payload.maxAddons,
+            addonGroups: payload.addonGroups || null,
           },
         });
         break;

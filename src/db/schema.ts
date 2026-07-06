@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   gender: text("gender"),
   createdAt: text("created_at").notNull(),
   pin: text("pin"),
+  roles: jsonb("roles"),
 });
 
 export const vendors = pgTable("vendors", {
@@ -49,6 +50,7 @@ export const products = pgTable("products", {
   createdAt: text("created_at").notNull(),
   addons: jsonb("addons"), // stores array of Addon objects
   maxAddons: integer("max_addons"),
+  addonGroups: jsonb("addon_groups"), // stores array of AddonGroup objects
 });
 
 export const orders = pgTable("orders", {

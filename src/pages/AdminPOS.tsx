@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Info,
   X,
-  FileText
+  FileText,
+  Check
 } from "lucide-react";
 
 interface PosCartItem {
@@ -66,6 +67,7 @@ export const AdminPOS: React.FC = () => {
   // Addon Modal State
   const [addonModalProduct, setAddonModalProduct] = useState<Product | null>(null);
   const [selectedAddons, setSelectedAddons] = useState<Addon[]>([]);
+  const [posAddonSelections, setPosAddonSelections] = useState<Record<string, any>>({});
 
   // Receipt Success Modal
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
@@ -102,21 +104,25 @@ export const AdminPOS: React.FC = () => {
 
   // Handle Add to Cart
   const handleProductClick = (product: Product) => {
-    if (product.addons && product.addons.length > 0) {
+    const hasAddons = (product.addons && product.addons.length > 0) || (product.addonGroups && product.addonGroups.length > 0);
+    if (hasAddons) {
       setAddonModalProduct(product);
       setSelectedAddons([]);
+      setPosAddonSelections({});
     } else {
       addToPosCart(product, []);
     }
   };
 
   const addToPosCart = (product: Product, addons: Addon[]) => {
-    const addonsKey = addons.map(a => a.id).sort().join(",");
-    
-    // Check if item with same product & addons is already in cart
+    // Check if item with same product & addons is already in cart (matching exact IDs and quantities)
     const existingIndex = cart.findIndex(item => {
-      const itemAddonsKey = item.selectedAddons.map(a => a.id).sort().join(",");
-      return item.product.id === product.id && itemAddonsKey === addonsKey;
+      if (item.product.id !== product.id) return false;
+      const itemAddons = item.selectedAddons || [];
+      if (itemAddons.length !== addons.length) return false;
+      const sSorted = [...addons].sort((a, b) => a.id.localeCompare(b.id));
+      const iSorted = [...itemAddons].sort((a, b) => a.id.localeCompare(b.id));
+      return sSorted.every((sa, i) => sa.id === iSorted[i].id && (sa.quantity || 1) === (iSorted[i].quantity || 1));
     });
 
     if (existingIndex > -1) {
@@ -130,12 +136,12 @@ export const AdminPOS: React.FC = () => {
         quantity: 1,
         selectedAddons: addons
       };
-      setCart([...cart], newItem);
       setCart(prev => [...prev, newItem]);
     }
     
     setAddonModalProduct(null);
     setSelectedAddons([]);
+    setPosAddonSelections({});
   };
 
   // Toggle addon selection in modal
@@ -174,7 +180,7 @@ export const AdminPOS: React.FC = () => {
     let vendorObj: Vendor | undefined = undefined;
 
     cart.forEach(item => {
-      const addonsPrice = item.selectedAddons.reduce((acc, a) => acc + a.price, 0);
+      const addonsPrice = item.selectedAddons.reduce((acc, a) => acc + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
       sub += (item.product.price + addonsPrice) * item.quantity;
       if (!vendorObj) {
         vendorObj = vendors.find(v => v.id === item.product.vendorId);
@@ -255,9 +261,9 @@ export const AdminPOS: React.FC = () => {
       deliveryFee,
       tax,
       items: cart.map(item => {
-        const addonsPrice = item.selectedAddons.reduce((acc, a) => acc + a.price, 0);
+        const addonsPrice = item.selectedAddons.reduce((acc, a) => acc + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
         const addonsLabel = item.selectedAddons.length > 0 
-          ? ` (${item.selectedAddons.map(a => a.name).join(", ")})` 
+          ? ` (${item.selectedAddons.map(a => `${a.name}${a.quantity && a.quantity > 1 ? ` (x${a.quantity})` : ""}`).join(", ")})` 
           : "";
         return {
           id: `oi-${Math.random().toString(36).substring(2, 9)}`,
@@ -402,7 +408,7 @@ export const AdminPOS: React.FC = () => {
                           <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 truncate max-w-[120px]">
                             {vendor?.name || "Merchant"}
                           </span>
-                          {p.addons && p.addons.length > 0 && (
+                          {((p.addons && p.addons.length > 0) || (p.addonGroups && p.addonGroups.length > 0)) && (
                             <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded" title="Includes customizable options">
                               Options+
                             </span>
@@ -413,7 +419,7 @@ export const AdminPOS: React.FC = () => {
                       </div>
                       
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50/50">
-                        <span className="font-mono font-black text-gray-950 text-xs">{currency}{p.price.toLocaleString()}</span>
+                        <span className="font-mono font-black text-gray-950 text-xs">{currency}{(p.price ?? 0).toLocaleString()}</span>
                         <span className="text-[10px] font-black text-purple-600 bg-purple-50 group-hover:bg-purple-600 group-hover:text-white px-2.5 py-1 rounded-lg border border-purple-100 transition flex items-center gap-1">
                           <Plus className="w-3 h-3" /> ADD
                         </span>
@@ -451,7 +457,7 @@ export const AdminPOS: React.FC = () => {
             ) : (
               <div className="space-y-3.5 max-h-[280px] overflow-y-auto pr-1">
                 {cart.map(item => {
-                  const addonsPrice = item.selectedAddons.reduce((acc, a) => acc + a.price, 0);
+                  const addonsPrice = item.selectedAddons.reduce((acc, a) => acc + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
                   const basePrice = item.product.price + addonsPrice;
                   const itemTotal = basePrice * item.quantity;
                   
@@ -461,7 +467,7 @@ export const AdminPOS: React.FC = () => {
                         <h5 className="font-bold text-xs text-gray-900 truncate">{item.product.name}</h5>
                         {item.selectedAddons.length > 0 && (
                           <p className="text-[9px] text-gray-500 font-sans italic truncate">
-                            + {item.selectedAddons.map(a => `${a.name} (${currency}${a.price})`).join(", ")}
+                            + {item.selectedAddons.map(a => `${a.name}${a.quantity && a.quantity > 1 ? ` (x${a.quantity})` : ""} (${currency}${((a.price ?? 0) * (a.quantity ?? 1))}`).join(", ")}
                           </p>
                         )}
                         <span className="font-mono text-[10px] text-gray-400 font-semibold block">
@@ -734,84 +740,249 @@ export const AdminPOS: React.FC = () => {
       </div>
 
       {/* MODAL 1: ADDON CUSTOMIZATION */}
-      {addonModalProduct && (
-        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-xl border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded">ADDON SELECTION</span>
-                <h3 className="font-bold text-lg text-gray-950 mt-1.5">{addonModalProduct.name}</h3>
-                <span className="text-xs text-gray-400 font-mono">Base Price: {currency}{addonModalProduct.price.toLocaleString()}</span>
-              </div>
-              <button 
-                onClick={() => setAddonModalProduct(null)}
-                className="p-1 text-gray-400 hover:text-gray-700 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {addonModalProduct && (() => {
+        const addonGroups = addonModalProduct.addonGroups && addonModalProduct.addonGroups.length > 0
+          ? addonModalProduct.addonGroups
+          : addonModalProduct.addons && addonModalProduct.addons.length > 0
+            ? [{
+                id: "legacy-group",
+                name: "Available Addons",
+                isRequired: false,
+                maxSelections: addonModalProduct.maxAddons,
+                addons: addonModalProduct.addons
+              }]
+            : [];
 
-            <div className="space-y-3.5">
-              <span className="text-xs font-bold text-gray-600 block">
-                Select Customizable Extras (Optional)
-                {addonModalProduct.maxAddons !== undefined && addonModalProduct.maxAddons > 0 && (
-                  <span className="text-amber-600 font-extrabold block mt-1">
-                    ⚠️ Limit: Choose up to {addonModalProduct.maxAddons} {addonModalProduct.maxAddons === 1 ? "addon" : "addons"} ({selectedAddons.length} selected)
-                  </span>
-                )}
-              </span>
-              
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {addonModalProduct.addons?.map(addon => {
-                  const isSelected = !!selectedAddons.find(a => a.id === addon.id);
-                  const limitReached = addonModalProduct.maxAddons !== undefined && addonModalProduct.maxAddons > 0 && selectedAddons.length >= addonModalProduct.maxAddons;
-                  const isDisabled = !isSelected && limitReached;
+        const getGroupSelectionCount = (groupId: string) => {
+          return (Object.values(posAddonSelections) as any[])
+            .filter(sel => sel.groupId === groupId)
+            .reduce((sum, sel) => sum + sel.quantity, 0);
+        };
+
+        const isGroupValid = (group: any) => {
+          const count = getGroupSelectionCount(group.id);
+          if (group.isRequired) {
+            const min = group.minSelections ?? 1;
+            if (count < min) return false;
+          }
+          if (group.maxSelections !== undefined && group.maxSelections > 0) {
+            if (count > group.maxSelections) return false;
+          }
+          return true;
+        };
+
+        const isAllSelectionsValid = addonGroups.every(isGroupValid);
+
+        const currentAddonsList = (Object.values(posAddonSelections) as any[]).map(sel => ({
+          ...sel.addon,
+          quantity: sel.quantity,
+          groupId: sel.groupId
+        }));
+
+        const totalCustomPrice = (addonModalProduct.price ?? 0) + currentAddonsList.reduce((sum, a) => sum + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-xl border border-gray-150 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col overflow-hidden">
+              <div className="flex items-start justify-between gap-4 shrink-0">
+                <div>
+                  <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded">ADDON SELECTION</span>
+                  <h3 className="font-bold text-lg text-gray-950 mt-1.5">{addonModalProduct.name}</h3>
+                  <span className="text-xs text-gray-400 font-mono">Base Price: {currency}{(addonModalProduct.price ?? 0).toLocaleString()}</span>
+                </div>
+                <button 
+                  onClick={() => setAddonModalProduct(null)}
+                  className="p-1 text-gray-400 hover:text-gray-700 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6 overflow-y-auto flex-grow pr-1 py-1">
+                {addonGroups.map((group: any) => {
+                  const groupTotalSelected = getGroupSelectionCount(group.id);
+                  const isSingleSelect = group.maxSelections === 1;
 
                   return (
-                    <div 
-                      key={addon.id}
-                      onClick={() => !isDisabled && handleToggleAddon(addon)}
-                      className={`p-3 rounded-xl border flex items-center justify-between transition ${
-                        isSelected 
-                          ? "bg-purple-50 border-purple-300 text-purple-950 font-bold cursor-pointer" 
-                          : isDisabled
-                            ? "bg-gray-50 border-gray-100 text-gray-400 opacity-40 cursor-not-allowed"
-                            : "bg-gray-50 border-gray-100 text-gray-700 hover:bg-gray-100 cursor-pointer"
-                      }`}
-                    >
-                      <span className="text-xs font-semibold">{addon.name}</span>
-                      <span className="font-mono text-xs">{currency}{addon.price.toLocaleString()}</span>
+                    <div key={group.id} className="space-y-3">
+                      <div className="pb-1 border-b border-gray-100 flex justify-between items-center">
+                        <div>
+                          <h4 className="font-bold text-xs text-gray-900 uppercase">{group.name}</h4>
+                          <span className="text-[10px] text-gray-400 block mt-0.5">
+                            {group.isRequired ? (
+                              <b className="text-amber-600">Required (Choose {group.minSelections ?? 1})</b>
+                            ) : (
+                              <span>Optional {group.maxSelections ? `(Choose up to ${group.maxSelections})` : ""}</span>
+                            )}
+                          </span>
+                        </div>
+                        {isGroupValid(group) ? (
+                          <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-150 px-2 py-0.5 rounded font-extrabold uppercase">Satisfied</span>
+                        ) : (
+                          <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-150 px-2 py-0.5 rounded font-extrabold uppercase animate-pulse">Required</span>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        {group.addons.map((addon: any) => {
+                          const selection = posAddonSelections[addon.id];
+                          const quantity = selection ? selection.quantity : 0;
+                          const isSelected = quantity > 0;
+
+                          const maxGroupSelections = group.maxSelections;
+                          const groupLimitReached = maxGroupSelections !== undefined && maxGroupSelections > 0 && groupTotalSelected >= maxGroupSelections;
+                          const isAddonDisabled = !isSelected && groupLimitReached && !isSingleSelect;
+
+                          const handleIncrement = (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            if (maxGroupSelections !== undefined && maxGroupSelections > 0 && groupTotalSelected >= maxGroupSelections) {
+                              return;
+                            }
+                            const maxPerAddon = group.maxQuantityPerAddon || 99;
+                            if (quantity >= maxPerAddon) return;
+
+                            setPosAddonSelections({
+                              ...posAddonSelections,
+                              [addon.id]: { addon, quantity: quantity + 1, groupId: group.id }
+                            });
+                          };
+
+                          const handleDecrement = (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            if (quantity <= 1) {
+                              const updated = { ...posAddonSelections };
+                              delete updated[addon.id];
+                              setPosAddonSelections(updated);
+                            } else {
+                              setPosAddonSelections({
+                                ...posAddonSelections,
+                                [addon.id]: { addon, quantity: quantity - 1, groupId: group.id }
+                              });
+                            }
+                          };
+
+                          const handleToggle = () => {
+                            if (isSingleSelect) {
+                              const updated = { ...posAddonSelections };
+                              Object.keys(updated).forEach(id => {
+                                if (updated[id].groupId === group.id) {
+                                  delete updated[id];
+                                }
+                              });
+                              updated[addon.id] = { addon, quantity: 1, groupId: group.id };
+                              setPosAddonSelections(updated);
+                            } else {
+                              if (isSelected) {
+                                const updated = { ...posAddonSelections };
+                                delete updated[addon.id];
+                                setPosAddonSelections(updated);
+                              } else {
+                                if (isAddonDisabled) return;
+                                setPosAddonSelections({
+                                  ...posAddonSelections,
+                                  [addon.id]: { addon, quantity: 1, groupId: group.id }
+                                });
+                              }
+                            }
+                          };
+
+                          return (
+                            <div
+                              key={addon.id}
+                              onClick={handleToggle}
+                              className={`p-3 rounded-xl border flex items-center justify-between transition text-left select-none ${
+                                isSelected
+                                  ? "bg-purple-50/55 border-purple-300 text-purple-950 font-bold cursor-pointer"
+                                  : isAddonDisabled
+                                    ? "bg-gray-50 border-gray-100 text-gray-400 opacity-40 cursor-not-allowed"
+                                    : "bg-gray-50 border-gray-100 text-gray-700 hover:bg-gray-100 cursor-pointer"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-4 h-4 rounded flex items-center justify-center border transition ${
+                                  isSingleSelect ? "rounded-full" : "rounded"
+                                } ${
+                                  isSelected ? "bg-purple-600 border-purple-600" : "border-gray-300"
+                                }`}>
+                                  {isSelected && (
+                                    isSingleSelect
+                                      ? <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                                      : <Check className="w-3 h-3 text-white stroke-[3px]" />
+                                  )}
+                                </div>
+                                <div>
+                                  <span className="text-xs font-semibold block">{addon.name}</span>
+                                  {addon.price > 0 && (
+                                    <span className="text-[10px] text-gray-400 font-mono">+{currency}{(addon.price ?? 0).toLocaleString()}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center">
+                                {group.allowMultipleQuantity && isSelected && (
+                                  <div className="flex items-center gap-1.5 bg-white border border-gray-200 shadow-xs rounded-lg px-1 py-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={handleDecrement}
+                                      className="w-5 h-5 rounded bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="w-4 text-center text-xs font-black font-mono">{quantity}</span>
+                                    <button
+                                      type="button"
+                                      onClick={handleIncrement}
+                                      className="w-5 h-5 rounded bg-gray-50 hover:bg-gray-100 flex items-center justify-center text-gray-600"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-              <div className="text-left">
-                <span className="text-[10px] text-gray-400 block font-semibold">Total Price:</span>
-                <span className="font-mono text-base font-black text-gray-950">
-                  {currency}{(addonModalProduct.price + selectedAddons.reduce((acc, a) => acc + a.price, 0)).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setAddonModalProduct(null)}
-                  className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-700 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => addToPosCart(addonModalProduct, selectedAddons)}
-                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-xl text-xs font-bold text-white shadow-sm transition"
-                >
-                  Confirm & Add
-                </button>
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100 shrink-0 font-sans">
+                <div className="text-left">
+                  <span className="text-[10px] text-gray-400 block font-semibold">Total Price:</span>
+                  <span className="font-mono text-base font-black text-gray-950">
+                    {currency}{totalCustomPrice.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAddonModalProduct(null)}
+                    className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-gray-700 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!isAllSelectionsValid}
+                    onClick={() => {
+                      if (isAllSelectionsValid) {
+                        addToPosCart(addonModalProduct, currentAddonsList);
+                      }
+                    }}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-sm transition ${
+                      isAllSelectionsValid
+                        ? "bg-purple-600 hover:bg-purple-700 cursor-pointer"
+                        : "bg-gray-300 cursor-not-allowed opacity-60"
+                    }`}
+                  >
+                    Confirm & Add
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL 2: SUCCESS RECEIPT MODAL */}
       {showReceiptModal && completedOrder && (
@@ -872,7 +1043,7 @@ export const AdminPOS: React.FC = () => {
                   <div key={idx} className="grid grid-cols-12 text-[10px]">
                     <span className="col-span-6 text-gray-800 font-semibold truncate" title={oi.name}>{oi.name}</span>
                     <span className="col-span-2 text-center text-gray-500">{oi.quantity}</span>
-                    <span className="col-span-4 text-right font-black text-gray-800">{currency}{(oi.price * oi.quantity).toLocaleString()}</span>
+                    <span className="col-span-4 text-right font-black text-gray-800">{currency}{((oi.price ?? 0) * oi.quantity).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -882,18 +1053,18 @@ export const AdminPOS: React.FC = () => {
                 {completedOrder.tax !== undefined && completedOrder.tax !== null && completedOrder.tax > 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-400 text-left">EST. VAT:</span>
-                    <span className="font-bold">{currency}{completedOrder.tax.toLocaleString()}</span>
+                    <span className="font-bold">{currency}{(completedOrder.tax ?? 0).toLocaleString()}</span>
                   </div>
                 )}
                 {completedOrder.serviceFee !== undefined && completedOrder.serviceFee !== null && (
                   <div className="flex justify-between">
                     <span className="text-gray-400 text-left">SERVICE FEE:</span>
-                    <span className="font-bold">{currency}{completedOrder.serviceFee.toLocaleString()}</span>
+                    <span className="font-bold">{currency}{(completedOrder.serviceFee ?? 0).toLocaleString()}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-gray-200 pt-1.5 mt-1.5">
                   <span className="font-bold text-gray-950 text-left">AMOUNT PAID:</span>
-                  <span className="font-black text-xs text-[#070329]">{currency}{completedOrder.totalAmount.toLocaleString()}</span>
+                  <span className="font-black text-xs text-[#070329]">{currency}{(completedOrder.totalAmount ?? 0).toLocaleString()}</span>
                 </div>
               </div>
 

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { UserRole } from "../types";
-import { Smartphone, UserPlus, LogIn } from "lucide-react";
+import { Smartphone, UserPlus, LogIn, ShieldAlert, MapPin, Activity, CheckCircle, Shield } from "lucide-react";
 
 interface SegmentedPinInputProps {
   value: string;
@@ -97,7 +97,7 @@ const SegmentedPinInput: React.FC<SegmentedPinInputProps> = ({ value, onChange, 
 };
 
 export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode = false }) => {
-  const { login, register, users } = useDatabase();
+  const { login, register, users, resetUserPin } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -119,6 +119,16 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const [loginPin, setLoginPin] = useState("");
   const [storedUserPin, setStoredUserPin] = useState("");
   
+  // Forgot PIN state
+  const [forgotPinStep, setForgotPinStep] = useState<"request" | "verify" | "new_pin" | null>(null);
+  const [forgotEmailOrPhone, setForgotEmailOrPhone] = useState("");
+  const [generatedResetCode, setGeneratedResetCode] = useState("");
+  const [resetCodeInput, setResetCodeInput] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmNewPin, setConfirmNewPin] = useState("");
+  const [showForgotPinLink, setShowForgotPinLink] = useState(false);
+  const [foundUserForReset, setFoundUserForReset] = useState<any>(null);
+  
   // Extra fields for vendor and riders
   const [businessName, setBusinessName] = useState("");
   const [cuisine, setCuisine] = useState("Italian");
@@ -137,6 +147,14 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
     setLoginPinStep(false);
     setLoginPin("");
     setStoredUserPin("");
+    setForgotPinStep(null);
+    setForgotEmailOrPhone("");
+    setGeneratedResetCode("");
+    setResetCodeInput("");
+    setNewPin("");
+    setConfirmNewPin("");
+    setShowForgotPinLink(false);
+    setFoundUserForReset(null);
     setError("");
     setSuccess("");
   }, [isRegisterMode]);
@@ -161,8 +179,122 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
     }
   };
 
+  const handleForgotPinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (forgotPinStep === "request") {
+      const identifier = forgotEmailOrPhone.trim().toLowerCase();
+      if (!identifier) {
+        setError("Please enter your registered email or phone number.");
+        return;
+      }
+
+      const foundUser = users.find(u => 
+        u.email.toLowerCase() === identifier || 
+        u.phone.replace(/[\s\-\+\(\)]/g, "") === identifier.replace(/[\s\-\+\(\)]/g, "")
+      );
+
+      if (!foundUser) {
+        setError("No account found with this email or phone number.");
+        return;
+      }
+
+      const code = Math.floor(1000 + Math.random() * 9000).toString();
+      setGeneratedResetCode(code);
+      setFoundUserForReset(foundUser);
+      setForgotPinStep("verify");
+      setSuccess("Sending 4-digit verification code to your email and phone...");
+
+      try {
+        const response = await fetch("/api/email/send-pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toEmail: foundUser.email,
+            name: foundUser.name,
+            pin: code
+          })
+        });
+        const resJson = await response.json();
+        if (resJson.success) {
+          setSuccess(`A 4-digit verification code has been sent to your email (${foundUser.email}) and phone!`);
+        } else {
+          setSuccess("");
+          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Please enter the verification code to proceed.`);
+        }
+      } catch (err: any) {
+        setSuccess("");
+        setError("Network error while sending verification PIN: " + (err.message || String(err)));
+      }
+    } else if (forgotPinStep === "verify") {
+      if (resetCodeInput.length < 4) {
+        setError("Please enter the complete 4-digit verification code.");
+        return;
+      }
+
+      if (resetCodeInput !== generatedResetCode) {
+        setError("Incorrect verification code. Please check and try again.");
+        return;
+      }
+
+      setForgotPinStep("new_pin");
+      setSuccess("Verification successful! Please define your new 4-digit security PIN.");
+    } else if (forgotPinStep === "new_pin") {
+      if (newPin.length < 4) {
+        setError("Please enter a complete 4-digit security PIN.");
+        return;
+      }
+
+      if (confirmNewPin.length < 4) {
+        setError("Please confirm your new 4-digit security PIN.");
+        return;
+      }
+
+      if (newPin !== confirmNewPin) {
+        setError("PIN mismatch! Both entered PIN codes must be identical.");
+        return;
+      }
+
+      if (!foundUserForReset) {
+        setError("Session expired. Please try again.");
+        setForgotPinStep("request");
+        return;
+      }
+
+      resetUserPin(foundUserForReset.id, newPin);
+
+      setSuccess("Your security PIN has been successfully reset! Redirecting to login...");
+      
+      setTimeout(() => {
+        setEmail(foundUserForReset.email);
+        setStoredUserPin(newPin);
+        setLoginPin("");
+        setForgotPinStep(null);
+        setLoginPinStep(true);
+        setShowForgotPinLink(false);
+        setSuccess("Success! Access granted...");
+        login(foundUserForReset.email, selectedRole);
+        const defaultRedirects: Record<UserRole, string> = {
+          customer: "/",
+          vendor: "/vendor/dashboard",
+          rider: "/rider/dashboard",
+          admin: "/admin/dashboard",
+          employee: "/admin/dashboard",
+          super_admin: "/admin/dashboard",
+        };
+        navigate(defaultRedirects[selectedRole] || "/");
+      }, 1500);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (forgotPinStep) {
+      handleForgotPinSubmit(e);
+      return;
+    }
     setError("");
     setSuccess("");
 
@@ -252,6 +384,11 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         const res = register(fullName, cleansedEmail, phone, selectedRole, gender, extraPayload);
         if (res.success) {
           setSuccess("Success! Your account is created & verified. Redirecting...");
+          // Mark this initial device as trusted automatically!
+          const registeredUser = users.find(u => u.email.toLowerCase() === cleansedEmail);
+          if (registeredUser) {
+            localStorage.setItem(`trusted_device_${registeredUser.id}`, "true");
+          }
           setTimeout(() => {
             const defaultRedirects: Record<UserRole, string> = {
               customer: "/",
@@ -259,6 +396,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
               rider: "/rider/dashboard",
               admin: "/admin/dashboard",
               employee: "/admin/dashboard",
+              super_admin: "/admin/dashboard",
             };
             navigate(defaultRedirects[selectedRole] || "/");
           }, 1000);
@@ -286,10 +424,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           return;
         }
 
-        if (foundUser.role !== selectedRole) {
-          setError(`This account is registered as a ${foundUser.role}, not a ${selectedRole}.`);
-          return;
-        }
+        const autoRole = foundUser.role || (foundUser.roles && foundUser.roles[0]) || "customer";
+        setSelectedRole(autoRole);
 
         // Proceed to login PIN entry step
         // Default PIN to "1234" for mock users without pin setup
@@ -306,6 +442,18 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         if (loginPin !== storedUserPin) {
           setError("Incorrect 4-digit security PIN. Please try again.");
+          setShowForgotPinLink(true);
+          return;
+        }
+
+        const foundUser = users.find(u => 
+          u.email.toLowerCase() === identifier || 
+          u.phone.replace(/[\s\-\+\(\)]/g, "") === identifier.replace(/[\s\-\+\(\)]/g, "")
+        );
+
+        if (!foundUser) {
+          setError("Session expired. Please start over.");
+          setLoginPinStep(false);
           return;
         }
 
@@ -319,6 +467,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
               rider: "/rider/dashboard",
               admin: "/admin/dashboard",
               employee: "/admin/dashboard",
+              super_admin: "/admin/dashboard",
             };
             navigate(defaultRedirects[selectedRole] || "/");
           }, 600);
@@ -354,7 +503,9 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md bg-white py-8 px-6 sm:px-10 rounded-2xl shadow-xl border border-gray-100">
         <h2 className="text-xl font-bold text-[#070329] tracking-tight mb-6 text-center">
-          {isRegisterMode 
+          {forgotPinStep
+            ? (forgotPinStep === "request" ? "Reset Security PIN" : forgotPinStep === "verify" ? "Verify Reset Code" : "Create New PIN")
+            : isRegisterMode 
             ? (registerStep === 3 ? "Verify Your Account" : registerStep === 2 ? "Create Security PIN" : "Create Your Owode Food Account") 
             : (loginPinStep ? "Enter Your PIN" : "Sign In to Owode Food")}
         </h2>
@@ -373,34 +524,110 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             </div>
           )}
 
-          {/* REGISTRATION FLOW */}
-          {isRegisterMode ? (
+          {/* FORGOT PIN FLOW */}
+          {forgotPinStep ? (
+            forgotPinStep === "request" ? (
+              <div className="space-y-4 animate-fade-in">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">
+                    Enter Your Account Phone or Email
+                  </label>
+                  <input
+                    type="text"
+                    value={forgotEmailOrPhone}
+                    onChange={(e) => setForgotEmailOrPhone(e.target.value)}
+                    placeholder="e.g. you@example.com or +234 803 123 4567"
+                    className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none"
+                    required
+                  />
+                </div>
+                <div className="flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => setForgotPinStep(null)}
+                    className="text-xs text-blue-600 font-semibold hover:underline"
+                  >
+                    ← Back to Sign In
+                  </button>
+                </div>
+              </div>
+            ) : forgotPinStep === "verify" ? (
+              <div className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-4">
+                    Please enter the 4-digit verification code sent to your email and phone (<span className="font-semibold text-gray-700">{foundUserForReset?.email}</span>).
+                  </p>
+                </div>
+
+                <SegmentedPinInput
+                  value={resetCodeInput}
+                  onChange={(val) => setResetCodeInput(val)}
+                  length={4}
+                />
+
+                <div className="flex justify-between items-center px-1 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setForgotPinStep("request")}
+                    className="text-xs text-blue-600 font-semibold hover:underline"
+                  >
+                    ← Back to request code
+                  </button>
+
+                  <span className="text-[10px] text-gray-400">
+                    For testing: Code is <span className="font-bold font-mono text-gray-600">{generatedResetCode}</span>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-2">
+                    Set a brand new 4-digit security PIN for your account.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 leading-none text-center">
+                    Enter New PIN
+                  </label>
+                  <SegmentedPinInput
+                    value={newPin}
+                    onChange={(val) => setNewPin(val)}
+                    length={4}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 leading-none text-center">
+                    Confirm New PIN
+                  </label>
+                  <SegmentedPinInput
+                    value={confirmNewPin}
+                    onChange={(val) => setConfirmNewPin(val)}
+                    length={4}
+                  />
+                </div>
+
+                <div className="flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotPinStep("verify");
+                      setError("");
+                      setSuccess("");
+                    }}
+                    className="text-xs text-blue-600 font-semibold hover:underline"
+                  >
+                    ← Back to verification
+                  </button>
+                </div>
+              </div>
+            )
+          ) : isRegisterMode ? (
             registerStep === 1 ? (
               // Registration Details (Step 1)
               <>
-                {/* Select Profile Role */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Choose Access Role
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(["customer", "vendor", "rider", "admin"] as UserRole[]).map((role) => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => handleRoleChange(role)}
-                        className={`py-2 px-1 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
-                          selectedRole === role
-                            ? "bg-[#070329] border-[#070329] text-white shadow-sm"
-                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                        }`}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">First Name</label>
@@ -620,29 +847,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             !loginPinStep ? (
               // Enter Identifier (Step 1)
               <>
-                {/* Select Profile Role */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Choose Access Role
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(["customer", "vendor", "rider", "admin"] as UserRole[]).map((role) => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => handleRoleChange(role)}
-                        className={`py-2 px-1 text-center font-bold text-xs capitalize rounded-xl border transition cursor-pointer ${
-                          selectedRole === role
-                            ? "bg-[#070329] border-[#070329] text-white shadow-sm"
-                            : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                        }`}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 leading-none">
                     Phone Number or Email Address
@@ -675,16 +879,37 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                 <div className="flex justify-between items-center px-1 mt-2">
                   <button
                     type="button"
-                    onClick={() => setLoginPinStep(false)}
-                    className="text-xs text-blue-600 font-semibold hover:underline"
+                    onClick={() => {
+                      setLoginPinStep(false);
+                      setShowForgotPinLink(false);
+                    }}
+                    className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer"
                   >
                     ← Change Email/Phone
                   </button>
 
-                  <span className="text-[10px] text-gray-400">
-                    Default PIN for mock users is <span className="font-bold font-mono text-gray-600">1234</span>
-                  </span>
+                  <span className="text-[10px] text-gray-400"></span>
                 </div>
+
+                {showForgotPinLink && (
+                  <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl text-center space-y-1.5 animate-fade-in mt-2">
+                    <p className="text-xs text-red-800 font-medium">
+                      Did you forget your login PIN?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotEmailOrPhone(email);
+                        setForgotPinStep("request");
+                        setError("");
+                        setSuccess("");
+                      }}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                    >
+                      Retrieve / Reset PIN Code →
+                    </button>
+                  </div>
+                )}
               </div>
             )
           )}
@@ -694,7 +919,24 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             type="submit"
             className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#070329] hover:bg-[#0d074e] text-white text-sm font-bold rounded-xl transition duration-200 shadow-lg cursor-pointer mt-4"
           >
-            {isRegisterMode ? (
+            {forgotPinStep ? (
+              forgotPinStep === "request" ? (
+                <>
+                  <Smartphone className="w-4 h-4" />
+                  Request Reset Code
+                </>
+              ) : forgotPinStep === "verify" ? (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  Verify Reset Code
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  Reset & Save PIN
+                </>
+              )
+            ) : isRegisterMode ? (
               registerStep === 1 ? (
                 <>
                   <UserPlus className="w-4 h-4" />
@@ -711,18 +953,16 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                   Verify PIN & Create Account
                 </>
               )
+            ) : !loginPinStep ? (
+              <>
+                <Smartphone className="w-4 h-4" />
+                Continue to Enter PIN
+              </>
             ) : (
-              !loginPinStep ? (
-                <>
-                  <Smartphone className="w-4 h-4" />
-                  Continue to Enter PIN
-                </>
-              ) : (
-                <>
-                  <LogIn className="w-4 h-4" />
-                  Verify PIN & Sign In
-                </>
-              )
+              <>
+                <LogIn className="w-4 h-4" />
+                Verify PIN & Sign In
+              </>
             )}
           </button>
         </form>

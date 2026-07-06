@@ -1,10 +1,24 @@
 import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
-import { Bike, Compass, Briefcase, History, User, LogOut, Shield, Power, Menu, X, ChevronRight } from "lucide-react";
+import { 
+  Bike, 
+  Compass, 
+  Briefcase, 
+  History, 
+  User, 
+  LogOut, 
+  Shield, 
+  Power, 
+  Menu, 
+  X, 
+  ChevronRight,
+  ChevronDown
+} from "lucide-react";
+import { UserRole } from "../types";
 
 export const RiderLayout: React.FC = () => {
-  const { currentRider, logout, updateRiderProfile } = useDatabase();
+  const { currentUser, switchRole, currentRider, logout, updateRiderProfile } = useDatabase();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -13,6 +27,8 @@ export const RiderLayout: React.FC = () => {
     logout();
     navigate("/login");
   };
+
+  const myApprovedRoles = currentUser?.roles || (currentUser ? [currentUser.role] : []);
 
   const toggleAvailability = () => {
     if (!currentRider) return;
@@ -171,6 +187,35 @@ export const RiderLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            {myApprovedRoles.length > 1 && (
+              <div className="relative shrink-0 mr-1">
+                <select
+                  value={currentUser?.role || "rider"}
+                  onChange={(e) => {
+                    const selectedRole = e.target.value as UserRole;
+                    switchRole(selectedRole);
+                    if (selectedRole === "customer") {
+                      navigate("/");
+                    } else if (selectedRole === "vendor") {
+                      navigate("/vendor/dashboard");
+                    } else if (selectedRole === "rider") {
+                      navigate("/rider/dashboard");
+                    } else {
+                      navigate("/admin/dashboard");
+                    }
+                  }}
+                  className="text-[10px] sm:text-xs font-bold font-mono text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-xl pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-4 focus:ring-yellow-100 cursor-pointer appearance-none"
+                >
+                  {myApprovedRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role === "customer" ? "Consumer" : role === "vendor" ? "Merchant" : role === "rider" ? "Rider" : role === "employee" ? "Staff" : "Admin"}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-yellow-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            )}
+
             <span className="text-[10px] sm:text-xs text-sky-700 bg-sky-50 px-2.5 py-1 rounded-md border border-sky-100 font-semibold uppercase font-mono">
               GPS Active
             </span>

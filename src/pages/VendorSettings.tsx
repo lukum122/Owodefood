@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
-import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign } from "lucide-react";
+import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign, Lock } from "lucide-react";
 import { VendorCategory } from "../types";
 
 export const VendorSettings: React.FC = () => {
-  const { currentVendor, updateVendorProfile, vendorCategories, currency, availableLocations = [] } = useDatabase();
+  const { currentUser, resetUserPin, currentVendor, updateVendorProfile, vendorCategories, currency, availableLocations = [] } = useDatabase();
 
   const [name, setName] = useState(currentVendor?.name || "");
   const [description, setDescription] = useState(currentVendor?.description || "");
@@ -44,6 +44,13 @@ export const VendorSettings: React.FC = () => {
 
   const [errorStr, setErrorStr] = useState("");
   const [successStr, setSuccessStr] = useState("");
+
+  // Security & PIN changing state
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmNewPin, setConfirmNewPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinSuccess, setPinSuccess] = useState("");
 
   const vendorFileRef = useRef<HTMLInputElement>(null);
   const coverFileRef = useRef<HTMLInputElement>(null);
@@ -143,6 +150,49 @@ export const VendorSettings: React.FC = () => {
       }, 3500);
     } catch (err: any) {
       setErrorStr("Failed to save changes.");
+    }
+  };
+
+  const handlePinChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError("");
+    setPinSuccess("");
+
+    if (!currentPin || !newPin || !confirmNewPin) {
+      setPinError("Please fill in all security PIN fields.");
+      return;
+    }
+
+    if (currentPin !== currentUser?.pin) {
+      setPinError("The current security PIN you entered is incorrect.");
+      return;
+    }
+
+    if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
+      setPinError("The new security PIN must be exactly 4 digits.");
+      return;
+    }
+
+    if (newPin !== confirmNewPin) {
+      setPinError("The new security PIN and confirmation PIN do not match.");
+      return;
+    }
+
+    if (newPin === currentPin) {
+      setPinError("The new PIN cannot be the same as your current PIN.");
+      return;
+    }
+
+    try {
+      if (currentUser) {
+        resetUserPin(currentUser.id, newPin);
+        setPinSuccess("Your login security PIN has been updated successfully!");
+        setCurrentPin("");
+        setNewPin("");
+        setConfirmNewPin("");
+      }
+    } catch (err: any) {
+      setPinError("Failed to update security PIN.");
     }
   };
 
@@ -515,6 +565,81 @@ export const VendorSettings: React.FC = () => {
         </form>
 
       </div>
+
+      {/* SECURITY / PASSWORD (PIN) CHANGE CARD */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-left">
+        <div className="flex items-center gap-2.5 pb-4 border-b border-gray-50">
+          <div className="w-9 h-9 bg-purple-50 text-purple-700 rounded-xl flex items-center justify-center">
+            <Lock className="w-4.5 h-4.5 text-purple-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-black text-[#070329] leading-tight">Security & Login Credentials</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Change your 4-digit security PIN used to log into your Owode Food account.</p>
+          </div>
+        </div>
+
+        {pinSuccess && (
+          <div className="p-3 bg-green-50 text-green-700 border border-green-100 rounded-xl text-xs font-semibold animate-fade-in">
+            {pinSuccess}
+          </div>
+        )}
+        {pinError && (
+          <div className="p-3 bg-red-50 text-red-700 border border-red-100 rounded-xl text-xs font-semibold animate-fade-in">
+            {pinError}
+          </div>
+        )}
+
+        <form onSubmit={handlePinChange} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">Current Security PIN</label>
+              <input
+                type="password"
+                maxLength={4}
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+                placeholder="••••"
+                className="w-full text-xs p-3.5 border border-gray-150 rounded-xl outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 font-mono tracking-widest text-center"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">New 4-Digit PIN</label>
+              <input
+                type="password"
+                maxLength={4}
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                placeholder="••••"
+                className="w-full text-xs p-3.5 border border-gray-150 rounded-xl outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 font-mono tracking-widest text-center"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">Confirm New PIN</label>
+              <input
+                type="password"
+                maxLength={4}
+                value={confirmNewPin}
+                onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ""))}
+                placeholder="••••"
+                className="w-full text-xs p-3.5 border border-gray-150 rounded-xl outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 font-mono tracking-widest text-center"
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              className="py-2.5 px-5 bg-purple-700 hover:bg-opacity-95 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <Save className="w-4 h-4 text-purple-200" />
+              Update Security PIN
+            </button>
+          </div>
+        </form>
+      </div>
+
     </div>
   );
 };

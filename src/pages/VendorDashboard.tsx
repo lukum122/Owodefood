@@ -33,7 +33,7 @@ export const VendorDashboard: React.FC = () => {
 
   const earnings = vendorOrders
     .filter(o => o.status === "delivered")
-    .reduce((sum, o) => sum + o.totalAmount, 0);
+    .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
 
   const pendingCount = vendorOrders.filter(o => o.status === "pending").length;
   
@@ -159,7 +159,7 @@ export const VendorDashboard: React.FC = () => {
                       <span className="text-[10px] text-gray-400">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <span className="block text-[11px] text-gray-500 font-medium">To: {order.customerName} : {order.deliveryAddress}</span>
-                    <span className="text-[10px] text-blue-600 font-bold block">{order.items.length} items : ₦{order.totalAmount.toLocaleString()}</span>
+                    <span className="text-[10px] text-blue-600 font-bold block">{order.items.length} items : ₦{(order.totalAmount ?? 0).toLocaleString()}</span>
                   </div>
 
                   <span className={`py-1 px-2 rounded-lg font-bold text-[10px] capitalize ${
@@ -209,7 +209,7 @@ export const VendorDashboard: React.FC = () => {
                   </div>
                   <div className="min-w-0">
                     <span className="font-bold text-xs text-gray-900 block truncate">{p.name}</span>
-                    <span className="text-[10px] text-gray-400 block font-mono">₦{p.price.toLocaleString()}</span>
+                    <span className="text-[10px] text-gray-400 block font-mono">₦{(p.price ?? 0).toLocaleString()}</span>
                   </div>
                 </div>
 

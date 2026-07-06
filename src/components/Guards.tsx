@@ -37,6 +37,7 @@ export const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ child
       rider: "/rider/dashboard",
       admin: "/admin/dashboard",
       employee: "/admin/dashboard",
+      super_admin: "/admin/dashboard",
     };
     return <Navigate to={defaultRedirects[currentUser.role] || "/"} replace />;
   }
@@ -54,6 +55,7 @@ const AccessDeniedScreen: React.FC<{ currentRole: string; requiredRoles: string[
     rider: "/rider/dashboard",
     admin: "/admin/dashboard",
     employee: "/admin/dashboard",
+    super_admin: "/admin/dashboard",
   };
 
   const portalNames: Record<string, string> = {
@@ -62,6 +64,7 @@ const AccessDeniedScreen: React.FC<{ currentRole: string; requiredRoles: string[
     rider: "Rider Delivery Portal",
     admin: "Admin Control Center",
     employee: "Employee Portal",
+    super_admin: "Super Admin Control Center",
   };
 
   const homeUrl = portalHomeMap[currentRole] || "/";

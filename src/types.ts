@@ -1,4 +1,4 @@
-export type UserRole = "customer" | "vendor" | "rider" | "admin" | "employee";
+export type UserRole = "customer" | "vendor" | "rider" | "admin" | "employee" | "super_admin";
 
 export interface Employee {
   id: string;
@@ -20,9 +20,11 @@ export interface User {
   gender?: string;
   createdAt: string;
   pin?: string;
+  profileImage?: string;
+  roles?: UserRole[];
 }
 
-export type VendorStatus = "pending" | "approved" | "suspended";
+export type VendorStatus = "pending" | "approved" | "suspended" | "rejected";
 export type VendorCategory = string;
 
 export interface VendorCategoryInfo {
@@ -56,12 +58,29 @@ export interface Vendor {
   commissionType?: "flat" | "percentage";
   commissionValue?: number;
   freeDelivery?: boolean;
+  businessRegNo?: string;
+  foodPermitNo?: string;
+  verificationDoc?: string;
+  receiptPickupEnabled?: boolean;
 }
 
 export interface Addon {
   id: string;
   name: string;
   price: number;
+  quantity?: number; // Optional selected quantity for the cart/order
+  groupId?: string;  // Optional reference to the group it belongs to
+}
+
+export interface AddonGroup {
+  id: string;
+  name: string;
+  isRequired: boolean;
+  minSelections?: number;
+  maxSelections?: number;
+  allowMultipleQuantity?: boolean;
+  maxQuantityPerAddon?: number;
+  addons: Addon[];
 }
 
 export interface Product {
@@ -76,6 +95,7 @@ export interface Product {
   createdAt: string;
   addons?: Addon[];
   maxAddons?: number;
+  addonGroups?: AddonGroup[];
 }
 
 export type OrderStatus =
@@ -105,6 +125,7 @@ export interface Order {
   serviceFee?: number;
   deliveryFee?: number;
   tax?: number;
+  receiptImage?: string;
 }
 
 export interface OrderItem {
@@ -116,7 +137,7 @@ export interface OrderItem {
   quantity: number;
 }
 
-export type RiderStatus = "pending" | "approved" | "suspended";
+export type RiderStatus = "pending" | "approved" | "suspended" | "rejected";
 
 export interface Rider {
   id: string;
@@ -127,6 +148,10 @@ export interface Rider {
   status: RiderStatus;
   isAvailable: boolean;
   createdAt: string;
+  licenseNo?: string;
+  plateNo?: string;
+  nationalIdNo?: string;
+  verificationDoc?: string;
 }
 
 export interface Address {
@@ -221,5 +246,49 @@ export function isVendorOpen(vendor: any): boolean {
   }
 
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string; // The user ID it belongs to (or "admin" or "all")
+  title: string;
+  message: string;
+  type: "order" | "wallet" | "system" | "delivery";
+  read: boolean;
+  createdAt: string;
+  relatedId?: string;
+}
+
+export interface WalletTransaction {
+  id: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  type: "deposit" | "purchase" | "refund" | "adjustment";
+  note?: string;
+  createdAt: string;
+  status?: "approved" | "pending" | "declined";
+  gateway?: "bank_transfer" | "monnify" | "paystack";
+  reference?: string;
+}
+
+export interface ReceiptPickupOrder {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  vendorId: string;
+  vendorName: string;
+  vendorAddress: string;
+  deliveryAddress: string;
+  receiptImageOrQr: string; // Base64 data or QR content
+  receiptNote?: string;
+  deliveryFee: number;
+  riderId?: string;
+  riderName?: string;
+  status: "pending" | "accepted" | "picked_up" | "delivered" | "cancelled";
+  paymentMethod: "wallet" | "cash";
+  paymentStatus: "paid" | "unpaid";
+  createdAt: string;
 }
 

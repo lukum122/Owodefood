@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
-import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle, Wallet, Shield, Lock, KeyRound, Copy, AlertCircle } from "lucide-react";
+import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle, Wallet, Shield, Lock, KeyRound, Copy, AlertCircle, User, Mail } from "lucide-react";
 
 export const CustomerCart: React.FC = () => {
   const { vendors, cart, updateCartQuantity, removeFromCart, clearCart, calculateDeliveryFee, calculateServiceFee, currency, vatEnabled, vatRate, maxCartItems } = useDatabase();
@@ -10,7 +10,7 @@ export const CustomerCart: React.FC = () => {
 
   // Dynamic cost calculation incorporating custom addons
   const total = cart.reduce((sum, item) => {
-    const addonCost = (item.selectedAddons || []).reduce((s, a) => s + a.price, 0);
+    const addonCost = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
     return sum + ((item.product.price + addonCost) * item.quantity);
   }, 0);
   const tax = vatEnabled ? total * (vatRate / 100) : 0; // Dynamic VAT
@@ -74,7 +74,7 @@ export const CustomerCart: React.FC = () => {
 
           <div className="divide-y divide-gray-100 text-xs">
             {cart.map((item) => {
-              const itemAddonPrice = (item.selectedAddons || []).reduce((s, a) => s + a.price, 0);
+              const itemAddonPrice = (item.selectedAddons || []).reduce((s, a) => s + (a.price ?? 0), 0);
               const singleItemTotal = item.product.price + itemAddonPrice;
 
               return (
@@ -97,14 +97,14 @@ export const CustomerCart: React.FC = () => {
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {item.selectedAddons.map((addon) => (
                           <span key={addon.id} className="text-[9px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold uppercase font-mono tracking-wide border border-gray-200">
-                            + {addon.name} ({currency}{addon.price.toLocaleString()})
+                            + {addon.name} {addon.quantity && addon.quantity > 1 ? `x${addon.quantity}` : ""} ({currency}{((addon.price ?? 0) * (addon.quantity ?? 1)).toLocaleString()})
                           </span>
                         ))}
                       </div>
                     )}
 
                     <span className="text-xs font-extrabold text-[#0ea5e9] font-mono mt-1.5 block">
-                      {currency}{singleItemTotal.toLocaleString()} each
+                      {currency}{(singleItemTotal ?? 0).toLocaleString()} each
                     </span>
                   </div>
 
@@ -217,9 +217,13 @@ export const CustomerCheckout: React.FC = () => {
     coverageGuideText,
     extremeLocations,
     extremeLocationTiers,
-    savedAddresses
+    savedAddresses,
+    register
   } = useDatabase();
   const navigate = useNavigate();
+
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
 
   // Detect matching district from default customer address or use first available
   const initialDistrict = availableLocations.find(loc => {
@@ -322,7 +326,7 @@ export const CustomerCheckout: React.FC = () => {
 
   // Dynamic cost calculation incorporating custom addons
   const total = cart.reduce((sum, item) => {
-    const addonCost = (item.selectedAddons || []).reduce((s, a) => s + a.price, 0);
+    const addonCost = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
     return sum + ((item.product.price + addonCost) * item.quantity);
   }, 0);
   const tax = vatEnabled ? total * (vatRate / 100) : 0;
@@ -364,6 +368,29 @@ export const CustomerCheckout: React.FC = () => {
       return;
     }
 
+    if (!currentUser) {
+      if (!guestName.trim()) {
+        setErrorWord("Please provide your full name to complete guest checkout.");
+        return;
+      }
+      if (!guestEmail.trim()) {
+        setErrorWord("Please provide your email address to complete guest checkout.");
+        return;
+      }
+      
+      const regRes = register(
+        guestName.trim(),
+        guestEmail.trim().toLowerCase(),
+        deliveryPhone.trim(),
+        "customer"
+      );
+      
+      if (!regRes.success) {
+        setErrorWord(regRes.error || "Could not register guest user details. If you have an account already, please sign in.");
+        return;
+      }
+    }
+
     if (paymentMethod === "Local Bank Transfer" && !receiptBase64) {
       setErrorWord("Please attach your payment receipt slip image to authorize the manual bank transfer.");
       return;
@@ -387,14 +414,19 @@ export const CustomerCheckout: React.FC = () => {
       }
     }
 
-    const { success } = placeOrder(deliveryAddress.trim(), paymentMethod, deliveryPhone.trim());
+    const { success } = placeOrder(
+      deliveryAddress.trim(),
+      paymentMethod,
+      deliveryPhone.trim(),
+      paymentMethod === "Local Bank Transfer" ? receiptBase64 : undefined
+    );
     if (success) {
       setIsOrdered(true);
       setTimeout(() => {
         navigate("/orders");
       }, 2000);
     } else {
-      setErrorWord("Could not complete checkout. Please ensure you are logged in.");
+      setErrorWord("Could not complete checkout. Please check your network and try again.");
     }
   };
 
@@ -424,6 +456,27 @@ export const CustomerCheckout: React.FC = () => {
         <p className="text-xs text-gray-500 mt-0.5">Please finalize your courier details and payment authorization.</p>
       </div>
 
+      {!currentUser && (
+        <div className="p-5 bg-[#0ea5e9]/5 border border-[#0ea5e9]/10 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="space-y-1 text-center md:text-left">
+            <h4 className="text-xs font-black text-[#070329] flex items-center justify-center md:justify-start gap-1.5">
+              <span className="w-2 h-2 bg-[#0ea5e9] rounded-full animate-pulse" />
+              Checking out as Guest
+            </h4>
+            <p className="text-[10px] text-gray-500 font-medium leading-relaxed max-w-xl">
+              You do not need to register to purchase, but saving your details lets you track orders in real-time, get free rewards, and top up your secure local wallet!
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/login?redirect=/checkout`)}
+            className="px-4 py-2.5 bg-[#070329] hover:bg-[#0ea5e9] text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition whitespace-nowrap shadow-sm cursor-pointer"
+          >
+            Sign In / Register ⚡
+          </button>
+        </div>
+      )}
+
       {errorWord && (
         <div className="p-3.5 bg-red-50 text-red-650 rounded-2xl border border-red-100 text-xs font-bold">
           {errorWord}
@@ -435,6 +488,43 @@ export const CustomerCheckout: React.FC = () => {
         {/* Address and pay selection */}
         <div className="lg:col-span-7 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
           <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider mb-2">Fulfillment Details</h3>
+
+          {/* Guest account identification */}
+          {!currentUser && (
+            <div className="space-y-4 pb-4 border-b border-gray-100">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Guest Account Setup</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-650 flex items-center gap-1.5 leading-none">
+                    <User className="w-4 h-4 text-purple-500" />
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Enter your first and last name"
+                    className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-650 flex items-center gap-1.5 leading-none">
+                    <Mail className="w-4 h-4 text-pink-500" />
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    placeholder="e.g. name@example.com"
+                    className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Quick Saved Address Select */}
           {savedAddresses && savedAddresses.filter(addr => !currentUser || addr.userId === currentUser.id).length > 0 && (
@@ -471,7 +561,7 @@ export const CustomerCheckout: React.FC = () => {
               <summary className="flex items-center justify-between font-extrabold text-xs text-teal-950 cursor-pointer outline-none select-none">
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-teal-600" />
-                  <span>📍 Kwara Marketplace Coverage & Faraway Surcharges</span>
+                  <span>📍 Owode Food Coverage & Faraway Surcharges</span>
                 </div>
                 <span className="transition-transform group-open:rotate-180 text-teal-600 font-bold text-xs">▼</span>
               </summary>
@@ -775,7 +865,7 @@ export const CustomerCheckout: React.FC = () => {
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
                           <span className="text-[9px] text-gray-400 font-bold uppercase block tracking-wider font-mono">Top-up Balance</span>
                           <span className="text-xl font-black text-[#070329] font-mono block mt-0.5">
-                            {currency}{checkoutFundingProcess.amount.toLocaleString()}.00
+                            {currency}{(checkoutFundingProcess.amount ?? 0).toLocaleString()}.00
                           </span>
                           <span className="text-[8px] text-gray-400 font-mono block mt-1">Ref: {checkoutFundingProcess.txRef}</span>
                         </div>
@@ -1043,15 +1133,15 @@ export const CustomerCheckout: React.FC = () => {
                       <div className="p-4 bg-white border border-gray-150 rounded-2xl space-y-3 shadow-sm">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 font-semibold">Current Balance:</span>
-                          <span className={`text-sm font-black font-mono ${checkoutWalletBalance >= grandTotal ? "text-green-600" : "text-red-500"}`}>
-                            {currency}{checkoutWalletBalance.toLocaleString()}
+                          <span className={`text-sm font-black font-mono ${(checkoutWalletBalance ?? 0) >= grandTotal ? "text-green-600" : "text-red-500"}`}>
+                            {currency}{(checkoutWalletBalance ?? 0).toLocaleString()}
                           </span>
                         </div>
                         
-                        {checkoutWalletBalance < grandTotal ? (
+                        {(checkoutWalletBalance ?? 0) < grandTotal ? (
                           <div className="space-y-3">
                             <p className="text-[10px] text-red-600 font-bold leading-normal bg-red-50/50 p-2.5 rounded-lg border border-red-100">
-                              ⚠️ Insufficient wallet balance. You need {currency}{(grandTotal - checkoutWalletBalance).toLocaleString()} more to place this order.
+                              ⚠️ Insufficient wallet balance. You need {currency}{(grandTotal - (checkoutWalletBalance ?? 0)).toLocaleString()} more to place this order.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2 pt-1">
                               <button
@@ -1075,7 +1165,7 @@ export const CustomerCheckout: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const needed = Math.ceil((grandTotal - checkoutWalletBalance) / 1000) * 1000;
+                                  const needed = Math.ceil((grandTotal - (checkoutWalletBalance ?? 0)) / 1000) * 1000;
                                   setCheckoutFundingProcess({
                                     amount: needed,
                                     stage: "method_select",
@@ -1089,7 +1179,7 @@ export const CustomerCheckout: React.FC = () => {
                                 }}
                                 className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black tracking-wide text-center transition active:scale-95 cursor-pointer shadow-sm"
                               >
-                                ⚡ Reload Exact (+{currency}{Math.max(0, Math.ceil((grandTotal - checkoutWalletBalance) / 1000) * 1000).toLocaleString()})
+                                ⚡ Reload Exact (+{currency}{Math.max(0, Math.ceil((grandTotal - (checkoutWalletBalance ?? 0)) / 1000) * 1000).toLocaleString()})
                               </button>
                             </div>
                           </div>
@@ -1116,7 +1206,7 @@ export const CustomerCheckout: React.FC = () => {
 
           <div className="divide-y divide-gray-100 max-h-52 overflow-y-auto pr-1">
             {cart.map((item) => {
-              const itemAddonPrice = (item.selectedAddons || []).reduce((s, a) => s + a.price, 0);
+              const itemAddonPrice = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
               const singleItemTotal = item.product.price + itemAddonPrice;
               const rowTotal = singleItemTotal * item.quantity;
 
@@ -1131,7 +1221,7 @@ export const CustomerCheckout: React.FC = () => {
                   {item.selectedAddons && item.selectedAddons.length > 0 && (
                     <div className="flex flex-col gap-0.5 pl-3 mt-1 text-[10px] text-gray-400 font-semibold font-sans">
                       {item.selectedAddons.map(a => (
-                        <span key={a.id}>+ {a.name} (+ {currency}{a.price.toLocaleString()})</span>
+                        <span key={a.id}>+ {a.name} {a.quantity && a.quantity > 1 ? `x${a.quantity}` : ""} (+ {currency}{((a.price ?? 0) * (a.quantity ?? 1)).toLocaleString()})</span>
                       ))}
                     </div>
                   )}
@@ -1241,7 +1331,7 @@ export const CustomerCheckout: React.FC = () => {
                       }`}
                     >
                       <b className="block text-[11px]">{opt.name}</b>
-                      <span className="text-[9px] text-gray-405 block mt-0.5">{opt.desc}</span>
+                      <span className="text-[9px] text-gray-400 block mt-0.5">{opt.desc}</span>
                     </button>
                   );
                 })}
@@ -1283,7 +1373,7 @@ export const CustomerCheckout: React.FC = () => {
 
             {monnifyMethod === "transfer" && (
               <div className="p-4 bg-amber-50/40 rounded-2xl border border-amber-100 text-center space-y-2.5 text-xs animate-in fade-in duration-200">
-                <p className="text-amber-805 leading-normal">
+                <p className="text-amber-800 leading-normal">
                   Execute direct transfer of <strong className="font-extrabold text-amber-950">{currency}{grandTotal.toLocaleString()}</strong> to the following dynamic host wallet:
                 </p>
                 <div className="bg-white rounded-xl p-3 border border-amber-100 inline-block font-mono font-bold tracking-wide text-amber-950 select-all text-xs">

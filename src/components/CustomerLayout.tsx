@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { getUserAvatarUrl } from "../pages/CustomerOrdersAndProfile";
 import { 
   Home, 
   Search, 
@@ -31,7 +32,9 @@ import {
   KeyRound,
   Copy,
   FileText,
-  Shield
+  Shield,
+  Store,
+  Bike
 } from "lucide-react";
 
 export const CustomerLayout: React.FC = () => {
@@ -46,7 +49,16 @@ export const CustomerLayout: React.FC = () => {
     setSelectedLocation,
     savedAddresses,
     addSavedAddress,
-    removeSavedAddress
+    removeSavedAddress,
+    notifications = [],
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    clearAllNotifications,
+    walletFundingBankTransferEnabled,
+    walletFundingMonnifyEnabled,
+    walletFundingPaystackEnabled,
+    requestWalletFunding,
+    switchRole,
   } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,6 +66,8 @@ export const CustomerLayout: React.FC = () => {
   // Dialog / Drawer States
   const [activeModal, setActiveModal] = useState<"wallet" | "addresses" | "favorites" | "help" | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showNotifPopover, setShowNotifPopover] = useState(false);
+  const [showProfilePopover, setShowProfilePopover] = useState(false);
   
   // Simulated Wallet balance with localStorage persistence
   const [walletBalance, setWalletBalance] = useState<number>(() => {
@@ -66,8 +80,8 @@ export const CustomerLayout: React.FC = () => {
   // Interactive Gateway Sandbox top-up process state
   const [fundingProcess, setFundingProcess] = useState<{
     amount: number;
-    stage: "method_select" | "card_entry" | "bank_transfer" | "otp_entry" | "processing" | "success";
-    method: "card" | "bank_transfer";
+    stage: "method_select" | "card_entry" | "bank_transfer" | "otp_entry" | "processing" | "success" | "paystack_sim" | "monnify_sim" | "transfer_pending";
+    method: "card" | "bank_transfer" | "paystack" | "monnify";
     cardNumber: string;
     cardExpiry: string;
     cardCvv: string;
@@ -93,8 +107,49 @@ export const CustomerLayout: React.FC = () => {
     }
   }, [availableLocations, newAddressDistrict]);
 
-  // Simulated Favorites
-  const [favorites, setFavorites] = useState<string[]>(["v-1", "v-2"]); // Vendor IDs
+  // Simulated Favorites with localStorage and event-driven cross-page reactivity
+  const getFavoritesKey = () => `fd_favorites_${currentUser?.id || "guest"}`;
+  
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    const key = `fd_favorites_${currentUser?.id || "guest"}`;
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : ["v-1", "v-2"];
+  });
+
+  useEffect(() => {
+    const key = getFavoritesKey();
+    localStorage.setItem(key, JSON.stringify(favorites));
+  }, [favorites, currentUser]);
+
+  useEffect(() => {
+    // Sync with other components via custom event
+    const handleSync = () => {
+      const key = getFavoritesKey();
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        setFavorites(JSON.parse(saved));
+      }
+    };
+
+    window.addEventListener("fd-favorites-updated", handleSync);
+    return () => window.removeEventListener("fd-favorites-updated", handleSync);
+  }, [currentUser]);
+
+  const toggleFavorite = (vendorId: string) => {
+    const key = getFavoritesKey();
+    const saved = localStorage.getItem(key);
+    let currentFavs: string[] = saved ? JSON.parse(saved) : ["v-1", "v-2"];
+    
+    if (currentFavs.includes(vendorId)) {
+      currentFavs = currentFavs.filter(id => id !== vendorId);
+    } else {
+      currentFavs = [...currentFavs, vendorId];
+    }
+    
+    localStorage.setItem(key, JSON.stringify(currentFavs));
+    setFavorites(currentFavs);
+    window.dispatchEvent(new Event("fd-favorites-updated"));
+  };
 
   // Dropdown UI visibility state
   const [showLocationSelect, setShowLocationSelect] = useState(false);
@@ -133,7 +188,7 @@ export const CustomerLayout: React.FC = () => {
       setFundingProcess({
         amount: amt,
         stage: "method_select",
-        method: "card",
+        method: "paystack", // default
         cardNumber: "",
         cardExpiry: "",
         cardCvv: "",
@@ -147,7 +202,7 @@ export const CustomerLayout: React.FC = () => {
     setFundingProcess({
       amount: amt,
       stage: "method_select",
-      method: "card",
+      method: "paystack", // default
       cardNumber: "",
       cardExpiry: "",
       cardCvv: "",
@@ -277,7 +332,7 @@ export const CustomerLayout: React.FC = () => {
           <div className="flex items-center justify-between w-full">
             <span>Wallet</span>
             <span className="bg-amber-500/25 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-amber-500/20">
-              {currency}{walletBalance.toLocaleString()}
+              {currency}{(walletBalance ?? 0).toLocaleString()}
             </span>
           </div>
         </button>
@@ -299,9 +354,11 @@ export const CustomerLayout: React.FC = () => {
         {currentUser ? (
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#0ea5e9]/20 border border-[#0ea5e9]/30 flex items-center justify-center font-bold text-white uppercase text-sm">
-                {currentUser.name.slice(0, 2)}
-              </div>
+              <img
+                src={getUserAvatarUrl(currentUser)}
+                alt={currentUser.name}
+                className="w-10 h-10 rounded-full object-cover border border-[#0ea5e9]/30 bg-white"
+              />
               <div className="min-w-0">
                 <h4 className="text-xs font-bold text-white truncate max-w-[120px]">
                   {currentUser.name}
@@ -335,6 +392,11 @@ export const CustomerLayout: React.FC = () => {
       </div>
     </div>
   );
+
+  const userNotifications = notifications.filter(
+    n => n.userId === (currentUser?.id || "cust-1") || n.userId === "all"
+  );
+  const unreadCount = userNotifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col lg:flex-row text-[#070329] selection:bg-[#070329]/15">
@@ -482,31 +544,264 @@ export const CustomerLayout: React.FC = () => {
               <div className="flex flex-col text-left">
                 <span className="text-[8px] font-bold text-amber-600 uppercase tracking-widest leading-none">Wallet balance</span>
                 <span className="text-xs font-black font-mono leading-tight mt-0.5">
-                  {currency}{walletBalance.toLocaleString()}
+                  {currency}{(walletBalance ?? 0).toLocaleString()}
                 </span>
               </div>
             </button>
 
-            <button className="p-2 sm:p-2.5 hover:bg-gray-100 rounded-xl text-gray-600 relative transition">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifPopover(!showNotifPopover)}
+                className="p-2 sm:p-2.5 hover:bg-gray-100 rounded-xl text-gray-600 relative transition cursor-pointer active:scale-95 flex items-center justify-center"
+                title="View notifications"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white font-extrabold text-[8px] rounded-full flex items-center justify-center border border-white leading-none scale-110">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Beautiful Notifications Popover Dropdown */}
+              {showNotifPopover && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowNotifPopover(false)} 
+                  />
+                  <div className="fixed left-4 right-4 top-[64px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-80 bg-white border border-gray-100 rounded-3xl shadow-xl z-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-3 duration-200">
+                    <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+                      <div className="text-left">
+                        <h4 className="font-extrabold text-[#070329] text-xs">Activity Alerts</h4>
+                        <span className="text-[9px] text-gray-450 uppercase tracking-wider font-bold">Updates & status notifications</span>
+                      </div>
+                      <div className="flex gap-2 text-[10px]">
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={() => markAllNotificationsAsRead(currentUser?.id || "cust-1")}
+                            className="text-purple-600 hover:text-purple-800 font-bold transition cursor-pointer bg-transparent border-none p-0"
+                          >
+                            Read All
+                          </button>
+                        )}
+                        {userNotifications.length > 0 && (
+                          <button 
+                            onClick={() => clearAllNotifications(currentUser?.id || "cust-1")}
+                            className="text-gray-400 hover:text-gray-650 transition cursor-pointer font-medium bg-transparent border-none p-0"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1 text-left">
+                      {userNotifications.length > 0 ? (
+                        userNotifications.map((n) => (
+                          <div 
+                            key={n.id}
+                            onClick={() => markNotificationAsRead(n.id)}
+                            className={`p-2.5 rounded-2xl border transition relative cursor-pointer ${
+                              n.read 
+                                ? "bg-white border-gray-100 hover:bg-gray-50/50" 
+                                : "bg-purple-50/45 border-purple-100/50 hover:bg-purple-50/70"
+                            }`}
+                          >
+                            {!n.read && (
+                              <span className="absolute top-3 right-3 w-1.5 h-1.5 bg-purple-600 rounded-full animate-pulse" />
+                            )}
+                            <div className="flex gap-2">
+                              <span className="text-sm mt-0.5">
+                                {n.type === "order" ? "🍳" : n.type === "wallet" ? "💰" : n.type === "delivery" ? "🚴" : "🔔"}
+                              </span>
+                              <div className="space-y-0.5 pr-2 min-w-0 flex-1">
+                                <span className="block font-sans font-black text-gray-900 text-[11px] leading-tight break-words">
+                                  {n.title}
+                                </span>
+                                <p className="text-[10px] text-gray-500 font-sans leading-relaxed break-words whitespace-pre-wrap">
+                                  {n.message}
+                                </p>
+                                <span className="block text-[8px] text-gray-400 font-mono">
+                                  {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-gray-400 space-y-1">
+                          <span className="text-2xl block">🎐</span>
+                          <span className="block text-[11px] font-bold text-gray-400">All clear! No alerts</span>
+                          <span className="block text-[9px] text-gray-450">Status notifications will appear here.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {currentUser ? (
-              <Link 
-                to="/profile" 
-                className="flex items-center gap-1.5 p-1 hover:bg-gray-50 rounded-xl transition"
-              >
-                <img 
-                  src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80" 
-                  alt="user avatar"
-                  className="w-8 h-8 rounded-full object-cover border border-gray-100 shadow-sm shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-                <span className="text-xs font-bold hidden sm:inline text-[#070329]">
-                  {currentUser.name}
-                </span>
-              </Link>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowProfilePopover(!showProfilePopover)}
+                  className="flex items-center gap-1.5 p-1 hover:bg-gray-50 rounded-xl transition cursor-pointer"
+                >
+                  <img 
+                    src={getUserAvatarUrl(currentUser)} 
+                    alt={currentUser.name}
+                    className="w-8 h-8 rounded-full object-cover border border-gray-100 shadow-sm shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span className="text-xs font-bold hidden sm:inline text-[#070329]">
+                    {currentUser.name}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-gray-500 hidden sm:inline transition-transform duration-200 ${showProfilePopover ? "rotate-180" : ""}`} />
+                </button>
+
+                {showProfilePopover && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowProfilePopover(false)} 
+                    />
+                    <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-100 rounded-3xl shadow-xl z-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-3 duration-200 text-left">
+                      {/* Dropdown Header */}
+                      <div className="flex items-center gap-3 pb-3 border-b border-gray-50">
+                        <img 
+                          src={getUserAvatarUrl(currentUser)} 
+                          alt={currentUser.name}
+                          className="w-10 h-10 rounded-full object-cover border border-gray-100 shadow-sm shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="min-w-0">
+                          <h4 className="font-extrabold text-[#070329] text-xs truncate">{currentUser.name}</h4>
+                          <p className="text-[10px] text-gray-400 truncate">{currentUser.email}</p>
+                          <span className="inline-block text-[9px] bg-blue-50 text-blue-600 font-bold px-1.5 py-0.5 rounded-md mt-1 font-mono uppercase tracking-wider">
+                            Consumer Portal
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Menu List */}
+                      <div className="space-y-1">
+                        <Link 
+                          to="/profile"
+                          onClick={() => setShowProfilePopover(false)}
+                          className="flex items-center gap-2.5 p-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition"
+                        >
+                          <User className="w-4 h-4 text-gray-400" />
+                          <span>My Profile</span>
+                        </Link>
+                        
+                        <button 
+                          onClick={() => {
+                            setActiveModal("addresses");
+                            setShowProfilePopover(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 p-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition text-left cursor-pointer bg-transparent border-none"
+                        >
+                          <MapPin className="w-4 h-4 text-gray-400" />
+                          <span>Saved Addresses</span>
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            setActiveModal("favorites");
+                            setShowProfilePopover(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 p-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition text-left cursor-pointer bg-transparent border-none"
+                        >
+                          <Heart className="w-4 h-4 text-gray-400" />
+                          <span>Saved Favorites</span>
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            setActiveModal("help");
+                            setShowProfilePopover(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 p-2 text-xs font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition text-left cursor-pointer bg-transparent border-none"
+                        >
+                          <HelpCircle className="w-4 h-4 text-gray-400" />
+                          <span>Get Help & Support</span>
+                        </button>
+                      </div>
+
+                      {/* Switch Portal Section if they have multiple roles */}
+                      {(currentUser.roles || [currentUser.role]).length > 1 && (
+                        <div className="pt-2 border-t border-gray-50">
+                          <span className="block text-[9px] text-gray-400 uppercase tracking-widest font-extrabold mb-1.5 px-2">
+                            Switch Portal
+                          </span>
+                          <div className="space-y-1">
+                            {(currentUser.roles || [currentUser.role]).map((role) => {
+                              // Don't show switch button for active role (which is customer in this customer layout)
+                              if (role === "customer") return null;
+
+                              let label = "Consumer Portal";
+                              let Icon = User;
+                              let colorClass = "text-blue-500 bg-blue-50/50 hover:bg-blue-50";
+                              let path = "/";
+
+                              if (role === "vendor") {
+                                label = "Merchant Portal";
+                                Icon = Store;
+                                colorClass = "text-green-600 bg-green-50/50 hover:bg-green-50";
+                                path = "/vendor/dashboard";
+                              } else if (role === "rider") {
+                                label = "Rider Portal";
+                                Icon = Bike;
+                                colorClass = "text-amber-600 bg-amber-50/50 hover:bg-amber-50";
+                                path = "/rider/dashboard";
+                              } else if (["admin", "super_admin", "employee"].includes(role)) {
+                                label = "Management Console";
+                                Icon = Shield;
+                                colorClass = "text-purple-600 bg-purple-50/50 hover:bg-purple-50";
+                                path = "/admin/dashboard";
+                              }
+
+                              return (
+                                <button
+                                  key={role}
+                                  onClick={() => {
+                                    switchRole(role);
+                                    setShowProfilePopover(false);
+                                    navigate(path);
+                                  }}
+                                  className={`w-full flex items-center justify-between p-2 rounded-xl transition text-xs font-bold text-left cursor-pointer border-none ${colorClass}`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Icon className="w-3.5 h-3.5" />
+                                    <span>{label}</span>
+                                  </div>
+                                  <span className="text-[9px] font-mono opacity-60 font-black">Go →</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Logout Button */}
+                      <div className="pt-2 border-t border-gray-50">
+                        <button 
+                          onClick={() => {
+                            setShowProfilePopover(false);
+                            logout();
+                            navigate("/login");
+                          }}
+                          className="w-full flex items-center gap-2.5 p-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition text-left cursor-pointer bg-transparent border-none"
+                        >
+                          <LogOut className="w-4 h-4 text-red-400" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             ) : (
               <Link 
                 to="/login"
@@ -599,7 +894,7 @@ export const CustomerLayout: React.FC = () => {
               <div>
                 <span className="text-[10px] uppercase font-mono text-gray-300 font-bold block">Items in Basket</span>
                 <span className="text-xs font-bold text-white block">
-                  {cartTotalItems} {cartTotalItems === 1 ? "Item" : "Items"} • {currency}{cartTotalPrice.toLocaleString()}
+                  {cartTotalItems} {cartTotalItems === 1 ? "Item" : "Items"} • {currency}{(cartTotalPrice ?? 0).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -659,7 +954,7 @@ export const CustomerLayout: React.FC = () => {
                   <div className="text-center py-3 bg-gray-50/60 rounded-2xl border border-gray-100 relative overflow-hidden">
                     <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest font-mono">Invoice Settlement</span>
                     <h2 className="text-2xl font-black font-mono text-[#070329] mt-1">
-                      {currency}{fundingProcess.amount.toLocaleString()}.00
+                      {currency}{(fundingProcess.amount ?? 0).toLocaleString()}.00
                     </h2>
                     <div className="flex items-center justify-center gap-1.5 mt-1 text-[9px] text-gray-500 font-semibold">
                       <span className="font-mono">REF: {fundingProcess.txRef}</span>
@@ -678,34 +973,67 @@ export const CustomerLayout: React.FC = () => {
                   {fundingProcess.stage === "method_select" && (
                     <div className="space-y-3">
                       <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">
-                        Select Your Simulated Funding Channel
+                        Select Your Active Funding Channel
                       </h4>
                       
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "card_entry", method: "card" } : null)}
-                          className="p-3 border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 rounded-xl text-center space-y-2 transition cursor-pointer group"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
-                            <CreditCard className="w-4 h-4" />
-                          </div>
-                          <span className="text-[11px] font-black text-gray-800 block">Simulate Card</span>
-                          <p className="text-[8px] text-gray-400">VISA / MasterCard Sandbox</p>
-                        </button>
+                      {(!walletFundingBankTransferEnabled && !walletFundingMonnifyEnabled && !walletFundingPaystackEnabled) ? (
+                        <div className="p-4 bg-amber-50 text-amber-800 border border-amber-200 rounded-2xl text-center">
+                          <p className="text-xs font-bold">Funding Disabled ⚠️</p>
+                          <p className="text-[10px] mt-1 text-gray-500 leading-normal">
+                            All wallet funding modes are currently turned off by the administrator from the admin portal. Please contact support or try again later.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {walletFundingPaystackEnabled && (
+                            <button
+                              type="button"
+                              onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "paystack_sim", method: "paystack" } : null)}
+                              className="p-3 border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/20 rounded-2xl flex items-center gap-3 transition cursor-pointer text-left group"
+                            >
+                              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <CreditCard className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-black text-gray-800 block">Paystack Payment Gateway</span>
+                                <span className="text-[9px] text-emerald-600 font-bold block mt-0.5">Credited Immediately ⚡</span>
+                              </div>
+                            </button>
+                          )}
 
-                        <button
-                          type="button"
-                          onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "bank_transfer", method: "bank_transfer" } : null)}
-                          className="p-3 border border-gray-100 hover:border-amber-200 hover:bg-amber-50/30 rounded-xl text-center space-y-2 transition cursor-pointer group"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
-                            <Landmark className="w-4 h-4" />
-                          </div>
-                          <span className="text-[11px] font-black text-gray-800 block">Simulate Transfer</span>
-                          <p className="text-[8px] text-gray-400">Mock Bank Clearing Feed</p>
-                        </button>
-                      </div>
+                          {walletFundingMonnifyEnabled && (
+                            <button
+                              type="button"
+                              onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "monnify_sim", method: "monnify" } : null)}
+                              className="p-3 border border-sky-100 hover:border-sky-300 hover:bg-sky-50/20 rounded-2xl flex items-center gap-3 transition cursor-pointer text-left group"
+                            >
+                              <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Landmark className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-black text-gray-800 block">Monnify Payment Gateway</span>
+                                <span className="text-[9px] text-sky-600 font-bold block mt-0.5">Credited Immediately ⚡</span>
+                              </div>
+                            </button>
+                          )}
+
+                          {walletFundingBankTransferEnabled && (
+                            <button
+                              type="button"
+                              onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "bank_transfer", method: "bank_transfer" } : null)}
+                              className="p-3 border border-amber-100 hover:border-amber-300 hover:bg-amber-50/20 rounded-2xl flex items-center gap-3 transition cursor-pointer text-left group"
+                            >
+                              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Landmark className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-black text-gray-800 block">Local Bank Transfer</span>
+                                <span className="text-[9px] text-amber-600 font-bold block mt-0.5">Requires Admin Approval ⏳</span>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       <button
                         type="button"
@@ -717,68 +1045,29 @@ export const CustomerLayout: React.FC = () => {
                     </div>
                   )}
 
-                  {/* STAGE: CARD_ENTRY */}
-                  {fundingProcess.stage === "card_entry" && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                          Enter Secure Card Credentials
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={() => setFundingProcess(prev => prev ? { 
-                            ...prev, 
-                            cardNumber: "4000 1234 5678 9010",
-                            cardExpiry: "12/28",
-                            cardCvv: "123"
-                          } : null)}
-                          className="text-[9px] font-bold text-blue-600 hover:underline flex items-center gap-1"
-                        >
-                          💡 Auto-fill Sandbox Card
-                        </button>
+                  {/* STAGE: PAYSTACK_SIM */}
+                  {fundingProcess.stage === "paystack_sim" && (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-center space-y-1">
+                        <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest font-mono">Paystack Sandbox Terminal</span>
+                        <h3 className="text-base font-extrabold text-emerald-950">Paystack Checkout 💚</h3>
+                        <p className="text-[10px] text-emerald-700/80 leading-normal mt-1">
+                          Simulating secure automated checkout. This transaction will be credited immediately to your wallet balance upon gateway confirmation.
+                        </p>
                       </div>
 
                       <div className="space-y-2">
-                        <div>
-                          <label className="text-[9px] uppercase font-bold text-gray-400 block mb-0.5">Card Number</label>
-                          <div className="relative">
-                            <input 
-                              type="text"
-                              placeholder="4000 1234 5678 9010"
-                              value={fundingProcess.cardNumber}
-                              onChange={(e) => setFundingProcess(prev => prev ? { ...prev, cardNumber: e.target.value } : null)}
-                              className="w-full text-xs p-2.5 pl-9 border border-gray-100 rounded-xl font-mono outline-none focus:border-blue-300"
-                            />
-                            <CreditCard className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          </div>
+                        <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs">
+                          <span className="text-gray-400 font-bold">Email Address</span>
+                          <span className="font-bold text-gray-800 font-mono">{currentUser?.email || "customer@gmail.com"}</span>
                         </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[9px] uppercase font-bold text-gray-400 block mb-0.5">Expiry Date</label>
-                            <input 
-                              type="text"
-                              placeholder="MM/YY"
-                              value={fundingProcess.cardExpiry}
-                              onChange={(e) => setFundingProcess(prev => prev ? { ...prev, cardExpiry: e.target.value } : null)}
-                              className="w-full text-xs p-2.5 border border-gray-100 rounded-xl font-mono outline-none focus:border-blue-300 text-center"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] uppercase font-bold text-gray-400 block mb-0.5">CVV Security Code</label>
-                            <input 
-                              type="password"
-                              maxLength={3}
-                              placeholder="***"
-                              value={fundingProcess.cardCvv}
-                              onChange={(e) => setFundingProcess(prev => prev ? { ...prev, cardCvv: e.target.value } : null)}
-                              className="w-full text-xs p-2.5 border border-gray-100 rounded-xl font-mono outline-none focus:border-blue-300 text-center tracking-widest"
-                            />
-                          </div>
+                        <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs">
+                          <span className="text-gray-400 font-bold">Invoice Ref</span>
+                          <span className="font-bold text-gray-800 font-mono text-[10px]">{fundingProcess.txRef}</span>
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-1">
+                      <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "method_select" } : null)}
@@ -789,75 +1078,68 @@ export const CustomerLayout: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!fundingProcess.cardNumber || !fundingProcess.cardExpiry || !fundingProcess.cardCvv) {
-                              setFundingProcess(prev => prev ? { ...prev, error: "Please enter your sandbox card credentials to verify." } : null);
-                              return;
-                            }
-                            setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Authorizing with sandbox issuing bank..." } : null);
+                            setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Authorizing immediate Paystack gateway confirmation..." } : null);
                             setTimeout(() => {
-                              setFundingProcess(prev => prev ? { ...prev, stage: "otp_entry" } : null);
+                              const amt = fundingProcess.amount;
+                              requestWalletFunding(currentUser?.id || "cust-1", amt, "paystack", fundingProcess.txRef);
+                              setWalletBalance(prev => prev + amt);
+                              setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                             }, 1400);
                           }}
-                          className="flex-[2] py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-md active:scale-95"
+                          className="flex-[2] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-md active:scale-95"
                         >
-                          Authorize Payment 💳
+                          Pay {currency}{(fundingProcess.amount ?? 0).toLocaleString()} ⚡
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* STAGE: OTP_ENTRY */}
-                  {fundingProcess.stage === "otp_entry" && (
-                    <div className="space-y-3">
-                      <div className="text-center space-y-1">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-                          <KeyRound className="w-4 h-4 animate-bounce" />
-                        </div>
-                        <h4 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                          Enter 3D-Secure Sandbox OTP
-                        </h4>
-                        <p className="text-[9px] text-gray-400 leading-normal max-w-xs mx-auto">
-                          A simulated SMS OTP has been generated for your session to complete sandbox settlement.
+                  {/* STAGE: MONNIFY_SIM */}
+                  {fundingProcess.stage === "monnify_sim" && (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-sky-50 border border-sky-100 rounded-2xl text-center space-y-1">
+                        <span className="text-[9px] text-sky-600 font-bold uppercase tracking-widest font-mono">Monnify Sandbox Terminal</span>
+                        <h3 className="text-base font-extrabold text-sky-950">Monnify Checkout 💙</h3>
+                        <p className="text-[10px] text-sky-700/80 leading-normal mt-1">
+                          Simulating secure automated payment via Monnify API. This top-up is processed instantly.
                         </p>
                       </div>
 
                       <div className="space-y-2">
-                        <input 
-                          type="text"
-                          placeholder="Enter 6-Digit OTP"
-                          maxLength={6}
-                          value={fundingProcess.otp}
-                          onChange={(e) => setFundingProcess(prev => prev ? { ...prev, otp: e.target.value } : null)}
-                          className="w-full text-center text-xs p-2.5 border border-gray-100 rounded-xl font-mono font-bold tracking-widest outline-none focus:border-blue-300"
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => setFundingProcess(prev => prev ? { ...prev, otp: "123456" } : null)}
-                          className="w-full py-1 text-center text-[9px] font-bold text-blue-600 hover:underline block"
-                        >
-                          💡 Auto-fill Sandbox Code (123456)
-                        </button>
+                        <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs">
+                          <span className="text-gray-400 font-bold">Secure Merchant</span>
+                          <span className="font-bold text-gray-800 font-mono">Owode Food Marketplace</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl border border-gray-100 text-xs">
+                          <span className="text-gray-400 font-bold">Simulated Channel</span>
+                          <span className="font-bold text-sky-600 font-mono text-[10px]">Direct Bank / Card Settlement</span>
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (fundingProcess.otp !== "123456" && fundingProcess.otp.length < 4) {
-                            setFundingProcess(prev => prev ? { ...prev, error: "Incorrect OTP code. Please use sandbox master code: 123456" } : null);
-                            return;
-                          }
-                          setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Settle funds in merchant secure ledger..." } : null);
-                          setTimeout(() => {
-                            const amt = fundingProcess.amount;
-                            setWalletBalance(prev => prev + amt);
-                            setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
-                          }, 1200);
-                        }}
-                        className="w-full py-2.5 bg-[#0ea5e9] hover:bg-[#0284c7] text-white rounded-xl text-xs font-black tracking-wide transition cursor-pointer text-center shadow-md active:scale-95"
-                      >
-                        Verify OTP & Authorize Settlement ⚡
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFundingProcess(prev => prev ? { ...prev, stage: "method_select" } : null)}
+                          className="flex-1 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-xl text-xs font-bold transition cursor-pointer text-center"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Validating Monnify merchant node settlement feed..." } : null);
+                            setTimeout(() => {
+                              const amt = fundingProcess.amount;
+                              requestWalletFunding(currentUser?.id || "cust-1", amt, "monnify", fundingProcess.txRef);
+                              setWalletBalance(prev => prev + amt);
+                              setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
+                            }, 1400);
+                          }}
+                          className="flex-[2] py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-md active:scale-95"
+                        >
+                          Settle {currency}{(fundingProcess.amount ?? 0).toLocaleString()} ⚡
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -866,10 +1148,10 @@ export const CustomerLayout: React.FC = () => {
                     <div className="space-y-3">
                       <div className="text-center space-y-0.5">
                         <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                          Simulated Escrow Bank Transfer
+                          Escrow Bank Transfer Details
                         </h4>
                         <p className="text-[9px] text-gray-400 leading-normal">
-                          Copy the dynamic escrow coordinates below and trigger the mock clearing check.
+                          Perform transfer of exactly the amount below to the designated platform account.
                         </p>
                       </div>
 
@@ -905,13 +1187,13 @@ export const CustomerLayout: React.FC = () => {
                         <div className="flex justify-between items-center text-xs border-t border-amber-100/60 pt-1.5">
                           <span className="text-gray-400 font-bold uppercase text-[8px]">Amount Due</span>
                           <span className="font-black text-[#070329] text-xs font-mono">
-                            {currency}{fundingProcess.amount.toLocaleString()}.00
+                            {currency}{(fundingProcess.amount ?? 0).toLocaleString()}.00
                           </span>
                         </div>
                       </div>
 
                       <p className="text-[8px] text-amber-700/80 bg-amber-50 p-2 rounded-lg text-center leading-normal">
-                        💡 In development, this is a simulation. Click the confirmation button below to verify.
+                        💡 Transfers are manual and must be confirmed and approved by our administrators before your wallet is credited.
                       </p>
 
                       <div className="flex gap-2 pt-1">
@@ -925,18 +1207,51 @@ export const CustomerLayout: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Scanning sandbox incoming Providus settlement feed..." } : null);
+                            setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Submitting bank transfer ledger for approval..." } : null);
                             setTimeout(() => {
                               const amt = fundingProcess.amount;
-                              setWalletBalance(prev => prev + amt);
-                              setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
-                            }, 1600);
+                              requestWalletFunding(currentUser?.id || "cust-1", amt, "bank_transfer", fundingProcess.txRef);
+                              setFundingProcess(prev => prev ? { ...prev, stage: "transfer_pending" } : null);
+                            }, 1500);
                           }}
-                          className="flex-[2] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-md active:scale-95"
+                          className="flex-[2] py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-md active:scale-95 animate-pulse"
                         >
                           I have made the transfer ⚡
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* STAGE: TRANSFER_PENDING */}
+                  {fundingProcess.stage === "transfer_pending" && (
+                    <div className="text-center space-y-4 animate-in zoom-in-95 duration-200">
+                      <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto border border-amber-100 animate-pulse">
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      </div>
+
+                      <div className="space-y-1">
+                        <h3 className="text-base font-black text-[#070329]">Verification Pending ⌛</h3>
+                        <p className="text-[11px] text-gray-500">
+                          Your transfer has been successfully registered for manual audit.
+                        </p>
+                      </div>
+
+                      <div className="bg-amber-50/40 border border-amber-100 rounded-xl p-3 text-left space-y-1.5 font-sans text-[10.5px] text-amber-900 max-w-xs mx-auto">
+                        <p className="font-semibold text-center">Reference: <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-100 text-amber-950 font-black">{fundingProcess.txRef}</span></p>
+                        <p className="text-[9.5px] leading-relaxed mt-1.5 text-center">
+                          Administrators have been notified to approve this wallet top-up request. Once confirmed, your balance will be credited.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFundingProcess(null);
+                        }}
+                        className="w-full py-2.5 bg-[#070329] hover:bg-[#100b47] text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-md active:scale-95"
+                      >
+                        Got it - Return to Wallet 🌟
+                      </button>
                     </div>
                   )}
 
@@ -972,11 +1287,11 @@ export const CustomerLayout: React.FC = () => {
                       <div className="bg-gray-50 border border-gray-150 rounded-xl p-3 text-left space-y-2 font-mono text-[10px] text-gray-600 max-w-xs mx-auto">
                         <div className="flex justify-between">
                           <span>Cleared Settle</span>
-                          <span className="font-bold text-gray-800">+{currency}{fundingProcess.amount.toLocaleString()}.00</span>
+                          <span className="font-bold text-gray-800">+{currency}{(fundingProcess.amount ?? 0).toLocaleString()}.00</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>New Balance</span>
-                          <span className="font-bold text-gray-800">{currency}{walletBalance.toLocaleString()}</span>
+                        <div className="flex justify-between font-bold">
+                          <span>Payment Gateway</span>
+                          <span className="text-emerald-600 uppercase text-[9px]">{fundingProcess.method}</span>
                         </div>
                         <div className="flex justify-between border-t border-gray-200/50 pt-1.5 text-[9px]">
                           <span>Tx Reference</span>
@@ -988,7 +1303,7 @@ export const CustomerLayout: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setFundingProcess(null);
-                          setWalletSuccessMsg(`Wallet loaded successfully! ${currency}${fundingProcess.amount.toLocaleString()} added.`);
+                          setWalletSuccessMsg(`Wallet loaded successfully! ${currency}${(fundingProcess.amount ?? 0).toLocaleString()} added.`);
                           setTimeout(() => {
                             setWalletSuccessMsg(null);
                           }, 4000);
@@ -1011,7 +1326,7 @@ export const CustomerLayout: React.FC = () => {
                       <span className="text-[9px] uppercase font-mono tracking-widest text-[#0ea5e9] font-black">Authorized Balance</span>
                       <span className="text-[9px] font-bold py-0.5 px-2 bg-green-500/10 text-green-400 rounded-full border border-green-500/20">Active</span>
                     </div>
-                    <h2 className="text-2xl font-black mb-1 font-mono">{currency}{walletBalance.toLocaleString()}</h2>
+                    <h2 className="text-2xl font-black mb-1 font-mono">{currency}{(walletBalance ?? 0).toLocaleString()}</h2>
                     <p className="text-[9px] text-gray-300">Pre-authorized credits for instant one-click checking.</p>
                   </div>
 
@@ -1235,17 +1550,29 @@ export const CustomerLayout: React.FC = () => {
                       </div>
                     </div>
                     
-                    <button
-                      onClick={() => {
-                        setActiveModal(null);
-                        navigate(`/vendor/${v.id}`);
-                      }}
-                      className="bg-[#070329] hover:bg-[#120a61] text-white text-[10px] font-bold py-1.5 px-3 rounded-lg transition"
-                    >
-                      Enter Menu
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setActiveModal(null);
+                          navigate(`/vendor/${v.id}`);
+                        }}
+                        className="bg-[#070329] hover:bg-[#120a61] text-white text-[10px] font-bold py-1.5 px-3 rounded-lg transition shrink-0"
+                      >
+                        Enter Menu
+                      </button>
+                      <button
+                        onClick={() => toggleFavorite(v.id)}
+                        className="text-red-500 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition shrink-0"
+                        title="Remove from favorites"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
+                {vendors.filter(v => favorites.includes(v.id)).length === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-4">No favorite vendors added yet. Click the heart button on any restaurant's menu page or home card!</p>
+                )}
               </div>
 
             </div>

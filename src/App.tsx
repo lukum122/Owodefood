@@ -9,12 +9,15 @@ import { CustomerLayout } from "./components/CustomerLayout";
 import { VendorLayout } from "./components/VendorLayout";
 import { RiderLayout } from "./components/RiderLayout";
 import { AdminLayout } from "./components/AdminLayout";
+import { PortalSimulator } from "./components/PortalSimulator";
 
 // Customer Pages
 import { CustomerHome } from "./pages/CustomerHome";
 import { CustomerVendorMenu } from "./pages/CustomerVendorMenu";
 import { CustomerCart, CustomerCheckout } from "./pages/CustomerCartAndCheckout";
 import { CustomerOrders, CustomerProfile } from "./pages/CustomerOrdersAndProfile";
+import { VendorOnboarding } from "./pages/VendorOnboarding";
+import { RiderOnboarding } from "./pages/RiderOnboarding";
 import { Login } from "./pages/Login";
 
 // Vendor Pages
@@ -39,12 +42,15 @@ import {
 } from "./pages/AdminManagementPages";
 import { AdminPOS } from "./pages/AdminPOS";
 import { AdminEmployees } from "./pages/AdminEmployees";
+import { AdminWallets } from "./pages/AdminWallets";
+import { AdminNotifications } from "./pages/AdminNotifications";
 
 export default function App() {
   return (
     <DatabaseProvider>
       <BrowserRouter>
         <ScrollToTop />
+        <PortalSimulator />
 
         <Routes>
           
@@ -77,10 +83,19 @@ export default function App() {
                 <CustomerOrders />
               </AuthGuard>
             } />
-            
             <Route path="profile" element={
               <AuthGuard allowedRoles={["customer"]}>
                 <CustomerProfile />
+              </AuthGuard>
+            } />
+            <Route path="onboard-vendor" element={
+              <AuthGuard allowedRoles={["customer"]}>
+                <VendorOnboarding />
+              </AuthGuard>
+            } />
+            <Route path="onboard-rider" element={
+              <AuthGuard allowedRoles={["customer"]}>
+                <RiderOnboarding />
               </AuthGuard>
             } />
           </Route>
@@ -121,7 +136,7 @@ export default function App() {
           {/* ADMIN PORTAL PORT */}
           {/* ================================================= */}
           <Route path="/admin" element={
-            <AuthGuard allowedRoles={["admin", "employee"]}>
+            <AuthGuard allowedRoles={["admin", "employee", "super_admin"]}>
               <AdminLayout />
             </AuthGuard>
           }>
@@ -132,8 +147,10 @@ export default function App() {
             <Route path="riders" element={<AdminRiders />} />
             <Route path="customers" element={<AdminCustomers />} />
             <Route path="employees" element={<AdminEmployees />} />
+            <Route path="wallets" element={<AdminWallets />} />
             <Route path="pos" element={<AdminPOS />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="notifications" element={<AdminNotifications />} />
           </Route>
 
           {/* Catch-all Wildcard fallback redirects */}

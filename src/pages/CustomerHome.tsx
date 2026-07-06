@@ -1,12 +1,47 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
-import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, LayoutGrid, Store, UtensilsCrossed, Apple, Pill, ShoppingBag, Flame, Shuffle, ArrowUpDown } from "lucide-react";
+import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, LayoutGrid, Store, UtensilsCrossed, Apple, Pill, ShoppingBag, Flame, Shuffle, ArrowUpDown, Heart } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
 export const CustomerHome: React.FC = () => {
-  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [] } = useDatabase();
+  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser } = useDatabase();
+  
+  // Sync favorites
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    const key = `fd_favorites_${currentUser?.id || "guest"}`;
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : ["v-1", "v-2"];
+  });
+
+  useEffect(() => {
+    const handleSync = () => {
+      const key = `fd_favorites_${currentUser?.id || "guest"}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        setFavorites(JSON.parse(saved));
+      }
+    };
+    window.addEventListener("fd-favorites-updated", handleSync);
+    return () => window.removeEventListener("fd-favorites-updated", handleSync);
+  }, [currentUser]);
+
+  const handleToggleFavorite = (vendorId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const key = `fd_favorites_${currentUser?.id || "guest"}`;
+    let newFavs: string[];
+    if (favorites.includes(vendorId)) {
+      newFavs = favorites.filter(id => id !== vendorId);
+    } else {
+      newFavs = [...favorites, vendorId];
+    }
+    localStorage.setItem(key, JSON.stringify(newFavs));
+    setFavorites(newFavs);
+    window.dispatchEvent(new Event("fd-favorites-updated"));
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedMerchantCategory, setSelectedMerchantCategory] = useState<string | null>(null);
@@ -679,6 +714,16 @@ export const CustomerHome: React.FC = () => {
                       </span>
                     </div>
                   )}
+
+                  {/* Favorite Toggle Button on cover card */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleFavorite(vendor.id, e)}
+                    className="absolute top-3 left-3 p-2 bg-white/90 hover:bg-white backdrop-blur-md rounded-xl text-gray-400 hover:text-red-500 hover:scale-110 transition duration-200 shadow-sm flex items-center justify-center z-20 cursor-pointer"
+                    title={favorites.includes(vendor.id) ? "Remove from Favorites" : "Add to Favorites"}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${favorites.includes(vendor.id) ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
+                  </button>
 
                   {/* Rating Badge on cover like mock */}
                   <div className="absolute top-3 right-3 py-1 px-2 bg-white/95 backdrop-blur-md rounded-xl text-[10px] font-black text-gray-800 shadow-sm flex items-center gap-0.5 z-20">

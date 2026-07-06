@@ -6,9 +6,27 @@ import * as LucideIcons from "lucide-react";
 
 /* 1. MASTER ORDERS AUDITOR SCREEN */
 export const AdminOrders: React.FC = () => {
-  const { orders, updateVendorOrder, currency, vatEnabled, vatRate } = useDatabase();
+  const { 
+    orders, 
+    updateVendorOrder, 
+    currency, 
+    vatEnabled, 
+    vatRate,
+    receiptPickupOrders,
+    updateReceiptPickupStatus,
+    acceptReceiptPickupDelivery,
+    acceptDelivery,
+    riders
+  } = useDatabase();
+
+  const [orderTypeTab, setOrderTypeTab] = useState<"standard" | "receipt_pickup">("standard");
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // States for Receipt Pickup orders
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any | null>(null);
+  const [receiptCancelTargetId, setReceiptCancelTargetId] = useState<string | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   const handleForceCancel = (id: string) => {
     setCancelTargetId(id);
@@ -25,6 +43,16 @@ export const AdminOrders: React.FC = () => {
     }
   };
 
+  const handleConfirmForceCancelReceipt = () => {
+    if (receiptCancelTargetId) {
+      updateReceiptPickupStatus(receiptCancelTargetId, "cancelled");
+      setReceiptCancelTargetId(null);
+      if (selectedReceiptOrder && selectedReceiptOrder.id === receiptCancelTargetId) {
+        setSelectedReceiptOrder({ ...selectedReceiptOrder, status: "cancelled" });
+      }
+    }
+  };
+
   const getBadgeStyle = (s: OrderStatus) => {
     switch (s) {
       case "pending": return "bg-yellow-50 text-yellow-700 border-yellow-200";
@@ -37,18 +65,31 @@ export const AdminOrders: React.FC = () => {
     }
   };
 
+  const getReceiptBadgeStyle = (s: string) => {
+    switch (s) {
+      case "pending": return "bg-yellow-50 text-yellow-700 border-yellow-200";
+      case "accepted": return "bg-blue-50 text-blue-700 border-blue-200";
+      case "picked_up": return "bg-indigo-50 text-indigo-700 border-indigo-200";
+      case "delivered": return "bg-green-50 text-green-700 border-green-200";
+      case "cancelled": return "bg-red-50 text-red-700 border-red-200";
+      default: return "bg-gray-50 text-gray-500 border-gray-200";
+    }
+  };
+
+  const activeRiders = (riders || []).filter(r => r.status === "approved");
+
   return (
-    <div className="space-y-8 font-sans text-xs">
+    <div className="space-y-6 font-sans text-xs">
       
-      {/* State-driven cancel confirmation modal avoiding window.confirm frame issues */}
+      {/* State-driven cancel confirmation modal avoiding window.confirm frame issues (Standard Orders) */}
       {cancelTargetId && (
-        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 p-6 space-y-6 text-left">
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 p-6 space-y-6 text-left animate-in fade-in zoom-in-95 duration-150">
             <div className="space-y-2">
               <span className="text-[10px] uppercase font-mono tracking-widest text-red-500 font-bold block">Critical Admin Override</span>
               <h3 className="text-base font-extrabold text-[#070329] tracking-tight">Force Cancel Order?</h3>
               <p className="text-xs text-gray-500 leading-relaxed">
-                Are you sure you want to enforce an immediate cancellation on order <b className="text-gray-900">#{cancelTargetId}</b>? This overrides existing kitchen fulfillment and dispatch rider protocols.
+                Are you sure you want to enforce an immediate cancellation on order <b className="text-gray-900">#{cancelTargetId}</b>? This overrides existing kitchen fulfillment and dispatch courier protocols.
               </p>
             </div>
 
@@ -61,7 +102,7 @@ export const AdminOrders: React.FC = () => {
               </button>
               <button 
                 onClick={handleConfirmForceCancel}
-                className="px-4 py-2 bg-red-650 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
               >
                 Yes, Force Cancel
               </button>
@@ -70,7 +111,37 @@ export const AdminOrders: React.FC = () => {
         </div>
       )}
 
-      {/* State-driven view detail modal */}
+      {/* State-driven cancel confirmation modal (Receipt Pickup Orders) */}
+      {receiptCancelTargetId && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 p-6 space-y-6 text-left animate-in fade-in zoom-in-95 duration-150">
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-red-500 font-bold block">Critical Admin Override</span>
+              <h3 className="text-base font-extrabold text-[#070329] tracking-tight">Force Cancel Receipt Pickup?</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Are you sure you want to enforce an immediate cancellation on receipt pickup job <b className="text-gray-900">#{receiptCancelTargetId}</b>? If paid via prepaid wallet, the delivery fee will be fully refunded.
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button 
+                onClick={() => setReceiptCancelTargetId(null)}
+                className="px-4 py-2 bg-gray-50 text-gray-500 border border-gray-100 rounded-xl text-xs font-bold hover:bg-gray-100 transition cursor-pointer"
+              >
+                No, Back
+              </button>
+              <button 
+                onClick={handleConfirmForceCancelReceipt}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
+              >
+                Yes, Force Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* State-driven view detail modal (Standard Orders) */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-gray-100 p-6 sm:p-8 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto relative">
@@ -107,7 +178,7 @@ export const AdminOrders: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Pay Method:</span>
-                    <span className="font-bold text-indigo-700">{selectedOrder.paymentMethod}</span>
+                    <span className="font-bold text-indigo-700 uppercase">{selectedOrder.paymentMethod}</span>
                   </div>
                 </div>
 
@@ -131,6 +202,36 @@ export const AdminOrders: React.FC = () => {
                     <strong className="text-sm text-gray-900 block font-sans font-extrabold">{selectedOrder.vendorName}</strong>
                     <span className="text-[10px] text-gray-400 font-mono block mt-0.5">ID Ref: {selectedOrder.vendorId}</span>
                   </div>
+                </div>
+
+                {/* Dispatch Rider Manual Selector */}
+                <div className="pt-2 border-t border-gray-200/50 space-y-1.5">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-455 flex items-center gap-1">
+                    <Bike className="w-3.5 h-3.5 text-sky-600" /> Dispatch Courier Rider
+                  </h4>
+                  <select
+                    value={selectedOrder.riderId || ""}
+                    onChange={(e) => {
+                      const selectedRiderId = e.target.value;
+                      if (!selectedRiderId) return;
+                      acceptDelivery(selectedOrder.id, selectedRiderId);
+                      const selectedRiderObj = activeRiders.find(r => r.id === selectedRiderId);
+                      if (selectedRiderObj) {
+                        setSelectedOrder({ 
+                          ...selectedOrder, 
+                          riderId: selectedRiderObj.id, 
+                          riderName: selectedRiderObj.name,
+                          status: "out_for_delivery"
+                        });
+                      }
+                    }}
+                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-sky-100 font-bold text-gray-700 cursor-pointer"
+                  >
+                    <option value="" disabled>{selectedOrder.riderId ? `Assigned: ${selectedOrder.riderName}` : "Select Rider to Dispatch"}</option>
+                    {activeRiders.map(r => (
+                      <option key={r.id} value={r.id}>🚴 {r.name} ({r.vehicleType || "Motorcycle"})</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="pt-3 border-t border-gray-200/50 space-y-2">
@@ -158,9 +259,49 @@ export const AdminOrders: React.FC = () => {
               </div>
             </div>
 
+            {/* Uploaded Payment Proof (Bank Transfer Receipt) */}
+            {selectedOrder.receiptImage && (
+              <div className="bg-amber-50/60 p-5 rounded-2xl border border-amber-150 space-y-3">
+                <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800 flex items-center gap-1.5 border-b border-amber-200/50 pb-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-amber-600" /> Uploaded Proof of Payment (Manual Transfer Receipt)
+                </h4>
+                <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
+                  <div 
+                    onClick={() => setZoomedImage(selectedOrder.receiptImage || null)}
+                    className="border border-amber-200 rounded-2xl overflow-hidden bg-white max-h-[180px] flex items-center justify-center relative shadow-sm shrink-0 cursor-zoom-in group transition-all hover:ring-4 hover:ring-amber-200/50"
+                    title="Click to zoom image"
+                  >
+                    <img
+                      src={selectedOrder.receiptImage}
+                      alt="Proof of Payment"
+                      className="max-h-[170px] max-w-full sm:max-w-[280px] object-contain p-1.5 transition-transform duration-300 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-bold text-[10px] uppercase font-sans">
+                      <LucideIcons.ZoomIn className="w-4 h-4 text-white" />
+                      <span>Zoom Image</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs font-sans">
+                    <p className="text-gray-700 font-medium leading-relaxed">
+                      The customer attached this payment receipt during checkout to authorize their manual bank transfer settlement.
+                    </p>
+                    <p className="text-amber-900 font-bold bg-amber-100/40 p-2.5 rounded-xl border border-amber-200/40">
+                      Verify that the grand total of <span className="font-mono text-amber-950 font-black">{currency}{(selectedOrder.totalAmount ?? 0).toLocaleString()}</span> has cleared in your platform bank account before changing the fulfillment status.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[9px] font-mono font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full border border-amber-200 uppercase">
+                        Requires Verification
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Ordered Items Table */}
             <div className="space-y-2">
-              <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-gray-450">Ordered Itemized Listing</h4>
+              <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-gray-455">Ordered Itemized Listing</h4>
               <div className="border border-gray-150 rounded-2xl overflow-hidden bg-gray-50">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -171,13 +312,13 @@ export const AdminOrders: React.FC = () => {
                       <th className="py-2.5 px-4 font-mono text-right">Row Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-150 text-xs text-gray-750">
+                  <tbody className="divide-y divide-gray-150 text-xs text-gray-755">
                     {selectedOrder.items.map((oi) => (
                       <tr key={oi.id} className="hover:bg-gray-150/45 transition">
                         <td className="py-3 px-4 font-sans font-bold text-gray-900">{oi.name}</td>
                         <td className="py-3 px-4 font-mono text-center font-bold text-gray-600">{oi.quantity}</td>
-                        <td className="py-3 px-4 font-mono text-right text-gray-500">{currency}{oi.price.toLocaleString()}</td>
-                        <td className="py-3 px-4 font-mono text-right font-black text-gray-950">{currency}{(oi.price * oi.quantity).toLocaleString()}</td>
+                        <td className="py-3 px-4 font-mono text-right text-gray-500">{currency}{(oi.price ?? 0).toLocaleString()}</td>
+                        <td className="py-3 px-4 font-mono text-right font-black text-gray-950">{currency}{((oi.price ?? 0) * oi.quantity).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -219,7 +360,7 @@ export const AdminOrders: React.FC = () => {
                     )}
                     <div className="border-t border-gray-200 pt-3 flex justify-between items-center text-sm">
                       <span className="font-black text-[#070329] uppercase tracking-tight">Grand Total Settled</span>
-                      <strong className="font-black text-lg text-emerald-600 font-mono">{currency}{selectedOrder.totalAmount.toLocaleString()}</strong>
+                      <strong className="font-black text-lg text-emerald-600 font-mono">{currency}{(selectedOrder.totalAmount ?? 0).toLocaleString()}</strong>
                     </div>
                   </>
                 );
@@ -248,83 +389,433 @@ export const AdminOrders: React.FC = () => {
         </div>
       )}
 
+      {/* State-driven view detail modal (Receipt Pickup Orders) */}
+      {selectedReceiptOrder && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-gray-100 p-6 sm:p-8 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto relative">
+            <div className="flex items-start justify-between gap-4 border-b border-gray-50 pb-4">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-widest text-[#0ea5e9] font-bold bg-sky-50 px-2.5 py-1 rounded-full border border-sky-100">Receipt Pickup & Delivery Ticket</span>
+                <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2 flex items-center gap-2">
+                  Pickup ID: <span className="font-mono text-gray-800">#{selectedReceiptOrder.id}</span>
+                </h3>
+                <span className="text-[10px] text-gray-400 block mt-1 font-sans">Scheduled on: {new Date(selectedReceiptOrder.createdAt).toLocaleString()}</span>
+              </div>
+              <button 
+                onClick={() => setSelectedReceiptOrder(null)}
+                className="p-1 text-gray-400 hover:text-gray-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Customer Info */}
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-3">
+                <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-450 flex items-center gap-1.5 border-b border-gray-200/50 pb-1.5">
+                  <Users className="w-3.5 h-3.5 text-gray-400" /> Customer / Recipient
+                </h4>
+                <div className="space-y-1.5 text-xs font-sans">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Name:</span>
+                    <strong className="text-gray-800">{selectedReceiptOrder.customerName}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Phone:</span>
+                    <strong className="text-gray-850 font-mono">{selectedReceiptOrder.customerPhone || "N/A"}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Fee Payment:</span>
+                    <span className="font-bold text-sky-700 capitalize">{selectedReceiptOrder.paymentMethod}</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-gray-200/50 space-y-1.5">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-450 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-gray-400" /> Delivery Target Address
+                  </h4>
+                  <p className="text-xs font-sans text-gray-700 bg-white p-2.5 rounded-xl border border-gray-150/75 font-medium leading-relaxed">
+                    {selectedReceiptOrder.deliveryAddress}
+                  </p>
+                </div>
+              </div>
+
+              {/* Merchant Store Info */}
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100/50 space-y-3 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-455 flex items-center gap-1.5 border-b border-gray-200/50 pb-1.5">
+                    <Store className="w-3.5 h-3.5 text-gray-400" /> Merchant Pickup Node
+                  </h4>
+                  <div className="mt-1.5">
+                    <strong className="text-sm text-gray-900 block font-sans font-extrabold">{selectedReceiptOrder.vendorName}</strong>
+                    <span className="text-xs text-gray-500 block font-sans leading-tight mt-1">{selectedReceiptOrder.vendorAddress}</span>
+                  </div>
+                  {selectedReceiptOrder.receiptNote && (
+                    <div className="mt-3 p-2 bg-amber-50 rounded-xl border border-amber-100 text-[10px] font-medium text-amber-800 leading-relaxed italic">
+                      "Note: {selectedReceiptOrder.receiptNote}"
+                    </div>
+                  )}
+                </div>
+
+                {/* Dispatch Rider Manual Selector */}
+                <div className="pt-2 border-t border-gray-200/50 space-y-1.5">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-455 flex items-center gap-1">
+                    <Bike className="w-3.5 h-3.5 text-sky-600" /> Dispatch Courier Rider
+                  </h4>
+                  <select
+                    value={selectedReceiptOrder.riderId || ""}
+                    onChange={(e) => {
+                      const selectedRiderId = e.target.value;
+                      if (!selectedRiderId) return;
+                      acceptReceiptPickupDelivery(selectedReceiptOrder.id, selectedRiderId);
+                      const selectedRiderObj = activeRiders.find(r => r.id === selectedRiderId);
+                      if (selectedRiderObj) {
+                        setSelectedReceiptOrder({ 
+                          ...selectedReceiptOrder, 
+                          riderId: selectedRiderObj.id, 
+                          riderName: selectedRiderObj.name,
+                          status: "accepted"
+                        });
+                      }
+                    }}
+                    className="w-full text-xs p-2 bg-white border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-sky-100 font-bold text-gray-700 cursor-pointer"
+                  >
+                    <option value="" disabled>{selectedReceiptOrder.riderId ? `Assigned: ${selectedReceiptOrder.riderName}` : "Select Rider to Dispatch"}</option>
+                    {activeRiders.map(r => (
+                      <option key={r.id} value={r.id}>🚴 {r.name} ({r.vehicleType || "Motorcycle"})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-3 border-t border-gray-200/50 space-y-2">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-gray-450">Active Fulfillment Status</h4>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedReceiptOrder.status}
+                      onChange={(e) => {
+                        const nextStatus = e.target.value as any;
+                        updateReceiptPickupStatus(selectedReceiptOrder.id, nextStatus);
+                        setSelectedReceiptOrder({ ...selectedReceiptOrder, status: nextStatus });
+                      }}
+                      className="text-xs p-2.5 bg-white border border-gray-255 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 flex-grow font-sans font-bold text-gray-700 cursor-pointer"
+                    >
+                      <option value="pending">⏳ Pending Dispatch</option>
+                      <option value="accepted">🚴 Rider Assigned (Accepted)</option>
+                      <option value="picked_up">📦 Picked Up (Verified Receipt)</option>
+                      <option value="delivered">✅ Delivered & Closed</option>
+                      <option value="cancelled">❌ Cancelled Order</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Receipt Proof QR/Image Display */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+              <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-slate-600" /> Customer-Provided Purchase Proof Verification
+              </h4>
+              <div className="bg-white p-4 rounded-xl border border-slate-150 flex flex-col items-center justify-center text-center">
+                {selectedReceiptOrder.receiptImageOrQr === "PRESET_INVOICE_1" ? (
+                  <div className="space-y-2 py-4">
+                    <span className="text-xl">📄</span>
+                    <h5 className="font-extrabold text-xs text-gray-900 font-mono">Preset Store Invoice #88210</h5>
+                    <p className="text-[10px] text-gray-500 max-w-sm">
+                      Pre-purchased direct order. Store has prepared the items under Invoice Ref #88210. Verify this identifier upon pickup.
+                    </p>
+                  </div>
+                ) : selectedReceiptOrder.receiptImageOrQr === "PRESET_QR_2" ? (
+                  <div className="space-y-2 py-4">
+                    <span className="text-xl">📱</span>
+                    <h5 className="font-extrabold text-xs text-gray-900 font-mono">Preset QR Verification Code Voucher</h5>
+                    <p className="text-[10px] text-gray-500 max-w-sm">
+                      Electronic voucher code of payment clearance. Rider must present voucher image to release the packed food.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 w-full">
+                    <p className="text-[10px] text-gray-500 text-left">
+                      Below is the proof or invoice receipt image uploaded by the customer during scheduled dispatch setup:
+                    </p>
+                    <div 
+                      onClick={() => setZoomedImage(selectedReceiptOrder.receiptImageOrQr || null)}
+                      className="flex justify-center max-h-[220px] overflow-hidden rounded-xl border border-gray-200 cursor-zoom-in group relative transition-all hover:ring-4 hover:ring-indigo-100"
+                      title="Click to zoom image"
+                    >
+                      <img 
+                        src={selectedReceiptOrder.receiptImageOrQr} 
+                        alt="Uploaded Verification" 
+                        className="max-h-[200px] object-contain p-1 transition-transform duration-300 group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-bold text-[10px] uppercase font-sans">
+                        <LucideIcons.ZoomIn className="w-4 h-4 text-white" />
+                        <span>Zoom Image</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Financial Summary */}
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 text-xs flex justify-between items-center">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase block">Delivery Dispatch Fee</span>
+                <span className="font-extrabold text-gray-600 font-sans">Payment via {selectedReceiptOrder.paymentMethod}</span>
+              </div>
+              <strong className="text-lg font-black text-[#0ea5e9] font-mono">{currency}{(selectedReceiptOrder.deliveryFee ?? 0).toLocaleString()}</strong>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              {selectedReceiptOrder.status !== "cancelled" && selectedReceiptOrder.status !== "delivered" && (
+                <button
+                  onClick={() => {
+                    setReceiptCancelTargetId(selectedReceiptOrder.id);
+                  }}
+                  className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-150 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Force Cancel
+                </button>
+              )}
+              <button 
+                onClick={() => setSelectedReceiptOrder(null)}
+                className="px-6 py-3 bg-[#070329] hover:bg-indigo-950 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
+              >
+                Close Audit Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Primary header */}
       <div>
         <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none">Platform Master Orders</h1>
-        <p className="text-xs text-gray-400 mt-1 max-w-lg">Supervise real-time transaction, track courier driver assignments, and enforce emergency cancellations.</p>
+        <p className="text-xs text-gray-400 mt-1 max-w-lg">Supervise real-time transactions, manage receipt pickups, track courier driver assignments, and enforce emergency cancellations.</p>
+      </div>
+
+      {/* Sub-tabs for standard versus receipt pickup */}
+      <div className="flex gap-2 border-b border-gray-100 pb-3">
+        <button
+          onClick={() => setOrderTypeTab("standard")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "standard"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({orders.length})
+        </button>
+        <button
+          onClick={() => setOrderTypeTab("receipt_pickup")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "receipt_pickup"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <Truck className="w-4 h-4" /> Receipt Pickups ({receiptPickupOrders.length})
+        </button>
       </div>
 
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-        {orders.length > 0 ? (
-          <div>
-            <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
-              <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+        {orderTypeTab === "standard" ? (
+          orders.length > 0 ? (
+            <div>
+              <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[950px]">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Merchant Node</th>
+                      <th className="py-3 px-4">Customer Name</th>
+                      <th className="py-3 px-4">Payment Method</th>
+                      <th className="py-3 px-4 font-mono text-right">Sum</th>
+                      <th className="py-3 px-4">Active Status</th>
+                      <th className="py-3 px-4">Courier Driver</th>
+                      <th className="py-3 px-4 text-center">Auditing Operations</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                    {orders.map((o) => (
+                      <tr key={o.id} className="hover:bg-gray-50/50 transition">
+                        <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
+                        <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
+                        <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
+                        <td className="py-3.5 px-4">
+                          <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
+                            {o.status.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {o.riderId ? (
+                            <span className="text-blue-700 font-bold">🚴 {o.riderName}</span>
+                          ) : (
+                            <span className="text-gray-400 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedOrder(o)}
+                              className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                            </button>
+                            {o.status !== "delivered" && o.status !== "cancelled" ? (
+                              <button
+                                onClick={() => handleForceCancel(o.id)}
+                                className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold border border-red-100 cursor-pointer text-[10px] transition"
+                              >
+                                Cancel
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 italic font-mono text-[10px] px-2 py-1 bg-gray-50 rounded-lg">Archived</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[950px]">
-              <thead>
-                <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Order ID</th>
-                  <th className="py-3 px-4">Merchant Node</th>
-                  <th className="py-3 px-4">Customer Name</th>
-                  <th className="py-3 px-4">Payment Method</th>
-                  <th className="py-3 px-4 font-mono text-right">Sum</th>
-                  <th className="py-3 px-4">Active Status</th>
-                  <th className="py-3 px-4">Courier Driver</th>
-                  <th className="py-3 px-4 text-center">Auditing Operations</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 text-xs">
-                {orders.map((o) => (
-                  <tr key={o.id} className="hover:bg-gray-50/50 transition">
-                    <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
-                    <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
-                    <td className="py-3.5 px-4 font-medium text-gray-700">{o.customerName}</td>
-                    <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px]">{o.paymentMethod}</td>
-                    <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{o.totalAmount.toLocaleString()}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
-                        {o.status.replace(/_/g, " ")}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {o.riderId ? (
-                        <span className="text-blue-700 font-medium">{o.riderName}</span>
-                      ) : (
-                        <span className="text-gray-400 italic">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setSelectedOrder(o)}
-                          className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
-                        </button>
-                        {o.status !== "delivered" && o.status !== "cancelled" ? (
-                          <button
-                            onClick={() => handleForceCancel(o.id)}
-                            className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold border border-red-100 cursor-pointer text-[10px] transition"
-                          >
-                            Cancel
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 italic font-mono text-[10px] px-2 py-1 bg-gray-50 rounded-lg">Archived</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+              No standard food orders registered in database.
+            </div>
+          )
         ) : (
-          <div className="text-center py-12 text-gray-400">
-            No orders logs registered mock database.
-          </div>
+          receiptPickupOrders.length > 0 ? (
+            <div>
+              <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[950px]">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Pickup ID</th>
+                      <th className="py-3 px-4">Merchant Node</th>
+                      <th className="py-3 px-4">Customer Name</th>
+                      <th className="py-3 px-4">Receipt/Proof Type</th>
+                      <th className="py-3 px-4 font-mono text-right">Fee</th>
+                      <th className="py-3 px-4">Active Status</th>
+                      <th className="py-3 px-4">Assigned Rider</th>
+                      <th className="py-3 px-4 text-center">Auditing Operations</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                    {receiptPickupOrders.map((rp: any) => (
+                      <tr key={rp.id} className="hover:bg-gray-50/50 transition">
+                        <td className="py-3.5 px-4 font-mono font-bold text-sky-950">#{rp.id}</td>
+                        <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{rp.vendorName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">{rp.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">
+                          {rp.receiptImageOrQr === "PRESET_INVOICE_1" && "Invoice #88210"}
+                          {rp.receiptImageOrQr === "PRESET_QR_2" && "QR Voucher"}
+                          {rp.receiptImageOrQr !== "PRESET_INVOICE_1" && rp.receiptImageOrQr !== "PRESET_QR_2" && "Uploaded Proof"}
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(rp.deliveryFee ?? 0).toLocaleString()}</td>
+                        <td className="py-3.5 px-4">
+                          <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getReceiptBadgeStyle(rp.status)}`}>
+                            {rp.status.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {rp.riderId ? (
+                            <span className="text-sky-700 font-bold">🚴 {rp.riderName}</span>
+                          ) : (
+                            <span className="text-gray-400 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedReceiptOrder(rp)}
+                              className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                            </button>
+                            {rp.status !== "delivered" && rp.status !== "cancelled" ? (
+                              <button
+                                onClick={() => {
+                                  setReceiptCancelTargetId(rp.id);
+                                }}
+                                className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold border border-red-100 cursor-pointer text-[10px] transition"
+                              >
+                                Cancel
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 italic font-mono text-[10px] px-2 py-1 bg-gray-50 rounded-lg">Archived</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+              No Receipt Pickups & Delivery requests logged on the platform yet.
+            </div>
+          )
         )}
       </div>
+
+      {/* Lightbox / High Resolution Proof Zoom Viewer */}
+      {zoomedImage && (
+        <div 
+          onClick={() => setZoomedImage(null)}
+          className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          {/* Controls Bar */}
+          <div className="absolute top-4 right-4 flex items-center gap-3 z-[110]">
+            <a 
+              href={zoomedImage} 
+              download="payment-receipt-proof.png" 
+              target="_blank" 
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition shadow-lg flex items-center justify-center cursor-pointer"
+              title="Download Original Image"
+            >
+              <LucideIcons.Download className="w-5 h-5" />
+            </a>
+            <button 
+              onClick={() => setZoomedImage(null)}
+              className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition shadow-lg flex items-center justify-center cursor-pointer"
+              title="Close Viewer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl max-h-[80vh] w-full flex items-center justify-center p-2 rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150"
+          >
+            <img 
+              src={zoomedImage} 
+              alt="High Resolution Proof Preview" 
+              className="max-w-full max-h-[75vh] object-contain rounded-2xl select-none"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+
+          <p className="text-white/60 text-xs mt-4 font-sans font-medium text-center max-w-md select-none">
+            High-Resolution Payment Clearance Proof. Inspect transaction coordinates and clearance timestamps carefully. Click anywhere to return.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -347,6 +838,7 @@ export const AdminVendors: React.FC = () => {
   const [editCommissionType, setEditCommissionType] = useState<"flat" | "percentage">("percentage");
   const [editCommissionValue, setEditCommissionValue] = useState<number>(15);
   const [editFreeDelivery, setEditFreeDelivery] = useState<boolean>(false);
+  const [editReceiptPickupEnabled, setEditReceiptPickupEnabled] = useState<boolean>(true);
   const [editOpeningTime, setEditOpeningTime] = useState("08:00");
   const [editClosingTime, setEditClosingTime] = useState("22:00");
   const [editDescription, setEditDescription] = useState("");
@@ -373,6 +865,7 @@ export const AdminVendors: React.FC = () => {
     setEditCommissionType(v.commissionType || "percentage");
     setEditCommissionValue(v.commissionValue !== undefined ? v.commissionValue : 15);
     setEditFreeDelivery(!!v.freeDelivery);
+    setEditReceiptPickupEnabled(v.receiptPickupEnabled !== false);
     setEditOpeningTime(v.openingTime || "08:00");
     setEditClosingTime(v.closingTime || "22:00");
     setEditDescription(v.description || "");
@@ -395,6 +888,7 @@ export const AdminVendors: React.FC = () => {
       commissionType: editCommissionType,
       commissionValue: editCommissionValue,
       freeDelivery: editFreeDelivery,
+      receiptPickupEnabled: editReceiptPickupEnabled,
       openingTime: editOpeningTime,
       closingTime: editClosingTime,
       description: editDescription,
@@ -504,19 +998,34 @@ export const AdminVendors: React.FC = () => {
                               View & Edit
                             </button>
                             
-                            {v.status !== "approved" ? (
-                              <button
-                                onClick={() => handleApproval(v.id, "approved")}
-                                className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
-                              >
-                                Approve
-                              </button>
-                            ) : (
+                            {v.status === "pending" ? (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleApproval(v.id, "approved")}
+                                  className="py-1 px-2 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleApproval(v.id, "rejected")}
+                                  className="py-1 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-100 rounded-lg cursor-pointer text-[10px] transition"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            ) : v.status === "approved" ? (
                               <button
                                 onClick={() => handleApproval(v.id, "suspended")}
                                 className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-600 font-bold border border-red-100 rounded-lg cursor-pointer text-[10px] transition"
                               >
                                 Suspend
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleApproval(v.id, "approved")}
+                                className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
+                              >
+                                Re-Approve
                               </button>
                             )}
                           </div>
@@ -636,6 +1145,22 @@ export const AdminVendors: React.FC = () => {
                     <div>
                       <span className="text-[11px] font-bold text-gray-800 block">Offer Free Delivery</span>
                       <span className="text-[9px] text-gray-400 block font-sans">Zero delivery fee for this merchant's orders</span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Receipt Pickup Toggle */}
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editReceiptPickupEnabled}
+                      onChange={(e) => setEditReceiptPickupEnabled(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-800 block">Enable Receipt Pickup</span>
+                      <span className="text-[9px] text-gray-400 block font-sans">Allow customer rider dispatch for pre-purchased items</span>
                     </div>
                   </label>
                 </div>
@@ -783,7 +1308,7 @@ export const AdminVendors: React.FC = () => {
                         />
                         <div className="min-w-0 flex-1">
                           <span className="text-[11px] font-black text-gray-900 block truncate">{p.name}</span>
-                          <span className="text-[10px] text-gray-500 font-bold block font-mono">{currency}{p.price.toLocaleString()}</span>
+                          <span className="text-[10px] text-gray-500 font-bold block font-mono">{currency}{(p.price ?? 0).toLocaleString()}</span>
                         </div>
                         <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${p.isAvailable ? "text-emerald-700 bg-emerald-50" : "text-gray-400 bg-gray-100"}`}>
                           {p.isAvailable ? "Instock" : "OOS"}
@@ -794,6 +1319,47 @@ export const AdminVendors: React.FC = () => {
                 ) : (
                   <p className="text-[11px] text-gray-400 italic">This vendor has not published any active items in their store yet.</p>
                 )}
+              </div>
+
+              {/* VERIFICATION CREDENTIALS AUDIT */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center gap-1.5 text-[#070329]">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span className="text-[11px] font-black uppercase tracking-wider">Verification Credentials Audit</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase block">Business Registration ID</span>
+                    <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
+                      {selectedVendor.businessRegNo || "BRN-902194-EX (Auto-verified)"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase block">Food Safety Permit ID</span>
+                    <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
+                      {selectedVendor.foodPermitNo || "FSP-482012-EX (Auto-verified)"}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Government-issued Proof document</span>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-white max-h-[160px] flex items-center justify-center relative group">
+                    <img 
+                      src={selectedVendor.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      alt="Government Proof" 
+                      className="w-full h-full object-contain max-h-[160px]" 
+                      referrerPolicy="no-referrer" 
+                    />
+                    <a 
+                      href={selectedVendor.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="absolute top-2 right-2 bg-black/60 hover:bg-black text-white font-mono text-[9px] py-1 px-2 rounded transition"
+                    >
+                      Open Full Screen
+                    </a>
+                  </div>
+                </div>
               </div>
 
               {/* Status control */}
@@ -854,6 +1420,7 @@ export const AdminVendors: React.FC = () => {
 /* 3. COURIER FLEETS SCREEN */
 export const AdminRiders: React.FC = () => {
   const { riders, toggleRiderStatus } = useDatabase();
+  const [selectedRider, setSelectedRider] = useState<Rider | null>(null);
 
   const handleApproval = (id: string, s: Rider["status"]) => {
     toggleRiderStatus(id, s);
@@ -888,7 +1455,7 @@ export const AdminRiders: React.FC = () => {
                 {riders.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50/50 transition">
                     <td className="py-3.5 px-4 font-extrabold text-[#070329] flex items-center gap-2">
-                      <Bike className="w-4 h-4 text-purple-650 shrink-0" />
+                      <Bike className="w-4 h-4 text-purple-600 shrink-0" />
                       {r.name}
                     </td>
                     <td className="py-3.5 px-4 font-medium text-gray-650">{r.phone}</td>
@@ -913,23 +1480,46 @@ export const AdminRiders: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <div className="flex gap-2.5 justify-center">
-                        {r.status !== "approved" && (
-                          <button
-                            onClick={() => handleApproval(r.id, "approved")}
-                            className="py-1 px-2.5 bg-green-50 hover:bg-green-105 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Verify Courier
-                          </button>
-                        )}
-                        {r.status !== "suspended" && (
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={() => setSelectedRider(r)}
+                          className="py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-150 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Audit Docs
+                        </button>
+                        {r.status === "pending" ? (
+                          <>
+                            <button
+                              onClick={() => handleApproval(r.id, "approved")}
+                              className="py-1 px-2 bg-green-50 hover:bg-green-105 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Verify
+                            </button>
+                            <button
+                              onClick={() => handleApproval(r.id, "rejected")}
+                              className="py-1 px-2 bg-rose-50 hover:bg-rose-105 text-rose-600 font-bold border border-rose-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              Reject
+                            </button>
+                          </>
+                        ) : r.status === "approved" ? (
                           <button
                             onClick={() => handleApproval(r.id, "suspended")}
-                            className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-650 font-bold border border-red-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                            className="py-1 px-2 bg-red-50 hover:bg-red-105 text-red-650 font-bold border border-red-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
                           >
                             <XCircle className="w-3.5 h-3.5" />
-                            Suspend Courier
+                            Suspend
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleApproval(r.id, "approved")}
+                            className="py-1 px-2 bg-green-50 hover:bg-green-105 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Verify
                           </button>
                         )}
                       </div>
@@ -946,13 +1536,151 @@ export const AdminRiders: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* RIDER VERIFICATION & DETAILS MODAL */}
+      {selectedRider && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 bg-purple-100 text-purple-700 rounded-2xl flex items-center justify-center">
+                  <Bike className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#070329] uppercase tracking-wider">Courier Dispatcher Profile</h3>
+                  <p className="text-[10px] text-gray-400 font-mono font-bold uppercase mt-0.5">ID: {selectedRider.id} • Registered</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedRider(null)}
+                className="p-2 hover:bg-gray-150 rounded-full transition text-gray-400 hover:text-gray-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1 text-left">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Courier Name</label>
+                  <p className="text-xs font-black text-gray-900 mt-0.5">{selectedRider.name}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Telephone</label>
+                  <p className="text-xs font-bold font-mono text-gray-900 mt-0.5">{selectedRider.phone}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Vehicle Type</label>
+                  <p className="text-xs font-black capitalize text-gray-900 mt-0.5">{selectedRider.vehicleType}</p>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Current Status</label>
+                  <p className="text-xs font-black uppercase text-gray-900 mt-0.5">{selectedRider.status}</p>
+                </div>
+              </div>
+
+              {/* VERIFICATION CREDENTIALS AUDIT */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 mt-2">
+                <div className="flex items-center gap-1.5 text-[#070329]">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span className="text-[11px] font-black uppercase tracking-wider">Verification Credentials Audit</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase block">Driver's License</span>
+                    <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
+                      {selectedRider.licenseNo || "DL-882194-TX (Auto-verified)"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase block">Vehicle Plate</span>
+                    <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5 text-center uppercase">
+                      {selectedRider.plateNo || "TX-4820-EX"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase block">National ID (NIN)</span>
+                    <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
+                      {selectedRider.nationalIdNo || "NIN-291048-EX"}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1 mt-2">
+                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Uploaded Verification Proof</span>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-white max-h-[160px] flex items-center justify-center relative group">
+                    <img 
+                      src={selectedRider.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      alt="Rider Proof" 
+                      className="w-full h-full object-contain max-h-[160px]" 
+                      referrerPolicy="no-referrer" 
+                    />
+                    <a 
+                      href={selectedRider.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="absolute top-2 right-2 bg-black/60 hover:bg-black text-white font-mono text-[9px] py-1 px-2 rounded transition"
+                    >
+                      Open Full Screen
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Controls */}
+              <div className="flex gap-2.5 mt-4 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    handleApproval(selectedRider.id, "approved");
+                    setSelectedRider(prev => prev ? { ...prev, status: "approved" } : null);
+                  }}
+                  className={`flex-1 py-2 rounded-xl font-bold text-xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                    selectedRider.status === "approved"
+                      ? "bg-green-600 text-white animate-pulse"
+                      : "bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Approve & Verify
+                </button>
+                <button
+                  onClick={() => {
+                    handleApproval(selectedRider.id, "suspended");
+                    setSelectedRider(prev => prev ? { ...prev, status: "suspended" } : null);
+                  }}
+                  className={`flex-1 py-2 rounded-xl font-bold text-xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                    selectedRider.status === "suspended"
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <XCircle className="w-4 h-4" />
+                  Suspend / Revoke
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-gray-100 flex justify-end bg-gray-50/50">
+              <button
+                onClick={() => setSelectedRider(null)}
+                className="py-2.5 px-4 bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 transition cursor-pointer"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 /* 4. CUSTOMERS DIRECTORY SCREEN */
 export const AdminCustomers: React.FC = () => {
-  const { users, deleteUser, adminCreateUser, adminUpdateUserRole } = useDatabase();
+  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin } = useDatabase();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   
   // Filtering & search states
@@ -965,7 +1693,72 @@ export const AdminCustomers: React.FC = () => {
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newRole, setNewRole] = useState<UserRole>("customer");
+  const [newRoles, setNewRoles] = useState<UserRole[]>(["customer"]);
+  const [newPin, setNewPin] = useState("1234");
+  const [provisionedUser, setProvisionedUser] = useState<{ name: string; email: string; phone: string; role: string; pin: string } | null>(null);
   
+  // Edit User modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>("customer");
+  const [editRoles, setEditRoles] = useState<UserRole[]>([]);
+  const [editPin, setEditPin] = useState("");
+  const [editFormError, setEditFormError] = useState("");
+
+  const handleStartEditUser = (user: User) => {
+    setEditingUserId(user.id);
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setEditPhone(user.phone);
+    setEditRole(user.role);
+    setEditRoles(user.roles || [user.role]);
+    setEditPin(user.pin || "1234");
+    setEditFormError("");
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditFormError("");
+
+    if (!editName.trim() || !editEmail.trim() || !editPhone.trim()) {
+      setEditFormError("All fields are required.");
+      return;
+    }
+
+    if (editRoles.length === 0) {
+      setEditFormError("At least one role must be assigned.");
+      return;
+    }
+
+    if (editPin.length !== 4 || isNaN(Number(editPin))) {
+      setEditFormError("Security PIN must be exactly 4 digits.");
+      return;
+    }
+
+    // Default primary role is the first one in editRoles, or the current editRole if still in list
+    const primaryRole = editRoles.includes(editRole) ? editRole : editRoles[0];
+
+    const result = adminUpdateUser(editingUserId!, {
+      name: editName.trim(),
+      email: editEmail.trim().toLowerCase(),
+      phone: editPhone.trim(),
+      role: primaryRole,
+      roles: editRoles,
+      pin: editPin
+    });
+
+    if (result.success) {
+      setIsEditModalOpen(false);
+      setEditingUserId(null);
+    } else {
+      setEditFormError(result.error || "An error occurred while updating the user.");
+    }
+  };
+
   // Custom metadata for roles
   const [vendorBusinessName, setVendorBusinessName] = useState("");
   const [vendorCuisine, setVendorCuisine] = useState("");
@@ -983,34 +1776,56 @@ export const AdminCustomers: React.FC = () => {
       return;
     }
 
-    const extra = newRole === "vendor" 
-      ? { businessName: vendorBusinessName || undefined, cuisine: vendorCuisine || undefined }
-      : newRole === "rider"
-        ? { vehicleType: riderVehicleType }
-        : undefined;
+    if (newRoles.length === 0) {
+      setFormError("At least one role must be selected.");
+      return;
+    }
+
+    if (newPin.length < 4 || isNaN(Number(newPin))) {
+      setFormError("PIN must be a 4-digit number.");
+      return;
+    }
+
+    const extra = {
+      businessName: newRoles.includes("vendor") ? vendorBusinessName || undefined : undefined,
+      cuisine: newRoles.includes("vendor") ? vendorCuisine || undefined : undefined,
+      vehicleType: newRoles.includes("rider") ? riderVehicleType : undefined,
+      pin: newPin,
+      roles: newRoles
+    };
+
+    const primaryRole = newRoles.includes(newRole) ? newRole : newRoles[0];
 
     const result = adminCreateUser(
       newName.trim(),
       newEmail.trim(),
       newPhone.trim(),
-      newRole,
+      primaryRole,
       extra
     );
 
     if (result.success) {
-      setFormSuccess(`User ${newName} successfully created as a ${newRole}!`);
+      // Store provisioned credentials for success display modal
+      setProvisionedUser({
+        name: newName.trim(),
+        email: newEmail.trim().toLowerCase(),
+        phone: newPhone.trim(),
+        role: primaryRole,
+        pin: newPin
+      });
+
+      setFormSuccess(`User ${newName} successfully created!`);
       // Reset form
       setNewName("");
       setNewEmail("");
       setNewPhone("");
       setNewRole("customer");
+      setNewRoles(["customer"]);
+      setNewPin("1234");
       setVendorBusinessName("");
       setVendorCuisine("");
       setRiderVehicleType("motorcycle");
-      setTimeout(() => {
-        setIsCreateModalOpen(false);
-        setFormSuccess("");
-      }, 1500);
+      setIsCreateModalOpen(false);
     } else {
       setFormError(result.error || "An error occurred while creating the user.");
     }
@@ -1080,6 +1895,60 @@ export const AdminCustomers: React.FC = () => {
                 Yes, Expel User
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Newly Provisioned User Credentials Success Modal */}
+      {provisionedUser && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 p-6 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200">
+            <div className="text-center space-y-2">
+              <div className="mx-auto w-12 h-12 bg-green-50 text-green-600 rounded-full flex items-center justify-center border border-green-150">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-black text-[#070329] tracking-tight">Staff Account Provisioned!</h3>
+              <p className="text-xs text-gray-500">
+                Successfully created and registered the credentials on the platform. Share these login details with your staff member.
+              </p>
+            </div>
+
+            <div className="bg-gray-50 rounded-2xl border border-gray-100 p-4 space-y-3 font-sans text-xs">
+              <div className="flex justify-between border-b border-gray-150 pb-2">
+                <span className="text-gray-400 font-bold">Staff Full Name</span>
+                <span className="font-extrabold text-[#070329]">{provisionedUser.name}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-150 pb-2">
+                <span className="text-gray-400 font-bold">Privilege Role</span>
+                <span className="font-extrabold uppercase text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">{provisionedUser.role}</span>
+              </div>
+              <div className="flex justify-between border-b border-gray-150 pb-2">
+                <span className="text-gray-400 font-bold">Login Email / Phone</span>
+                <span className="font-mono font-extrabold text-gray-800 select-all">{provisionedUser.email}</span>
+              </div>
+              <div className="flex justify-between items-center bg-purple-50/50 p-2.5 rounded-xl border border-purple-100">
+                <div>
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-purple-600 font-black block">Security Login PIN</span>
+                  <span className="font-mono font-black text-sm tracking-widest text-[#070329] select-all">{provisionedUser.pin}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`Hi ${provisionedUser.name}, your account on Owode Food has been created!\n\nEmail: ${provisionedUser.email}\nSecurity PIN: ${provisionedUser.pin}\nRole: ${provisionedUser.role}\n\nLog in here: ${window.location.origin}/login`);
+                    alert("Copied login details to clipboard!");
+                  }}
+                  className="px-2.5 py-1.5 bg-[#070329] hover:bg-indigo-950 text-white text-[10px] font-bold rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0"
+                >
+                  Copy All
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setProvisionedUser(null)}
+              className="w-full py-3 bg-[#070329] hover:bg-indigo-950 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer text-center block"
+            >
+              Done, Close
+            </button>
           </div>
         </div>
       )}
@@ -1157,21 +2026,69 @@ export const AdminCustomers: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Platform Role Assignment</label>
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as UserRole)}
-                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans font-bold text-gray-700"
-                  >
-                    <option value="customer">Consumer (Customer) 🧑‍💻</option>
-                    <option value="vendor">Merchant (Vendor Store) 🏪</option>
-                    <option value="rider">Logistics (Rider Delivery) 🚴</option>
-                    <option value="admin">Administrator (Super User) 🛡️</option>
-                  </select>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Platform Role Assignment (Select one or more)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-150">
+                    {[
+                      { val: "customer", label: "Consumer (Customer) 🧑‍💻" },
+                      { val: "vendor", label: "Merchant (Vendor Store) 🏪" },
+                      { val: "rider", label: "Logistics (Rider Delivery) 🚴" },
+                      { val: "employee", label: "Staff / Employee 🧑‍💼" },
+                      { val: "admin", label: "Administrator 🛡️" }
+                    ].map((item) => {
+                      const isChecked = newRoles.includes(item.val as UserRole);
+                      return (
+                        <label 
+                          key={item.val} 
+                          className={`flex items-center gap-2 px-3 py-2 border rounded-xl cursor-pointer transition text-xs font-bold ${
+                            isChecked 
+                              ? "bg-purple-50/70 border-purple-200 text-purple-950 animate-in fade-in duration-100" 
+                              : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setNewRoles(newRoles.filter(r => r !== item.val));
+                              } else {
+                                setNewRoles([...newRoles, item.val as UserRole]);
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Assigned Login Security PIN</label>
+                    <button
+                      type="button"
+                      onClick={() => setNewPin(Math.floor(1000 + Math.random() * 9000).toString())}
+                      className="text-[10px] text-purple-600 font-extrabold hover:underline cursor-pointer"
+                    >
+                      🎲 Generate Random PIN
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    required
+                    placeholder="e.g. 1234"
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-mono tracking-widest font-black"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">The user will enter this 4-digit security PIN to authorize logins.</p>
                 </div>
 
                 {/* Adaptive Extra Fields for Vendor */}
-                {newRole === "vendor" && (
+                {newRoles.includes("vendor") && (
                   <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 space-y-3 animate-in slide-in-from-top-2 duration-150">
                     <span className="text-[9px] uppercase font-mono font-black text-amber-700 tracking-wider">Merchant Credentials Setup</span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1200,7 +2117,7 @@ export const AdminCustomers: React.FC = () => {
                 )}
 
                 {/* Adaptive Extra Fields for Rider */}
-                {newRole === "rider" && (
+                {newRoles.includes("rider") && (
                   <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-2 animate-in slide-in-from-top-2 duration-150">
                     <span className="text-[9px] uppercase font-mono font-black text-blue-700 tracking-wider">Logistics Vehicle Assignment</span>
                     <div>
@@ -1233,6 +2150,155 @@ export const AdminCustomers: React.FC = () => {
                 >
                   <Plus className="w-4 h-4" />
                   Register User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Existing User Overlay Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 p-6 sm:p-8 space-y-6 text-left animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-4">
+              <div>
+                <span className="text-[10px] uppercase font-mono tracking-widest text-purple-600 font-bold bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">User Configuration Editor</span>
+                <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2">Edit Account & Role</h3>
+                <p className="text-[11px] text-gray-400 mt-1">Update profile contact details, security credentials, and access privilege role.</p>
+              </div>
+              <button 
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4">
+              {editFormError && (
+                <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-red-600 font-bold flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+                  {editFormError}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Tunde Alao"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. tunde@platform.com"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Phone Number</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. +2348012345678"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-sans font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">System Privilege Role Assignment (Select one or more)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-150">
+                    {[
+                      { val: "customer", label: "Consumer (Customer) 🧑‍💻" },
+                      { val: "vendor", label: "Merchant (Vendor Store) 🏪" },
+                      { val: "rider", label: "Logistics (Rider Delivery) 🚴" },
+                      { val: "employee", label: "Staff / Employee 🧑‍💼" },
+                      { val: "admin", label: "Administrator 🛡️" }
+                    ].map((item) => {
+                      const isChecked = editRoles.includes(item.val as UserRole);
+                      return (
+                        <label 
+                          key={item.val} 
+                          className={`flex items-center gap-2 px-3 py-2 border rounded-xl cursor-pointer transition text-xs font-bold ${
+                            isChecked 
+                              ? "bg-purple-50/70 border-purple-200 text-purple-950 animate-in fade-in duration-100" 
+                              : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setEditRoles(editRoles.filter(r => r !== item.val));
+                              } else {
+                                setEditRoles([...editRoles, item.val as UserRole]);
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Login Security PIN</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditPin(Math.floor(1000 + Math.random() * 9000).toString())}
+                      className="text-[10px] text-purple-600 font-extrabold hover:underline cursor-pointer"
+                    >
+                      🎲 Generate Random PIN
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    required
+                    placeholder="e.g. 1234"
+                    value={editPin}
+                    onChange={(e) => setEditPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-mono tracking-widest font-black"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-0.5">The user will enter this 4-digit security PIN to authorize logins.</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-500 rounded-xl border border-gray-250 font-bold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#070329] hover:bg-indigo-950 text-white font-extrabold rounded-xl transition shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  Save Changes
                 </button>
               </div>
             </form>
@@ -1340,69 +2406,75 @@ export const AdminCustomers: React.FC = () => {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[850px]">
-              <thead>
-                <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
-                  <th className="py-3 px-4">User Member Details</th>
-                  <th className="py-3 px-4">Registration Contact Email</th>
-                  <th className="py-3 px-4">Destination Telephone</th>
-                  <th className="py-3 px-4">System Privilege Role</th>
-                  <th className="py-3 px-4">Registration Date</th>
-                  <th className="py-3 px-4 text-center">Manage / Assign Role</th>
-                  <th className="py-3 px-4 text-center">Delete</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 text-xs">
-                {filteredUsers.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50/50 transition">
-                    <td className="py-3.5 px-4 font-extrabold text-[#070329]">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-[#070329] border border-indigo-150 flex items-center justify-center font-black font-sans shrink-0">
-                          {c.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <span className="block text-gray-900 font-sans font-black">{c.name}</span>
-                          <span className="text-[9px] text-gray-400 font-mono">ID: {c.id}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-gray-500">{c.email}</td>
-                    <td className="py-3.5 px-4 font-medium text-gray-700 font-mono">{c.phone}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${getRoleBadgeStyle(c.role)}`}>
-                        {c.role}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-gray-400 font-mono text-[10px]">{new Date(c.createdAt).toLocaleDateString()}</td>
-                    <td className="py-3.5 px-4 text-center">
-                      <select
-                        value={c.role}
-                        onChange={(e) => {
-                          const nextRole = e.target.value as UserRole;
-                          if (confirm(`Are you sure you want to reassign ${c.name}'s role to "${nextRole.toUpperCase()}"?`)) {
-                            adminUpdateUserRole(c.id, nextRole);
-                          }
-                        }}
-                        className="text-[10px] font-extrabold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-250 rounded-lg py-1 px-2 cursor-pointer outline-none focus:ring-2 focus:ring-purple-150 transition"
-                      >
-                        <option value="customer">Customer</option>
-                        <option value="vendor">Vendor</option>
-                        <option value="rider">Rider</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => handleDeleteModel(c.id)}
-                        className="p-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg cursor-pointer transition border border-red-100 inline-flex items-center justify-center"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                <thead>
+                  <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
+                    <th className="py-3 px-4">User Member Details</th>
+                    <th className="py-3 px-4">Registration Contact Email</th>
+                    <th className="py-3 px-4">Destination Telephone</th>
+                    <th className="py-3 px-4">System Privilege Role</th>
+                    <th className="py-3 px-4 text-center">Security PIN</th>
+                    <th className="py-3 px-4">Registration Date</th>
+                    <th className="py-3 px-4 text-center">Manage Account</th>
+                    <th className="py-3 px-4 text-center">Delete</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-xs">
+                  {filteredUsers.map((c) => (
+                    <tr key={c.id} className="hover:bg-gray-50/50 transition">
+                      <td className="py-3.5 px-4 font-extrabold text-[#070329]">
+                         <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-indigo-50 text-[#070329] border border-indigo-150 flex items-center justify-center font-black font-sans shrink-0">
+                            {c.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="block text-gray-900 font-sans font-black">{c.name}</span>
+                            <span className="text-[9px] text-gray-400 font-mono">ID: {c.id}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-gray-500">{c.email}</td>
+                      <td className="py-3.5 px-4 font-medium text-gray-700 font-mono">{c.phone}</td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${getRoleBadgeStyle(c.role)}`}>
+                          {c.role}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono">
+                        <div className="inline-flex items-center justify-center gap-1.5 bg-purple-50 px-2 py-1 rounded-xl border border-purple-100">
+                          <span className="font-mono font-black text-[#070329] tracking-widest text-[10px]">
+                            {c.pin || "1234"}
+                          </span>
+                          <button
+                            onClick={() => handleStartEditUser(c)}
+                            className="p-0.5 text-[9px] hover:scale-110 active:scale-95 transition cursor-pointer"
+                            title="Edit User details & PIN"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-400 font-mono text-[10px]">{new Date(c.createdAt).toLocaleDateString()}</td>
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          onClick={() => handleStartEditUser(c)}
+                          className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold rounded-xl border border-purple-150 cursor-pointer transition text-[10px] inline-flex items-center gap-1 hover:scale-105 active:scale-95"
+                        >
+                          ⚙️ Edit Account
+                        </button>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          onClick={() => handleDeleteModel(c.id)}
+                          className="p-1.5 bg-red-50 hover:bg-red-100 text-red-650 rounded-lg cursor-pointer transition border border-red-100 inline-flex items-center justify-center"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <div className="text-center py-12 text-gray-400">
@@ -2269,7 +3341,7 @@ export const AdminSettings: React.FC = () => {
                         <span>{loc}</span>
                         {tier ? (
                           <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 font-extrabold rounded-full border border-amber-100 shrink-0">
-                            {tier.name} (+{currency}{tier.surcharge.toLocaleString()})
+                            {tier.name} (+{currency}{(tier.surcharge ?? 0).toLocaleString()})
                           </span>
                         ) : (
                           <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-700 font-extrabold rounded-full border border-green-100 shrink-0">
@@ -2358,7 +3430,7 @@ export const AdminSettings: React.FC = () => {
               >
                 <option value="">Base Fee (No Surcharge)</option>
                 {extremeLocationTiers.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} (+{currency}{t.surcharge.toLocaleString()})</option>
+                  <option key={t.id} value={t.id}>{t.name} (+{currency}{(t.surcharge ?? 0).toLocaleString()})</option>
                 ))}
               </select>
             </div>

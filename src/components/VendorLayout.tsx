@@ -1,10 +1,24 @@
 import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
-import { LayoutDashboard, ShoppingBag, UtensilsCrossed, Settings, LogOut, ChevronRight, Store, Star, AlertCircle, Menu, X } from "lucide-react";
+import { 
+  LayoutDashboard, 
+  ShoppingBag, 
+  UtensilsCrossed, 
+  Settings, 
+  LogOut, 
+  ChevronRight, 
+  Store, 
+  Star, 
+  AlertCircle, 
+  Menu, 
+  X,
+  ChevronDown
+} from "lucide-react";
+import { UserRole } from "../types";
 
 export const VendorLayout: React.FC = () => {
-  const { currentVendor, logout } = useDatabase();
+  const { currentUser, switchRole, currentVendor, logout } = useDatabase();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -13,6 +27,8 @@ export const VendorLayout: React.FC = () => {
     logout();
     navigate("/login");
   };
+
+  const myApprovedRoles = currentUser?.roles || (currentUser ? [currentUser.role] : []);
 
   const menuItems = [
     { name: "Dashboard", path: "/vendor/dashboard", icon: LayoutDashboard },
@@ -167,7 +183,36 @@ export const VendorLayout: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            <span className="text-[10px] text-green-705 bg-green-50 px-2 py-0.5 sm:py-1 rounded border border-green-150 font-bold uppercase tracking-wider">
+            {myApprovedRoles.length > 1 && (
+              <div className="relative shrink-0 mr-1">
+                <select
+                  value={currentUser?.role || "vendor"}
+                  onChange={(e) => {
+                    const selectedRole = e.target.value as UserRole;
+                    switchRole(selectedRole);
+                    if (selectedRole === "customer") {
+                      navigate("/");
+                    } else if (selectedRole === "vendor") {
+                      navigate("/vendor/dashboard");
+                    } else if (selectedRole === "rider") {
+                      navigate("/rider/dashboard");
+                    } else {
+                      navigate("/admin/dashboard");
+                    }
+                  }}
+                  className="text-[10px] sm:text-xs font-bold font-mono text-green-700 bg-green-50 border border-green-200 rounded-xl pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-4 focus:ring-green-100 cursor-pointer appearance-none"
+                >
+                  {myApprovedRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role === "customer" ? "Consumer" : role === "vendor" ? "Merchant" : role === "rider" ? "Rider" : role === "employee" ? "Staff" : "Admin"}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-green-600 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            )}
+
+            <span className="text-[10px] text-green-700 bg-green-50 px-2 py-0.5 sm:py-1 rounded border border-green-100 font-bold uppercase tracking-wider">
               ONLINE
             </span>
             <div className="h-4 w-px bg-gray-200 sm:block hidden"></div>
