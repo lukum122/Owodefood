@@ -441,7 +441,7 @@ export const VendorSettings: React.FC = () => {
                     type="url"
                     value={image}
                     onChange={(e) => setImage(e.target.value)}
-                    placeholder="https://images.unsplash.com/... or base64 format"
+                    placeholder="/images/hero.png"
                     className="w-full text-xs p-2.5 border border-gray-250 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition font-mono"
                   />
                 </div>
@@ -500,7 +500,7 @@ export const VendorSettings: React.FC = () => {
                     type="url"
                     value={coverImage}
                     onChange={(e) => setCoverImage(e.target.value)}
-                    placeholder="https://images.unsplash.com/... or keep blank to use default logo"
+                    placeholder="/images/jollof.png"
                     className="w-full text-xs p-2.5 border border-gray-250 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition font-mono"
                   />
                 </div>

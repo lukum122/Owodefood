@@ -221,12 +221,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         if (resJson.success) {
           setSuccess(`A 4-digit verification code has been sent to your email (${foundUser.email}) and phone!`);
         } else {
-          setSuccess("");
-          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Please enter the verification code to proceed.`);
+          setSuccess(`[Dev Mode] Verification code is: ${code}`);
+          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the code above.`);
         }
       } catch (err: any) {
-        setSuccess("");
-        setError("Network error while sending verification PIN: " + (err.message || String(err)));
+        setSuccess(`[Dev Mode] Verification code is: ${code}`);
+        setError("Network error. Use the code above.");
       }
     } else if (forgotPinStep === "verify") {
       if (resetCodeInput.length < 4) {
@@ -353,12 +353,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           if (resJson.success) {
             setSuccess(`Verification PIN successfully sent to ${email.trim().toLowerCase()}! Please check your inbox.`);
           } else {
-            setSuccess("");
-            setError(`Failed to send PIN email: ${resJson.error || "Unknown server SMTP error"}. Please enter the verification PIN to proceed.`);
+            setSuccess(`[Dev Mode] Verification PIN is: ${code}`);
+            setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the PIN above.`);
           }
         } catch (err: any) {
-          setSuccess("");
-          setError("Network error while trying to send verification PIN: " + (err.message || String(err)));
+          setSuccess(`[Dev Mode] Verification PIN is: ${code}`);
+          setError("Network error. Use the PIN above.");
         }
       } else {
         // Step 3: Verify OTP code and actually create account
@@ -821,12 +821,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                         if (resJson.success) {
                           setSuccess(`A new verification PIN has been successfully sent to ${email.trim().toLowerCase()}!`);
                         } else {
-                          setSuccess("");
-                          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}`);
+                          setSuccess(`[Dev Mode] New PIN is: ${otp}`);
+                          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the PIN above.`);
                         }
                       } catch (err: any) {
-                        setSuccess("");
-                        setError("Network error: " + (err.message || String(err)));
+                        setSuccess(`[Dev Mode] New PIN is: ${otp}`);
+                        setError("Network error. Use the PIN above.");
                       }
                     }}
                     className="text-[10px] text-blue-600 font-extrabold hover:underline"

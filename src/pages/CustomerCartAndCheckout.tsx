@@ -218,7 +218,8 @@ export const CustomerCheckout: React.FC = () => {
     extremeLocations,
     extremeLocationTiers,
     savedAddresses,
-    register
+    register,
+    getUserWalletBalance
   } = useDatabase();
   const navigate = useNavigate();
 
@@ -247,19 +248,7 @@ export const CustomerCheckout: React.FC = () => {
   const [streetAddress, setStreetAddress] = useState(initialStreet);
 
   // Reactive Wallet Balance tracking
-  const [checkoutWalletBalance, setCheckoutWalletBalance] = useState<number>(() => {
-    const saved = localStorage.getItem("fd_wallet_balance");
-    return saved ? Number(saved) : 14500;
-  });
-
-  React.useEffect(() => {
-    const handleUpdate = () => {
-      const saved = localStorage.getItem("fd_wallet_balance");
-      if (saved) setCheckoutWalletBalance(Number(saved));
-    };
-    window.addEventListener("wallet-balance-updated", handleUpdate);
-    return () => window.removeEventListener("wallet-balance-updated", handleUpdate);
-  }, []);
+  const checkoutWalletBalance = currentUser ? getUserWalletBalance(currentUser.id) : 0;
 
   // Derived reactive full delivery address
   const deliveryAddress = streetAddress.trim() + (selectedDistrict ? `, ${selectedDistrict}` : "");
@@ -402,15 +391,10 @@ export const CustomerCheckout: React.FC = () => {
     }
 
     if (paymentMethod === "Owode Food Wallet") {
-      const savedBalance = localStorage.getItem("fd_wallet_balance");
-      const currentBalance = savedBalance ? Number(savedBalance) : 14500;
+      const currentBalance = checkoutWalletBalance;
       if (currentBalance < grandTotal) {
         setErrorWord(`Insufficient wallet balance. Total is ${currency}${grandTotal.toLocaleString()}, but your balance is ${currency}${currentBalance.toLocaleString()}. Please reload your wallet to complete purchase.`);
         return;
-      } else {
-        const newBalance = currentBalance - grandTotal;
-        localStorage.setItem("fd_wallet_balance", String(newBalance));
-        window.dispatchEvent(new Event("wallet-balance-updated"));
       }
     }
 

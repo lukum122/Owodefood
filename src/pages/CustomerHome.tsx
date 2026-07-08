@@ -479,7 +479,7 @@ export const CustomerHome: React.FC = () => {
           <div className="lg:col-span-5 flex justify-center lg:justify-end">
             <div className="relative w-64 h-64 sm:w-80 sm:h-80 lg:w-96 lg:h-96 shrink-0 aspect-square rounded-full overflow-hidden border-8 border-white/5 shadow-2xl relative">
               <img 
-                src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=850&auto=format&fit=crop&q=80"
+                src="/images/hero.png"
                 alt="ramen ramen bowl food"
                 className="w-full h-full object-cover rounded-full"
                 referrerPolicy="no-referrer"
@@ -702,7 +702,7 @@ export const CustomerHome: React.FC = () => {
                     loading="lazy"
                     onError={(e) => {
                       // Fallback image in case Unsplash fails
-                      e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=60";
+                      e.currentTarget.src = "/images/hero.png";
                     }}
                   />
                   

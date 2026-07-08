@@ -1345,13 +1345,13 @@ export const AdminVendors: React.FC = () => {
                   <span className="text-[10px] text-gray-400 font-bold uppercase block">Government-issued Proof document</span>
                   <div className="border border-gray-200 rounded-xl overflow-hidden bg-white max-h-[160px] flex items-center justify-center relative group">
                     <img 
-                      src={selectedVendor.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      src={selectedVendor.verificationDoc || "/images/hero.png"} 
                       alt="Government Proof" 
                       className="w-full h-full object-contain max-h-[160px]" 
                       referrerPolicy="no-referrer" 
                     />
                     <a 
-                      href={selectedVendor.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      href={selectedVendor.verificationDoc || "/images/jollof.png"} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="absolute top-2 right-2 bg-black/60 hover:bg-black text-white font-mono text-[9px] py-1 px-2 rounded transition"
@@ -1612,13 +1612,13 @@ export const AdminRiders: React.FC = () => {
                   <span className="text-[10px] text-gray-400 font-bold uppercase block">Uploaded Verification Proof</span>
                   <div className="border border-gray-200 rounded-xl overflow-hidden bg-white max-h-[160px] flex items-center justify-center relative group">
                     <img 
-                      src={selectedRider.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      src={selectedRider.verificationDoc || "/images/chicken.png"} 
                       alt="Rider Proof" 
                       className="w-full h-full object-contain max-h-[160px]" 
                       referrerPolicy="no-referrer" 
                     />
                     <a 
-                      href={selectedRider.verificationDoc || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60"} 
+                      href={selectedRider.verificationDoc || "/images/pizza.png"} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="absolute top-2 right-2 bg-black/60 hover:bg-black text-white font-mono text-[9px] py-1 px-2 rounded transition"

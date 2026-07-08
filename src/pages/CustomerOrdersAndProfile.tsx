@@ -7,12 +7,12 @@ import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, 
 export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string } | null | undefined) => {
   if (user?.profileImage) return user.profileImage;
   if (user?.gender === "male") {
-    return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=60";
+    return "/images/burger.png";
   }
   if (user?.gender === "female") {
-    return "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=60";
+    return "/images/hero.png";
   }
-  return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=60";
+  return "/images/jollof.png";
 };
 
 export const CustomerOrders: React.FC = () => {
@@ -270,7 +270,7 @@ export const CustomerProfile: React.FC = () => {
   const [vCuisine, setVCuisine] = useState("");
   const [vBusinessRegNo, setVBusinessRegNo] = useState("");
   const [vFoodPermitNo, setVFoodPermitNo] = useState("");
-  const [vVerificationDoc, setVVerificationDoc] = useState("https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60");
+  const [vVerificationDoc, setVVerificationDoc] = useState("/images/chicken.png");
   const [vSuccess, setVSuccess] = useState("");
   const [vError, setVError] = useState("");
 
@@ -278,7 +278,7 @@ export const CustomerProfile: React.FC = () => {
   const [rLicenseNo, setRLicenseNo] = useState("");
   const [rPlateNo, setRPlateNo] = useState("");
   const [rNationalIdNo, setRNationalIdNo] = useState("");
-  const [rVerificationDoc, setRVerificationDoc] = useState("https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60");
+  const [rVerificationDoc, setRVerificationDoc] = useState("/images/pizza.png");
   const [rSuccess, setRSuccess] = useState("");
   const [rError, setRError] = useState("");
 
@@ -463,8 +463,8 @@ export const CustomerProfile: React.FC = () => {
 
   const handleGenderChange = (newGender: "male" | "female") => {
     setGender(newGender);
-    const maleDefault = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=60";
-    const femaleDefault = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=60";
+    const maleDefault = "/images/burger.png";
+    const femaleDefault = "/images/hero.png";
     if (!profileImage || profileImage === maleDefault || profileImage === femaleDefault) {
       setProfileImage("");
     }

@@ -44,7 +44,7 @@ export const RiderOnboarding: React.FC = () => {
   const [licenseNo, setLicenseNo] = useState("");
   const [plateNo, setPlateNo] = useState("");
   const [nationalIdNo, setNationalIdNo] = useState("");
-  const [verificationDoc, setVerificationDoc] = useState("https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60");
+  const [verificationDoc, setVerificationDoc] = useState("/images/jollof.png");
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

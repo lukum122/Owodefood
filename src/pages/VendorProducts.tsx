@@ -69,7 +69,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setName("");
       setDescription("");
       setPrice("");
-      setImage("https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=60");
+      setImage("/images/pizza.png");
       setCategory("Burgers");
       setIsAvailable(true);
       setAddons([]);
@@ -545,7 +545,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setImage("https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=60");
+                        setImage("/images/burger.png");
                       }}
                       className="w-full text-center text-[10px] text-[#0ea5e9] hover:text-blue-900 font-extrabold uppercase tracking-wider transition"
                     >

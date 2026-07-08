@@ -58,6 +58,7 @@ export const CustomerLayout: React.FC = () => {
     walletFundingMonnifyEnabled,
     walletFundingPaystackEnabled,
     requestWalletFunding,
+    getUserWalletBalance,
     switchRole,
   } = useDatabase();
   const navigate = useNavigate();
@@ -69,11 +70,8 @@ export const CustomerLayout: React.FC = () => {
   const [showNotifPopover, setShowNotifPopover] = useState(false);
   const [showProfilePopover, setShowProfilePopover] = useState(false);
   
-  // Simulated Wallet balance with localStorage persistence
-  const [walletBalance, setWalletBalance] = useState<number>(() => {
-    const saved = localStorage.getItem("fd_wallet_balance");
-    return saved ? Number(saved) : 14500;
-  });
+  // Derived wallet balance
+  const walletBalance = currentUser ? getUserWalletBalance(currentUser.id) : 0;
   const [fundAmount, setFundAmount] = useState<string>("5000");
   const [walletSuccessMsg, setWalletSuccessMsg] = useState<string | null>(null);
 
@@ -90,11 +88,7 @@ export const CustomerLayout: React.FC = () => {
     error?: string;
   } | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem("fd_wallet_balance", String(walletBalance));
-    // Emit custom event to notify other windows or components about balance updates
-    window.dispatchEvent(new Event("wallet-balance-updated"));
-  }, [walletBalance]);
+  // Wallet balance is managed by DatabaseContext
 
   // Saved Addresses fields
   const [newStreetAddress, setNewStreetAddress] = useState<string>("");
@@ -321,21 +315,23 @@ export const CustomerLayout: React.FC = () => {
           <span>Addresses</span>
         </button>
 
-        <button 
-          onClick={() => {
-            setMobileMenuOpen(false);
-            setActiveModal("wallet");
-          }}
-          className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 w-full text-left transition"
-        >
-          <Wallet className="w-5 h-5 text-amber-400" />
-          <div className="flex items-center justify-between w-full">
-            <span>Wallet</span>
-            <span className="bg-amber-500/25 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-amber-500/20">
-              {currency}{(walletBalance ?? 0).toLocaleString()}
-            </span>
-          </div>
-        </button>
+        {currentUser && (
+          <button 
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setActiveModal("wallet");
+            }}
+            className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 w-full text-left transition"
+          >
+            <Wallet className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center justify-between w-full">
+              <span>Wallet</span>
+              <span className="bg-amber-500/25 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-amber-500/20">
+                {currency}{(walletBalance ?? 0).toLocaleString()}
+              </span>
+            </div>
+          </button>
+        )}
 
         <button 
           onClick={() => {
@@ -535,19 +531,21 @@ export const CustomerLayout: React.FC = () => {
           {/* Right Notification Bell & Profile Avatar */}
           <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             {/* Desktop Quick Wallet Action Pill */}
-            <button 
-              onClick={() => setActiveModal("wallet")}
-              className="hidden md:flex items-center gap-2 bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-[#070329] px-3.5 py-1.5 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm group active:scale-95"
-              title="Click to view & reload wallet"
-            >
-              <Wallet className="w-4 h-4 text-amber-500 group-hover:scale-115 transition-transform" />
-              <div className="flex flex-col text-left">
-                <span className="text-[8px] font-bold text-amber-600 uppercase tracking-widest leading-none">Wallet balance</span>
-                <span className="text-xs font-black font-mono leading-tight mt-0.5">
-                  {currency}{(walletBalance ?? 0).toLocaleString()}
-                </span>
-              </div>
-            </button>
+            {currentUser && (
+              <button 
+                onClick={() => setActiveModal("wallet")}
+                className="hidden md:flex items-center gap-2 bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-[#070329] px-3.5 py-1.5 rounded-2xl transition-all duration-200 cursor-pointer shadow-sm group active:scale-95"
+                title="Click to view & reload wallet"
+              >
+                <Wallet className="w-4 h-4 text-amber-500 group-hover:scale-115 transition-transform" />
+                <div className="flex flex-col text-left">
+                  <span className="text-[8px] font-bold text-amber-600 uppercase tracking-widest leading-none">Wallet balance</span>
+                  <span className="text-xs font-black font-mono leading-tight mt-0.5">
+                    {currency}{(walletBalance ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              </button>
+            )}
 
             <div className="relative">
               <button 
@@ -1082,7 +1080,6 @@ export const CustomerLayout: React.FC = () => {
                             setTimeout(() => {
                               const amt = fundingProcess.amount;
                               requestWalletFunding(currentUser?.id || "cust-1", amt, "paystack", fundingProcess.txRef);
-                              setWalletBalance(prev => prev + amt);
                               setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                             }, 1400);
                           }}
@@ -1131,7 +1128,6 @@ export const CustomerLayout: React.FC = () => {
                             setTimeout(() => {
                               const amt = fundingProcess.amount;
                               requestWalletFunding(currentUser?.id || "cust-1", amt, "monnify", fundingProcess.txRef);
-                              setWalletBalance(prev => prev + amt);
                               setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                             }, 1400);
                           }}
