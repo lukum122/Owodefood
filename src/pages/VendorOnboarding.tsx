@@ -56,6 +56,8 @@ export const VendorOnboarding: React.FC = () => {
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
         setErrorMsg("Document size should be less than 2MB.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       const reader = new FileReader();
@@ -74,10 +76,14 @@ export const VendorOnboarding: React.FC = () => {
 
     if (!businessName.trim() || !cuisine.trim()) {
       setErrorMsg("Please fill out both Business Name and Cuisine/Category Specialty.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (!businessRegNo.trim() || !foodPermitNo.trim()) {
       setErrorMsg("Please provide both your Business Registration Number and Food Safety Permit Number.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -97,9 +103,13 @@ export const VendorOnboarding: React.FC = () => {
         setFoodPermitNo("");
       } else {
         setErrorMsg(res.error || "Failed to submit vendor application.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err) {
       setErrorMsg("An unexpected error occurred. Please try again.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }

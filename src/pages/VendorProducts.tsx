@@ -214,6 +214,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     if (file) {
       if (file.size > 3 * 1024 * 1024) {
         setUploadError("Image surpasses 3MB limit. Please pick a smaller image.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       setUploadError("");
@@ -225,6 +227,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       };
       reader.onerror = () => {
         setUploadError("Error reading file.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       };
       reader.readAsDataURL(file);
     }
@@ -248,10 +252,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     if (file) {
       if (!file.type.startsWith("image/")) {
         setUploadError("Only standard image formats are permitted.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       if (file.size > 3 * 1024 * 1024) {
         setUploadError("Image surpasses 3MB limit. Please pick a smaller image.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       const reader = new FileReader();

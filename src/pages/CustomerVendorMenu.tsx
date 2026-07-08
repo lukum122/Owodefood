@@ -180,11 +180,15 @@ export const CustomerVendorMenu: React.FC = () => {
 
     if (!currentUser) {
       setFormError("Please log in to submit a review.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (!newComment.trim()) {
       setFormError("Review comment cannot be empty.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 

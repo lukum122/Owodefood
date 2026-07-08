@@ -55,6 +55,8 @@ export const RiderOnboarding: React.FC = () => {
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
         setErrorMsg("Document size should be less than 2MB.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       const reader = new FileReader();
@@ -73,6 +75,8 @@ export const RiderOnboarding: React.FC = () => {
 
     if (!licenseNo.trim() || !plateNo.trim() || !nationalIdNo.trim()) {
       setErrorMsg("All driver registration fields (License No, Plate No, National ID No) are required.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -92,9 +96,13 @@ export const RiderOnboarding: React.FC = () => {
         setNationalIdNo("");
       } else {
         setErrorMsg(res.error || "Failed to submit rider application.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err) {
       setErrorMsg("An unexpected error occurred. Please try again.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }

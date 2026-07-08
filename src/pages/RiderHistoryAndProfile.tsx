@@ -199,6 +199,8 @@ export const RiderProfile: React.FC = () => {
       setOtpNotification("");
     } else {
       setOtpError("Incorrect code. Please enter the simulated verification code shown above.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -217,26 +219,36 @@ export const RiderProfile: React.FC = () => {
 
     if (!currentPin || !newPin || !confirmNewPin) {
       setPinError("Please fill in all security PIN fields.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (currentPin !== currentUser?.pin) {
       setPinError("The current security PIN you entered is incorrect.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
       setPinError("The new security PIN must be exactly 4 digits.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (newPin !== confirmNewPin) {
       setPinError("The new security PIN and confirmation PIN do not match.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (newPin === currentPin) {
       setPinError("The new PIN cannot be the same as your current PIN.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -250,6 +262,8 @@ export const RiderProfile: React.FC = () => {
       }
     } catch (err: any) {
       setPinError("Failed to update security PIN.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 

@@ -349,21 +349,29 @@ export const CustomerCheckout: React.FC = () => {
     e.preventDefault();
     if (!deliveryAddress.trim()) {
       setErrorWord("Please state a physical drop-off address.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (!deliveryPhone.trim()) {
       setErrorWord("Please state an active delivery phone number.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (!currentUser) {
       if (!guestName.trim()) {
         setErrorWord("Please provide your full name to complete guest checkout.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       if (!guestEmail.trim()) {
         setErrorWord("Please provide your email address to complete guest checkout.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       
@@ -376,17 +384,23 @@ export const CustomerCheckout: React.FC = () => {
       
       if (!regRes.success) {
         setErrorWord(regRes.error || "Could not register guest user details. If you have an account already, please sign in.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
     }
 
     if (paymentMethod === "Local Bank Transfer" && !receiptBase64) {
       setErrorWord("Please attach your payment receipt slip image to authorize the manual bank transfer.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (paymentMethod === "Monnify (Bank & Card)" && !monnifySuccess) {
       setErrorWord("Please complete your secure payment initialization through the Monnify payment dialog first.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -394,6 +408,8 @@ export const CustomerCheckout: React.FC = () => {
       const currentBalance = checkoutWalletBalance;
       if (currentBalance < grandTotal) {
         setErrorWord(`Insufficient wallet balance. Total is ${currency}${grandTotal.toLocaleString()}, but your balance is ${currency}${currentBalance.toLocaleString()}. Please reload your wallet to complete purchase.`);
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
     }
@@ -411,6 +427,8 @@ export const CustomerCheckout: React.FC = () => {
       }, 2000);
     } else {
       setErrorWord("Could not complete checkout. Please check your network and try again.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 

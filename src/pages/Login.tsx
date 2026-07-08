@@ -120,6 +120,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const [storedUserPin, setStoredUserPin] = useState("");
   const [deviceVerificationStep, setDeviceVerificationStep] = useState(false);
   const [deviceOtp, setDeviceOtp] = useState("");
+  const [generatedDeviceOtp, setGeneratedDeviceOtp] = useState("");
   
   // Forgot PIN state
   const [forgotPinStep, setForgotPinStep] = useState<"request" | "verify" | "new_pin" | null>(null);
@@ -142,16 +143,18 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const from = (location.state as any)?.from?.pathname || "/";
 
   React.useEffect(() => {
+    if (isRegisterMode) {
+      setLoginPinStep(false);
+      setDeviceVerificationStep(false);
+      setLoginPin("");
+      setDeviceOtp("");
+      setGeneratedDeviceOtp("");
+      setForgotPinStep(null);
+    }
     setRegisterStep(1);
     setCreatedPin("");
     setRegisterOtp("");
     setGeneratedRegisterOtp("");
-    setLoginPinStep(false);
-    setLoginPin("");
-    setStoredUserPin("");
-    setDeviceVerificationStep(false);
-    setDeviceOtp("");
-    setForgotPinStep(null);
     setForgotEmailOrPhone("");
     setGeneratedResetCode("");
     setResetCodeInput("");
@@ -192,6 +195,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
       const identifier = forgotEmailOrPhone.trim().toLowerCase();
       if (!identifier) {
         setError("Please enter your registered email or phone number.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -202,6 +207,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
       if (!foundUser) {
         setError("No account found with this email or phone number.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -227,19 +234,27 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         } else {
           setSuccess(`[Dev Mode] Verification code is: ${code}`);
           setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the code above.`);
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } catch (err: any) {
         setSuccess(`[Dev Mode] Verification code is: ${code}`);
         setError("Network error. Use the code above.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else if (forgotPinStep === "verify") {
       if (resetCodeInput.length < 4) {
         setError("Please enter the complete 4-digit verification code.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
       if (resetCodeInput !== generatedResetCode) {
         setError("Incorrect verification code. Please check and try again.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -248,21 +263,29 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
     } else if (forgotPinStep === "new_pin") {
       if (newPin.length < 4) {
         setError("Please enter a complete 4-digit security PIN.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
       if (confirmNewPin.length < 4) {
         setError("Please confirm your new 4-digit security PIN.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
       if (newPin !== confirmNewPin) {
         setError("PIN mismatch! Both entered PIN codes must be identical.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
       if (!foundUserForReset) {
         setError("Session expired. Please try again.");
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         setForgotPinStep("request");
         return;
       }
@@ -307,14 +330,20 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         // Step 1: Validate registration info
         if (!email.trim()) {
           setError("Please fill in your email address.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
         if (!firstName.trim() || !surname.trim() || !phone.trim()) {
           setError("Please define your first name, surname, and phone number.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
         if (!gender) {
           setError("Please select your gender.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
@@ -322,6 +351,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
         if (exists) {
           setError("An account with this email already exists.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
@@ -332,6 +363,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         // Step 2: Create 4-Digit Security PIN and send verification OTP
         if (createdPin.length < 4) {
           setError("Please enter a complete 4-digit PIN.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
@@ -359,20 +392,28 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           } else {
             setSuccess(`[Dev Mode] Verification PIN is: ${code}`);
             setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the PIN above.`);
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           }
         } catch (err: any) {
           setSuccess(`[Dev Mode] Verification PIN is: ${code}`);
           setError("Network error. Use the PIN above.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } else {
         // Step 3: Verify OTP code and actually create account
         if (registerOtp.length < 4) {
           setError("Please enter the complete 4-digit verification PIN.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
         if (registerOtp !== generatedRegisterOtp) {
           setError("Incorrect 4-digit verification PIN. Please check and try again.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
@@ -406,6 +447,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           }, 1000);
         } else {
           setError(res.error || "Failed to create account.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       }
     } else {
@@ -415,6 +458,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         // Step 1: Enter email/phone
         if (!identifier) {
           setError("Please fill in your phone number or email.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
@@ -425,6 +470,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         if (!foundUser) {
           setError("No registered account matches this email or phone number. Try selecting 'Register'.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
@@ -437,15 +484,19 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         setLoginPinStep(true);
         setError("");
         setSuccess("");
-      } else {
+      } else if (!deviceVerificationStep) {
         // Step 2: Verify login PIN
         if (loginPin.length < 4) {
           setError("Please enter a complete 4-digit PIN.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
         if (loginPin !== storedUserPin) {
           setError("Incorrect 4-digit security PIN. Please try again.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           setShowForgotPinLink(true);
           return;
         }
@@ -457,26 +508,105 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         if (!foundUser) {
           setError("Session expired. Please start over.");
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
           setLoginPinStep(false);
           return;
         }
 
+        // Check Device Trust & Inactivity
+        const isTrusted = localStorage.getItem(`trusted_device_${foundUser.id}`) === "true";
+        const lastLoginStr = localStorage.getItem(`last_login_${foundUser.id}`);
+        const lastLoginTime = lastLoginStr ? parseInt(lastLoginStr, 10) : 0;
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const hasBeenLongTime = (Date.now() - lastLoginTime) > THIRTY_DAYS_MS;
+
+        if (!isTrusted || hasBeenLongTime) {
+          // Trigger Device Verification
+          const otp = Math.floor(1000 + Math.random() * 9000).toString();
+          setGeneratedDeviceOtp(otp);
+          setDeviceVerificationStep(true);
+          setDeviceOtp("");
+          setError("");
+          setSuccess("Sending verification code to your email...");
+          
+          fetch("/api/email/send-pin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              toEmail: foundUser.email,
+              name: foundUser.name,
+              pin: otp,
+            }),
+          }).then(res => res.json()).then(resJson => {
+            if (resJson.success) {
+              setSuccess(`A verification code has been sent to ${foundUser.email} for this new device.`);
+            } else {
+              setSuccess(`[Dev Mode] Device OTP is: ${otp}`);
+              setError(`Failed to send code: ${resJson.error || "SMTP error"}. Use the code above.`);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }).catch(() => {
+            setSuccess(`[Dev Mode] Device OTP is: ${otp}`);
+            setError("Network error. Use the code above.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          });
+          return;
+        }
+
+        // Device is trusted and active, proceed to login
+        localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
         const res = login(email, selectedRole);
         if (res.success) {
           setSuccess("Success! Access granted...");
           setTimeout(() => {
             const defaultRedirects: Record<UserRole, string> = {
-              customer: "/",
-              vendor: "/vendor/dashboard",
-              rider: "/rider/dashboard",
-              admin: "/admin/dashboard",
-              employee: "/admin/dashboard",
-              super_admin: "/admin/dashboard",
+              customer: "/", vendor: "/vendor/dashboard", rider: "/rider/dashboard",
+              admin: "/admin/dashboard", employee: "/admin/dashboard", super_admin: "/admin/dashboard",
             };
             navigate(defaultRedirects[selectedRole] || "/");
           }, 600);
         } else {
           setError(res.error || "Authentication process failed.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } else {
+        // Step 3: Verify Device OTP
+        if (deviceOtp.length < 4) {
+          setError("Please enter the complete 4-digit verification code.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        if (deviceOtp !== generatedDeviceOtp) {
+          setError("Incorrect verification code. Please check and try again.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        const foundUser = users.find(u => 
+          u.email.toLowerCase() === email.trim().toLowerCase() || 
+          u.phone.replace(/[\s\-\+\(\)]/g, "") === email.trim().toLowerCase().replace(/[\s\-\+\(\)]/g, "")
+        );
+
+        if (foundUser) {
+          localStorage.setItem(`trusted_device_${foundUser.id}`, "true");
+          localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
+        }
+
+        const res = login(email, selectedRole);
+        if (res.success) {
+          setSuccess("Device verified! Access granted...");
+          setTimeout(() => {
+            const defaultRedirects: Record<UserRole, string> = {
+              customer: "/", vendor: "/vendor/dashboard", rider: "/rider/dashboard",
+              admin: "/admin/dashboard", employee: "/admin/dashboard", super_admin: "/admin/dashboard",
+            };
+            navigate(defaultRedirects[selectedRole] || "/");
+          }, 600);
+        } else {
+          setError(res.error || "Authentication process failed after device verification.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       }
     }
@@ -827,10 +957,14 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                         } else {
                           setSuccess(`[Dev Mode] New PIN is: ${otp}`);
                           setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the PIN above.`);
+
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                         }
                       } catch (err: any) {
                         setSuccess(`[Dev Mode] New PIN is: ${otp}`);
                         setError("Network error. Use the PIN above.");
+
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
                       }
                     }}
                     className="text-[10px] text-blue-600 font-extrabold hover:underline"
