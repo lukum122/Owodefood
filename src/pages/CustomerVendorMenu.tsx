@@ -370,7 +370,7 @@ export const CustomerVendorMenu: React.FC = () => {
               activeTab === "pickup" ? "border-[#0ea5e9] text-[#0ea5e9]" : "border-transparent text-gray-400 hover:text-[#070329]"
             }`}
           >
-            <Truck className="w-4 h-4" /> Receipt Pickup
+            <Truck className="w-4 h-4" /> Pickup with Receipt
           </button>
         )}
       </section>
@@ -972,13 +972,13 @@ export const CustomerVendorMenu: React.FC = () => {
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="text-[9px] uppercase font-mono bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold">Ref: #{o.id}</span>
-                            <p className="text-[10px] text-gray-400 mt-1 font-semibold">
-                              {new Date(o.createdAt).toLocaleString(undefined, {
-                                month: 'short',
+                            <p className="text-[9px] font-bold text-gray-400 mt-0.5">
+                              {o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-US', { 
+                                month: 'short', 
                                 day: 'numeric',
                                 hour: '2-digit',
                                 minute: '2-digit'
-                              })}
+                              }) : "Date Unknown"}
                             </p>
                           </div>
                           
