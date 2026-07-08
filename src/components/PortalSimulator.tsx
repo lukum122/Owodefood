@@ -9,8 +9,12 @@ export const PortalSimulator: React.FC = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
-  // If there is no user logged in, we can still show the simulator or let them log in
+  // Only show the simulator if the user is a super admin
   const currentRole = currentUser?.role || "guest";
+  
+  if (currentRole !== "super_admin") {
+    return null;
+  }
 
   const rolesConfig: { role: UserRole; label: string; path: string; icon: React.ReactNode; color: string; desc: string }[] = [
     {

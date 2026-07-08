@@ -861,6 +861,36 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                   />
                 </div>
               </>
+            ) : deviceVerificationStep ? (
+              // Enter Device OTP (Step 3)
+              <div className="space-y-4 animate-fade-in">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-4">
+                    For your security, please enter the 4-digit verification code sent to your email to verify this device.
+                  </p>
+                </div>
+
+                <SegmentedPinInput
+                  value={deviceOtp}
+                  onChange={(val) => setDeviceOtp(val)}
+                  length={4}
+                />
+
+                <div className="flex justify-between items-center px-1 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeviceVerificationStep(false);
+                      setLoginPinStep(true);
+                      setError("");
+                      setSuccess("");
+                    }}
+                    className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer"
+                  >
+                    ← Back to Security PIN
+                  </button>
+                </div>
+              </div>
             ) : (
               // Enter PIN (Step 2)
               <div className="space-y-4 animate-fade-in">
@@ -953,15 +983,20 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                   Verify PIN & Create Account
                 </>
               )
-            ) : !loginPinStep ? (
+            ) : !loginPinStep && !deviceVerificationStep ? (
               <>
                 <Smartphone className="w-4 h-4" />
                 Continue to Enter PIN
               </>
-            ) : (
+            ) : loginPinStep && !deviceVerificationStep ? (
               <>
                 <LogIn className="w-4 h-4" />
                 Verify PIN & Sign In
+              </>
+            ) : (
+              <>
+                <Shield className="w-4 h-4" />
+                Verify Device & Sign In
               </>
             )}
           </button>
