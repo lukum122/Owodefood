@@ -118,6 +118,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const [loginPinStep, setLoginPinStep] = useState(false);
   const [loginPin, setLoginPin] = useState("");
   const [storedUserPin, setStoredUserPin] = useState("");
+  const [deviceVerificationStep, setDeviceVerificationStep] = useState(false);
+  const [deviceOtp, setDeviceOtp] = useState("");
   
   // Forgot PIN state
   const [forgotPinStep, setForgotPinStep] = useState<"request" | "verify" | "new_pin" | null>(null);
@@ -147,6 +149,8 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
     setLoginPinStep(false);
     setLoginPin("");
     setStoredUserPin("");
+    setDeviceVerificationStep(false);
+    setDeviceOtp("");
     setForgotPinStep(null);
     setForgotEmailOrPhone("");
     setGeneratedResetCode("");

@@ -1012,7 +1012,6 @@ export const CustomerCheckout: React.FC = () => {
                                   const amt = checkoutFundingProcess.amount;
                                   const newBal = checkoutWalletBalance + amt;
                                   localStorage.setItem("fd_wallet_balance", String(newBal));
-                                  setCheckoutWalletBalance(newBal);
                                   window.dispatchEvent(new Event("wallet-balance-updated"));
                                   setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                                 }, 1200);
@@ -1064,7 +1063,6 @@ export const CustomerCheckout: React.FC = () => {
                                     const amt = checkoutFundingProcess.amount;
                                     const newBal = checkoutWalletBalance + amt;
                                     localStorage.setItem("fd_wallet_balance", String(newBal));
-                                    setCheckoutWalletBalance(newBal);
                                     window.dispatchEvent(new Event("wallet-balance-updated"));
                                     setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                                   }, 1500);
