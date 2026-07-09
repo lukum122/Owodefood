@@ -47,6 +47,7 @@ export const VendorSettings: React.FC = () => {
   const [category, setCategory] = useState<string>(currentVendor?.category || "restaurant");
   const [prepTime, setPrepTime] = useState<number>(currentVendor?.prepTime || 20);
   const [deliveryFee, setDeliveryFee] = useState<number>(currentVendor?.deliveryFee || 750);
+  const [receiptPickupEnabled, setReceiptPickupEnabled] = useState<boolean>(currentVendor?.receiptPickupEnabled !== false);
 
   const [errorStr, setErrorStr] = useState("");
   const [successStr, setSuccessStr] = useState("");
@@ -87,6 +88,7 @@ export const VendorSettings: React.FC = () => {
       setCategory(currentVendor.category || "restaurant");
       setPrepTime(currentVendor.prepTime || 20);
       setDeliveryFee(currentVendor.deliveryFee || 750);
+      setReceiptPickupEnabled(currentVendor.receiptPickupEnabled !== false);
 
       const dist = availableLocations.find(loc => {
         const distName = loc.split(",")[0].trim().toLowerCase();
@@ -159,6 +161,7 @@ export const VendorSettings: React.FC = () => {
         category,
         prepTime,
         deliveryFee,
+        receiptPickupEnabled,
       });
       setSuccessStr("Awesome! Your merchant profile was successfully updated!");
       setTimeout(() => {
@@ -403,6 +406,22 @@ export const VendorSettings: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Receipt Pickup Toggle */}
+            <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
+              <div>
+                <label className="text-[11px] font-bold text-gray-800 block">Allow Client Receipt Pickup</label>
+                <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Enable customers to request rider pickup for items they pre-purchased from you directly.</span>
+              </div>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={receiptPickupEnabled}
+                  onChange={(e) => setReceiptPickupEnabled(e.target.checked)}
+                  className="w-5 h-5 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                />
+              </label>
             </div>
           </div>
 
