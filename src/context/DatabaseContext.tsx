@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder } from "../types";
+import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
 
 export interface CartItem {
   id: string;
@@ -19,6 +19,15 @@ interface DatabaseContextType {
   riders: Rider[];
   cart: CartItem[];
   categories: Category[];
+
+  // Homepage Dynamic Engine
+  homepageSections: HomepageSection[];
+  updateHomepageSections: (sections: HomepageSection[]) => void;
+  collections: Collection[];
+  updateCollections: (collections: Collection[]) => void;
+  heroBanner: HeroBannerConfig;
+  updateHeroBanner: (config: HeroBannerConfig) => void;
+
   availableLocations: string[];
   updateAvailableLocations: (locations: string[]) => void;
   selectedLocation: string;
@@ -58,6 +67,16 @@ interface DatabaseContextType {
   // Max cart item limit
   maxCartItems: number;
   updateMaxCartItems: (limit: number) => void;
+
+  // Surge Pricing Config
+  surgeConfig: SystemSurgeConfig;
+  updateSurgeConfig: (config: Partial<SystemSurgeConfig>) => void;
+
+  // Legal & Contact Info
+  legalContent: LegalContent;
+  updateLegalContent: (content: Partial<LegalContent>) => void;
+  contactInfo: ContactInfo;
+  updateContactInfo: (info: Partial<ContactInfo>) => void;
 
   // Employee Management
   employees: Employee[];
@@ -637,6 +656,78 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+
+  // Homepage Dynamic Engine State
+  const [homepageSections, setHomepageSections] = useState<HomepageSection[]>(() => {
+    try {
+      const saved = localStorage.getItem("fd_homepage_sections");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    // Seed initial sections
+    return [
+      { id: "sec-featured", title: "Featured Restaurants", type: "featured_restaurants", isEnabled: true, sortOrder: 1 },
+      { id: "sec-categories", title: "Explore by Category", type: "food_category", isEnabled: true, sortOrder: 2 },
+      { id: "sec-fast", title: "Fast Delivery", subtitle: "Under 30 mins", type: "fast_delivery", isEnabled: true, sortOrder: 3 }
+    ];
+  });
+
+  const [collections, setCollections] = useState<Collection[]>(() => {
+    try {
+      const saved = localStorage.getItem("fd_collections");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("fd_homepage_sections", JSON.stringify(homepageSections));
+  }, [homepageSections]);
+
+  useEffect(() => {
+    localStorage.setItem("fd_collections", JSON.stringify(collections));
+  }, [collections]);
+
+  const updateHomepageSections = (sections: HomepageSection[]) => setHomepageSections(sections);
+  const updateCollections = (colls: Collection[]) => setCollections(colls);
+
+  const [heroBanner, setHeroBanner] = useState<HeroBannerConfig>(() => {
+    try {
+      const saved = localStorage.getItem("fd_hero_banner");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      isEnabled: true,
+      badgeText: "EASY LOCAL DELIVERY",
+      title: "Good food,<br className=\"hidden sm:inline\" /> fast delivery",
+      description: "Order from your favorite restaurants and get it delivered to your door. Fresh meals brought with speed.",
+      backgroundColor: "#070329",
+      image: "/images/hero.png"
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem("fd_hero_banner", JSON.stringify(heroBanner));
+  }, [heroBanner]);
+
+  const updateHeroBanner = (config: HeroBannerConfig) => setHeroBanner(config);
+
+  const [receiptPickupConfig, setReceiptPickupConfig] = useState<ReceiptPickupConfig>(() => {
+    try {
+      const saved = localStorage.getItem("fd_receipt_pickup_config");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      isEnabled: true,
+      flatServiceFee: 200 // default
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem("fd_receipt_pickup_config", JSON.stringify(receiptPickupConfig));
+  }, [receiptPickupConfig]);
+
+  const updateReceiptPickupConfig = (config: ReceiptPickupConfig) => setReceiptPickupConfig(config);
+
   const [receiptPickupOrders, setReceiptPickupOrders] = useState<ReceiptPickupOrder[]>(() => {
     try {
       const saved = localStorage.getItem("fd_receipt_pickup_orders");
@@ -914,6 +1005,30 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const [globalServiceFeeType, setGlobalServiceFeeType] = useState<"category" | "flat" | "percentage">("category");
   const [globalServiceFeeValue, setGlobalServiceFeeValue] = useState<number>(0);
   const [globalFreeDelivery, setGlobalFreeDelivery] = useState<boolean>(false);
+  const [surgeConfig, setSurgeConfig] = useState<SystemSurgeConfig>({
+    isSurgeActive: false,
+    surgeFee: 0,
+    isRainActive: false,
+    rainFee: 0,
+    isNightActive: false,
+    nightFee: 0,
+    nightStartTime: "22:00",
+    nightEndTime: "06:00"
+  });
+  const [legalContent, setLegalContent] = useState<LegalContent>({
+    terms: "Welcome to our Terms of Service...",
+    privacy: "Your privacy is important to us...",
+    cookies: "We use cookies to improve your experience...",
+    refund: "Our refund policy allows for refunds within 24 hours under certain conditions."
+  });
+  const [contactInfo, setContactInfo] = useState<ContactInfo>({
+    address: "123 Owode Street, Tanke, Ilorin, Nigeria",
+    phone: "+234 (0) 800 000 0000",
+    email: "support@owodefood.com",
+    facebook: "https://facebook.com",
+    twitter: "https://twitter.com",
+    instagram: "https://instagram.com"
+  });
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [currency, setCurrency] = useState<string>("₦");
   
@@ -1634,6 +1749,32 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       if (savedFreeDel) {
         setGlobalFreeDelivery(savedFreeDel === "true");
       }
+      const savedSurge = localStorage.getItem("fd_surge_config");
+      if (savedSurge) {
+        try {
+          setSurgeConfig(JSON.parse(savedSurge));
+        } catch (e) {
+          console.error("Failed to parse surge config", e);
+        }
+      }
+
+      const savedLegal = localStorage.getItem("fd_legal_content");
+      if (savedLegal) {
+        try {
+          setLegalContent(JSON.parse(savedLegal));
+        } catch (e) {
+          console.error("Failed to parse legal config", e);
+        }
+      }
+
+      const savedContact = localStorage.getItem("fd_contact_info");
+      if (savedContact) {
+        try {
+          setContactInfo(JSON.parse(savedContact));
+        } catch (e) {
+          console.error("Failed to parse contact config", e);
+        }
+      }
 
       const savedCurrency = localStorage.getItem("fd_currency");
       if (savedCurrency) {
@@ -1884,6 +2025,30 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     localStorage.setItem("fd_global_free_delivery", String(isEnabled));
   };
 
+  const updateSurgeConfig = (config: Partial<SystemSurgeConfig>) => {
+    setSurgeConfig(prev => {
+      const updated = { ...prev, ...config };
+      localStorage.setItem("fd_surge_config", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const updateLegalContent = (content: Partial<LegalContent>) => {
+    setLegalContent(prev => {
+      const updated = { ...prev, ...content };
+      localStorage.setItem("fd_legal_content", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const updateContactInfo = (info: Partial<ContactInfo>) => {
+    setContactInfo(prev => {
+      const updated = { ...prev, ...info };
+      localStorage.setItem("fd_contact_info", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const updateCurrency = (symbol: string) => {
     setCurrency(symbol);
     localStorage.setItem("fd_currency", symbol);
@@ -1994,10 +2159,35 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     // If regions mismatch and both are known, add a cross-district delivery fee of ₦850
     if (vendorRegion !== "other" && customerRegion !== "other" && vendorRegion !== customerRegion) {
-      return baseFee + 850 + extremeSurcharge;
+      extremeSurcharge += 850;
     }
 
-    return baseFee + extremeSurcharge;
+    // Apply Surge Pricing & Weather Charges
+    let totalSurge = 0;
+    if (surgeConfig.isSurgeActive) totalSurge += surgeConfig.surgeFee;
+    if (surgeConfig.isRainActive) totalSurge += surgeConfig.rainFee;
+    if (surgeConfig.isNightActive) {
+      const now = new Date();
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const currentMinutes = currentH * 60 + currentM;
+      
+      const [startH, startM] = surgeConfig.nightStartTime.split(":").map(Number);
+      const [endH, endM] = surgeConfig.nightEndTime.split(":").map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+      
+      let isNightNow = false;
+      if (startMinutes > endMinutes) {
+        // Night crosses midnight (e.g. 22:00 to 06:00)
+        isNightNow = currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+      } else {
+        isNightNow = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+      }
+      if (isNightNow) totalSurge += surgeConfig.nightFee;
+    }
+
+    return baseFee + extremeSurcharge + totalSurge;
   };
 
   const addEmployee = (newEmpData: Omit<Employee, "id" | "createdAt">) => {
@@ -3249,7 +3439,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
   const adminUpdateUser = (
     userId: string,
-    fields: { name: string; email: string; phone: string; role: UserRole; pin: string; roles?: UserRole[] }
+    fields: { name: string; email: string; phone: string; role: UserRole; pin: string; roles?: UserRole[] },
+    extra?: { businessName?: string; cuisine?: string; vehicleType?: Rider["vehicleType"] }
   ) => {
     const cleansedEmail = fields.email.trim().toLowerCase();
     const otherExists = users.some(u => u.id !== userId && u.email.toLowerCase() === cleansedEmail);
@@ -3295,9 +3486,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       const newVendor: Vendor = {
         id: "v-" + generateId(),
         userId,
-        name: `${fields.name.trim()}'s Eatery`,
-        description: "Premium platform vendor.",
-        cuisine: "Continental",
+        name: extra?.businessName || `${fields.name.trim()}'s Eatery`,
+        description: `Premium platform vendor serving ${extra?.cuisine || "delicious"} food.`,
+        cuisine: extra?.cuisine || "Continental",
         image: "/images/burger.png",
         rating: 5.0,
         address: "Kwara Delivery Zone",
@@ -3313,7 +3504,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         userId,
         name: fields.name.trim(),
         phone: fields.phone.trim(),
-        vehicleType: "motorcycle",
+        vehicleType: extra?.vehicleType || "motorcycle",
         status: "approved",
         isAvailable: true,
         createdAt: new Date().toISOString()
@@ -3363,27 +3554,36 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // --- RECEIPT PICKUP & DELIVERY FUNCTIONS ---
-  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => {
-    const orderId = "rcpt-" + generateId();
+  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "serviceFee" | "totalAmount" | "createdAt">) => {
+    if (!currentUser) return { success: false, error: "Not logged in" };
     
+    // Auto-approve if standard method, else pending
+    const status = orderData.paymentMethod === "cash" || orderData.paymentMethod === "wallet" 
+      ? "pending" 
+      : "pending";
+
+    // Deduct from wallet if wallet
     if (orderData.paymentMethod === "wallet") {
-      const balance = getUserWalletBalance(orderData.customerId);
-      if (balance < orderData.deliveryFee) {
-        return { success: false, error: "Insufficient wallet balance to pay for delivery." };
+      const bal = getUserWalletBalance(currentUser.id);
+      const totalAmount = orderData.deliveryFee + receiptPickupConfig.flatServiceFee;
+      if (bal < totalAmount) {
+        return { success: false, error: "Insufficient wallet balance" };
       }
       updateUserWalletBalance(
-        orderData.customerId,
-        orderData.deliveryFee,
-        "purchase",
-        `Receipt Pickup Delivery Fee to ${orderData.vendorName} - Ref: #${orderId}`
+        currentUser.id,
+        -totalAmount,
+        "payment",
+        `Payment for receipt pickup from ${orderData.vendorName}`
       );
     }
 
     const newOrder: ReceiptPickupOrder = {
       ...orderData,
-      id: orderId,
+      id: "rp-" + Math.random().toString(36).substr(2, 9),
       status: "pending",
       paymentStatus: orderData.paymentMethod === "wallet" ? "paid" : "unpaid",
+      serviceFee: receiptPickupConfig.flatServiceFee,
+      totalAmount: orderData.deliveryFee + receiptPickupConfig.flatServiceFee,
       createdAt: new Date().toISOString()
     };
 
@@ -3499,6 +3699,12 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         riders,
         cart,
         categories,
+        homepageSections,
+        updateHomepageSections,
+        collections,
+        updateCollections,
+        heroBanner,
+        updateHeroBanner,
         availableLocations,
         updateAvailableLocations,
         selectedLocation,
@@ -3518,6 +3724,12 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         updateGlobalServiceFeeSettings,
         globalFreeDelivery,
         updateGlobalFreeDelivery,
+        surgeConfig,
+        updateSurgeConfig,
+        legalContent,
+        updateLegalContent,
+        contactInfo,
+        updateContactInfo,
         calculateServiceFee,
         calculateDeliveryFee,
         currency,
@@ -3610,6 +3822,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         declineWalletFunding,
 
         // Receipt Pickup & Delivery System
+        receiptPickupConfig,
+        updateReceiptPickupConfig,
         receiptPickupOrders,
         createReceiptPickupOrder,
         acceptReceiptPickupDelivery,

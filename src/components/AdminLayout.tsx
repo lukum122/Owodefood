@@ -20,7 +20,8 @@ import {
   Bell,
   Lock,
   ShieldAlert,
-  ChevronDown
+  ChevronDown,
+  Layers
 } from "lucide-react";
 import { UserRole } from "../types";
 
@@ -90,6 +91,8 @@ export const AdminLayout: React.FC = () => {
           return dept === "finance" || dept === "admin";
         case "Platform Communications":
           return perms.includes("manage_orders") || dept === "support" || dept === "admin";
+        case "Homepage Engine":
+          return perms.includes("view_settings") || dept === "admin";
         case "Global Settings":
           return perms.includes("view_settings") || dept === "admin";
         default:
@@ -110,6 +113,7 @@ export const AdminLayout: React.FC = () => {
     { name: "Manage Staff", path: "/admin/employees", icon: ShieldCheck },
     { name: "Wallet Management", path: "/admin/wallets", icon: Coins },
     { name: "Platform Communications", path: "/admin/notifications", icon: Bell },
+    { name: "Homepage Engine", path: "/admin/discovery", icon: Layers },
     { name: "Global Settings", path: "/admin/settings", icon: Settings },
   ];
 

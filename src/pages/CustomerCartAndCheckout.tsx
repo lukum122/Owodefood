@@ -1,12 +1,22 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { CartItem } from "../types";
 import { isVendorOpen } from "../types";
 import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle, Wallet, Shield, Lock, KeyRound, Copy, AlertCircle, User, Mail } from "lucide-react";
 
 export const CustomerCart: React.FC = () => {
   const { vendors, cart, updateCartQuantity, removeFromCart, clearCart, calculateDeliveryFee, calculateServiceFee, currency, vatEnabled, vatRate, maxCartItems } = useDatabase();
   const navigate = useNavigate();
+  const [addonPromptItem, setAddonPromptItem] = useState<CartItem | null>(null);
+
+  const handleIncreaseQuantity = (item: CartItem) => {
+    if (item.selectedAddons && item.selectedAddons.length > 0) {
+      setAddonPromptItem(item);
+    } else {
+      updateCartQuantity(item.id, item.quantity + 1);
+    }
+  };
 
   // Dynamic cost calculation incorporating custom addons
   const total = cart.reduce((sum, item) => {
@@ -119,7 +129,7 @@ export const CustomerCart: React.FC = () => {
                       </button>
                       <span className="text-xs font-extrabold font-mono min-w-4 text-center">{item.quantity}</span>
                       <button
-                        onClick={() => updateCartQuantity(item.id, item.quantity + 1)}
+                        onClick={() => handleIncreaseQuantity(item)}
                         className="text-gray-500 hover:text-green-500 text-xs font-black cursor-pointer px-1 py-0.5"
                       >
                         +
@@ -176,6 +186,15 @@ export const CustomerCart: React.FC = () => {
             </div>
           )}
 
+          {cartVendor && (
+            <button
+              onClick={() => navigate(`/vendor/${cartVendor.id}`)}
+              className="w-full py-3 px-5 text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer mb-3"
+            >
+              <span>Add More Items</span>
+            </button>
+          )}
+
           <button
             onClick={() => navigate("/checkout")}
             disabled={cartVendor ? !isVendorOpen(cartVendor) : false}
@@ -195,6 +214,51 @@ export const CustomerCart: React.FC = () => {
         </div>
 
       </div>
+
+      {/* ADDON REPEAT PROMPT MODAL */}
+      {addonPromptItem && (
+        <div className="fixed inset-0 bg-gray-950/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-amber-500 mb-4">
+              <AlertTriangle className="w-6 h-6" />
+              <h2 className="text-lg font-black text-gray-900 tracking-tight leading-none">Repeat customized item?</h2>
+            </div>
+            
+            <p className="text-xs text-gray-500 leading-relaxed mb-6">
+              You've already customized this <span className="font-bold text-gray-800">{addonPromptItem.product.name}</span> with specific add-ons. Do you want to repeat this exact item, or customize a fresh one from the menu?
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  updateCartQuantity(addonPromptItem.id, addonPromptItem.quantity + 1);
+                  setAddonPromptItem(null);
+                }}
+                className="w-full bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold py-3.5 px-4 rounded-xl transition cursor-pointer"
+              >
+                Repeat Item (Same Add-ons)
+              </button>
+              
+              <button
+                onClick={() => {
+                  navigate(`/vendor/${addonPromptItem.product.vendorId}`);
+                  setAddonPromptItem(null);
+                }}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold py-3.5 px-4 rounded-xl transition cursor-pointer"
+              >
+                Customize New Item
+              </button>
+              
+              <button
+                onClick={() => setAddonPromptItem(null)}
+                className="w-full text-gray-400 hover:text-gray-600 text-xs font-bold py-2 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

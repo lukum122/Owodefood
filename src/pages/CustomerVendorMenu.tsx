@@ -6,7 +6,7 @@ import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, Shi
 
 export const CustomerVendorMenu: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, receiptPickupOrders, createReceiptPickupOrder, cancelReceiptPickupOrder, savedAddresses, getUserWalletBalance, calculateDeliveryFee } = useDatabase();
+  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, receiptPickupOrders, createReceiptPickupOrder, cancelReceiptPickupOrder, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -367,7 +367,7 @@ export const CustomerVendorMenu: React.FC = () => {
         >
           Info & Hours
         </button>
-        {vendorObj.receiptPickupEnabled !== false && (
+        {vendorObj.receiptPickupEnabled !== false && receiptPickupConfig?.isEnabled !== false && (
           <button 
             onClick={() => setActiveTab("pickup")}
             className={`py-3.5 text-sm font-extrabold border-b-2 transition uppercase tracking-wider flex items-center gap-1.5 ${
@@ -872,67 +872,69 @@ export const CustomerVendorMenu: React.FC = () => {
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-mono tracking-wider font-black text-gray-400 block">Delivery Settlement Method</label>
                     <div className="grid grid-cols-2 gap-3">
-                      {/* Cashless Wallet */}
-                      <div
-                        onClick={() => setPaymentMethod("wallet")}
-                        className={`p-3.5 rounded-2xl border transition text-left cursor-pointer relative select-none flex flex-col justify-between ${
-                          paymentMethod === "wallet"
-                            ? "bg-sky-50/55 border-[#0ea5e9] text-sky-950"
-                            : "bg-white border-gray-200 hover:bg-gray-50 text-gray-700"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black">Pre-Paid Wallet</span>
-                          <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] text-white ${
-                            paymentMethod === "wallet" ? "bg-[#0ea5e9] border-[#0ea5e9]" : "border-gray-300"
-                          }`}>{paymentMethod === "wallet" && "✓"}</span>
+                      {paymentGateways?.filter(g => g.isEnabled).map(gateway => (
+                        <div
+                          key={gateway.id}
+                          onClick={() => setPaymentMethod(gateway.id)}
+                          className={`p-3.5 rounded-2xl border transition text-left cursor-pointer relative select-none flex flex-col justify-between ${
+                            paymentMethod === gateway.id
+                              ? "bg-sky-50/55 border-[#0ea5e9] text-sky-950"
+                              : "bg-white border-gray-200 hover:bg-gray-50 text-gray-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black capitalize">{gateway.name}</span>
+                            <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] text-white ${
+                              paymentMethod === gateway.id ? "bg-[#0ea5e9] border-[#0ea5e9]" : "border-gray-300"
+                            }`}>{paymentMethod === gateway.id && "✓"}</span>
+                          </div>
+                          {gateway.id === "wallet" && (
+                            <p className="text-[10px] text-gray-400 font-semibold mt-1">
+                              Wallet Balance: {currency}{getUserWalletBalance(currentUser.id).toLocaleString()}
+                            </p>
+                          )}
+                          {gateway.id === "cash" && (
+                            <p className="text-[10px] text-gray-400 font-semibold mt-1">Pay rider when items arrive</p>
+                          )}
                         </div>
-                        <p className="text-[10px] text-gray-400 font-semibold mt-1">
-                          Wallet Balance: {currency}{getUserWalletBalance(currentUser.id).toLocaleString()}
-                        </p>
-                      </div>
-
-                      {/* Cash on Delivery */}
-                      <div
-                        onClick={() => setPaymentMethod("cash")}
-                        className={`p-3.5 rounded-2xl border transition text-left cursor-pointer relative select-none flex flex-col justify-between ${
-                          paymentMethod === "cash"
-                            ? "bg-sky-50/55 border-[#0ea5e9] text-sky-950"
-                            : "bg-white border-gray-200 hover:bg-gray-50 text-gray-700"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black">Cash on Delivery</span>
-                          <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[8px] text-white ${
-                            paymentMethod === "cash" ? "bg-[#0ea5e9] border-[#0ea5e9]" : "border-gray-300"
-                          }`}>{paymentMethod === "cash" && "✓"}</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 font-semibold mt-1">Pay rider when items arrive</p>
-                      </div>
+                      ))}
                     </div>
 
-                    {paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (vendorObj?.deliveryFee || 750) && (
+                    {paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < ((vendorObj?.deliveryFee || 750) + (receiptPickupConfig?.flatServiceFee || 0)) && (
                       <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2 rounded-xl border border-amber-100">
-                        ⚠ Your wallet balance is too low for pre-paid delivery fee. Please choose "Cash on Delivery" or fund your wallet first in profile tab.
+                        ⚠ Your wallet balance is too low to cover the total amount. Please choose another method or fund your wallet.
                       </p>
                     )}
                   </div>
 
-                  {/* Delivery Fee Summary */}
-                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-extrabold text-[#070329]">Delivery Dispatch Fee</span>
-                      <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Strictly for pre-purchased items</p>
+                  {/* Fee Summary */}
+                  <div className="space-y-1">
+                    <div className="p-3 bg-gray-50 rounded-t-2xl border border-gray-100 flex justify-between items-center text-xs">
+                      <div>
+                        <span className="font-bold text-gray-600">Delivery Dispatch Fee</span>
+                      </div>
+                      <span className="text-gray-900 font-bold font-mono">{currency}{(vendorObj?.deliveryFee || 750).toLocaleString()}</span>
                     </div>
-                    <span className="text-[#070329] font-black text-sm">{currency}{(vendorObj?.deliveryFee || 750).toLocaleString()}</span>
+                    {(receiptPickupConfig?.flatServiceFee || 0) > 0 && (
+                      <div className="p-3 bg-gray-50 border-x border-b border-gray-100 flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-gray-600">Platform Service Fee</span>
+                        </div>
+                        <span className="text-gray-900 font-bold font-mono">{currency}{(receiptPickupConfig.flatServiceFee).toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="p-4 bg-sky-50 rounded-b-2xl border-x border-b border-sky-100 flex justify-between items-center text-sm">
+                      <span className="font-extrabold text-[#070329]">Total</span>
+                      <span className="text-[#070329] font-black">{currency}{((vendorObj?.deliveryFee || 750) + (receiptPickupConfig?.flatServiceFee || 0)).toLocaleString()}</span>
+                    </div>
                   </div>
 
                   {/* Submit Button */}
                   <button
                     type="submit"
-                    disabled={isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (vendorObj?.deliveryFee || 750))}
+                    disabled={!paymentMethod || isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < ((vendorObj?.deliveryFee || 750) + (receiptPickupConfig?.flatServiceFee || 0)))}
                     className={`w-full text-white py-3 px-5 rounded-2xl text-xs font-bold shadow transition flex items-center justify-center gap-2 ${
-                      isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (vendorObj?.deliveryFee || 750))
+                      !paymentMethod || isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < ((vendorObj?.deliveryFee || 750) + (receiptPickupConfig?.flatServiceFee || 0)))
                         ? "bg-gray-300 cursor-not-allowed text-gray-500 shadow-none"
                         : "bg-[#0ea5e9] hover:bg-[#0284c7] cursor-pointer"
                     }`}

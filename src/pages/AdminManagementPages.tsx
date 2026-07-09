@@ -2502,6 +2502,12 @@ export const AdminSettings: React.FC = () => {
     updateGlobalServiceFeeSettings,
     globalFreeDelivery,
     updateGlobalFreeDelivery,
+    surgeConfig,
+    updateSurgeConfig,
+    legalContent,
+    updateLegalContent,
+    contactInfo,
+    updateContactInfo,
     currency,
     updateCurrency,
     
@@ -2529,7 +2535,9 @@ export const AdminSettings: React.FC = () => {
     extremeLocations,
     addExtremeLocation,
     removeExtremeLocation,
-    updateExtremeLocations
+    updateExtremeLocations,
+    receiptPickupConfig,
+    updateReceiptPickupConfig
   } = useDatabase();
   
   const [newLocTierId, setNewLocTierId] = useState(""); // "" means No Surcharge / Base Fee
@@ -2889,6 +2897,52 @@ export const AdminSettings: React.FC = () => {
             </button>
           </div>
         </form>
+      </div>
+      {/* CARD: Receipt Pickup Configuration */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-sky-600 text-white flex items-center justify-center p-1 shadow-md shadow-sky-100">
+            <Truck className="w-8 h-8 text-white" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg text-gray-950">Receipt Pickup Service</h3>
+                <span className="text-xs text-gray-400 block mt-0.5 font-sans">Toggle the receipt pickup module and set its platform fee.</span>
+              </div>
+              {/* Feature Toggle */}
+              <button
+                type="button"
+                onClick={() => updateReceiptPickupConfig({ ...receiptPickupConfig, isEnabled: !receiptPickupConfig.isEnabled })}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
+                  receiptPickupConfig.isEnabled ? "bg-green-500" : "bg-gray-200"
+                }`}
+              >
+                <div
+                  className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
+                    receiptPickupConfig.isEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className={`space-y-4 ${!receiptPickupConfig.isEnabled ? "opacity-50 pointer-events-none" : ""}`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-650 block">Flat Service Fee ({currency})</label>
+              <input
+                type="number"
+                value={receiptPickupConfig.flatServiceFee}
+                onChange={(e) => updateReceiptPickupConfig({ ...receiptPickupConfig, flatServiceFee: Number(e.target.value) })}
+                className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-sky-100 font-mono font-bold"
+                required
+              />
+              <p className="text-[10px] text-gray-400 mt-1">This fee is charged to the customer in addition to the vendor's delivery dispatch fee.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* CARD: Global Fees & Pricing Policy */}
@@ -3693,6 +3747,261 @@ export const AdminSettings: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* SURGE PRICING & WEATHER CONDITIONS */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
+        <div className="mb-6">
+          <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+            Surge Pricing & Conditions
+          </h2>
+          <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+            Configure dynamic delivery surcharges based on weather, demand, or time of day.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {/* General Surge */}
+          <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-xs font-bold text-gray-900">General Surge Surcharge</h4>
+                <p className="text-[10px] text-gray-500">Apply an extra fee during high demand.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={surgeConfig.isSurgeActive}
+                  onChange={(e) => updateSurgeConfig({ isSurgeActive: e.target.checked })}
+                />
+                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
+              </label>
+            </div>
+            {surgeConfig.isSurgeActive && (
+              <div className="mt-3">
+                <label className="text-[10px] font-bold text-gray-600 mb-1 block">Surge Fee Amount ({currency})</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={surgeConfig.surgeFee}
+                  onChange={(e) => updateSurgeConfig({ surgeFee: Number(e.target.value) })}
+                  className="w-full sm:w-1/3 text-xs p-2.5 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-teal-100"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Rain / Weather */}
+          <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-xs font-bold text-blue-900">Rain & Weather Premium</h4>
+                <p className="text-[10px] text-blue-700/70">Extra delivery charge when raining.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={surgeConfig.isRainActive}
+                  onChange={(e) => updateSurgeConfig({ isRainActive: e.target.checked })}
+                />
+                <div className="w-9 h-5 bg-blue-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            {surgeConfig.isRainActive && (
+              <div className="mt-3">
+                <label className="text-[10px] font-bold text-blue-800 mb-1 block">Rain Surcharge Amount ({currency})</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={surgeConfig.rainFee}
+                  onChange={(e) => updateSurgeConfig({ rainFee: Number(e.target.value) })}
+                  className="w-full sm:w-1/3 text-xs p-2.5 border border-blue-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Night Surcharge */}
+          <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-xs font-bold text-indigo-900">Night-time Premium Surcharge</h4>
+                <p className="text-[10px] text-indigo-700/70">Automatically applied during specific late hours.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={surgeConfig.isNightActive}
+                  onChange={(e) => updateSurgeConfig({ isNightActive: e.target.checked })}
+                />
+                <div className="w-9 h-5 bg-indigo-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+            {surgeConfig.isNightActive && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-800 mb-1 block">Start Time</label>
+                  <input
+                    type="time"
+                    value={surgeConfig.nightStartTime}
+                    onChange={(e) => updateSurgeConfig({ nightStartTime: e.target.value })}
+                    className="w-full text-xs p-2.5 border border-indigo-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-800 mb-1 block">End Time</label>
+                  <input
+                    type="time"
+                    value={surgeConfig.nightEndTime}
+                    onChange={(e) => updateSurgeConfig({ nightEndTime: e.target.value })}
+                    className="w-full text-xs p-2.5 border border-indigo-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-100 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-indigo-800 mb-1 block">Night Fee ({currency})</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={surgeConfig.nightFee}
+                    onChange={(e) => updateSurgeConfig({ nightFee: Number(e.target.value) })}
+                    className="w-full text-xs p-2.5 border border-indigo-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* LEGAL & POLICIES CONTENT */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
+        <div className="mb-6">
+          <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+            Legal & Policies Content
+          </h2>
+          <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+            Update the terms and policies displayed to customers on the frontend. Use simple text or markdown format.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Terms of Service</label>
+            <textarea
+              value={legalContent.terms}
+              onChange={(e) => updateLegalContent({ terms: e.target.value })}
+              rows={4}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-sky-100 font-mono"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Privacy Policy</label>
+            <textarea
+              value={legalContent.privacy}
+              onChange={(e) => updateLegalContent({ privacy: e.target.value })}
+              rows={4}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-sky-100 font-mono"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Cookie Policy</label>
+            <textarea
+              value={legalContent.cookies}
+              onChange={(e) => updateLegalContent({ cookies: e.target.value })}
+              rows={4}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-sky-100 font-mono"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Refund Policy</label>
+            <textarea
+              value={legalContent.refund}
+              onChange={(e) => updateLegalContent({ refund: e.target.value })}
+              rows={4}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-gray-50 outline-none focus:ring-2 focus:ring-sky-100 font-mono"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* CONTACT & SOCIAL LINKS */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
+        <div className="mb-6">
+          <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+            Contact & Social Links
+          </h2>
+          <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+            Update the contact information and social media links displayed in the customer footer.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Office Address</label>
+            <input
+              type="text"
+              value={contactInfo.address}
+              onChange={(e) => updateContactInfo({ address: e.target.value })}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Support Phone</label>
+            <input
+              type="text"
+              value={contactInfo.phone}
+              onChange={(e) => updateContactInfo({ phone: e.target.value })}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Support Email</label>
+            <input
+              type="email"
+              value={contactInfo.email}
+              onChange={(e) => updateContactInfo({ email: e.target.value })}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Facebook URL</label>
+            <input
+              type="url"
+              value={contactInfo.facebook}
+              onChange={(e) => updateContactInfo({ facebook: e.target.value })}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Twitter URL</label>
+            <input
+              type="url"
+              value={contactInfo.twitter}
+              onChange={(e) => updateContactInfo({ twitter: e.target.value })}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700">Instagram URL</label>
+            <input
+              type="url"
+              value={contactInfo.instagram}
+              onChange={(e) => updateContactInfo({ instagram: e.target.value })}
+              className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
         </div>
       </div>
     </div>

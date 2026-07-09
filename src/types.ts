@@ -167,6 +167,11 @@ export interface Category {
   icon: string;
 }
 
+export interface ReceiptPickupConfig {
+  isEnabled: boolean;
+  flatServiceFee: number;
+}
+
 export interface PaymentGateway {
   id: string;
   name: string;
@@ -287,8 +292,10 @@ export interface ReceiptPickupOrder {
   riderId?: string;
   riderName?: string;
   status: "pending" | "accepted" | "picked_up" | "delivered" | "cancelled";
-  paymentMethod: "wallet" | "cash";
+  paymentMethod: string;
   paymentStatus: "paid" | "unpaid";
+  serviceFee?: number;
+  totalAmount?: number;
   createdAt: string;
 }
 

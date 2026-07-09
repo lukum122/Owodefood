@@ -6,7 +6,7 @@ import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, Layou
 import * as LucideIcons from "lucide-react";
 
 export const CustomerHome: React.FC = () => {
-  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser } = useDatabase();
+  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser, homepageSections = [], heroBanner } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -440,62 +440,62 @@ export const CustomerHome: React.FC = () => {
       </div>
 
       {/* Dynamic Owode Food Hero Promo Banner */}
-      <section className="relative rounded-[32px] bg-[#070329] text-white p-8 sm:p-12 lg:p-14 overflow-hidden border border-white/5">
-        
-        {/* Subtle backgrounds */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-20 pointer-events-none hidden lg:block bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-300 via-blue-900 to-[#070329]"></div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+      {heroBanner?.isEnabled && (
+        <section 
+          className="relative rounded-[32px] text-white p-8 sm:p-12 lg:p-14 overflow-hidden border border-white/5"
+          style={{ backgroundColor: heroBanner.backgroundColor }}
+        >
+          {/* Subtle backgrounds */}
+          <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-20 pointer-events-none hidden lg:block bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent"></div>
           
-          <div className="lg:col-span-7 space-y-6">
-            <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-[#38bdf8] py-1.5 px-4 rounded-full text-xs font-bold leading-none uppercase tracking-wide border border-white/10">
-              <Sparkles className="w-3.5 h-3.5" />
-              Easy Local Delivery
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
             
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-tight tracking-tight text-white">
-              Good food,<br className="hidden sm:inline" /> fast delivery
-            </h1>
-            
-            <p className="text-xs sm:text-sm text-gray-300 leading-relaxed max-w-md">
-              Order from your favorite restaurants and get it delivered to your door. Fresh meals brought with speed.
-            </p>
-            
-            <div className="pt-2">
-              <button 
-                onClick={() => {
-                  const el = document.getElementById("restaurants-grid");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="inline-flex items-center gap-2 bg-white hover:bg-gray-100 text-[#070329] py-3.5 px-7 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg transition duration-200"
-              >
-                <span>Order Now</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* High Fidelity bowl image matching mockup */}
-          <div className="lg:col-span-5 flex justify-center lg:justify-end">
-            <div className="relative w-64 h-64 sm:w-80 sm:h-80 lg:w-96 lg:h-96 shrink-0 aspect-square rounded-full overflow-hidden border-8 border-white/5 shadow-2xl relative">
-              <img 
-                src="/images/hero.png"
-                alt="ramen ramen bowl food"
-                className="w-full h-full object-cover rounded-full"
-                referrerPolicy="no-referrer"
+            <div className="lg:col-span-7 space-y-6">
+              {heroBanner.badgeText && (
+                <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md text-[#38bdf8] py-1.5 px-4 rounded-full text-xs font-bold leading-none uppercase tracking-wide border border-white/10">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {heroBanner.badgeText}
+                </div>
+              )}
+              
+              <h1 
+                className="text-4xl sm:text-5xl lg:text-6xl font-black leading-tight tracking-tight text-white"
+                dangerouslySetInnerHTML={{ __html: heroBanner.title }}
               />
+              
+              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed max-w-md">
+                {heroBanner.description}
+              </p>
+              
+              <div className="pt-2">
+                <button 
+                  onClick={() => {
+                    const el = document.getElementById("restaurants-grid");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="inline-flex items-center gap-2 bg-white hover:bg-gray-100 text-[#070329] py-3.5 px-7 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg transition duration-200"
+                >
+                  <span>Order Now</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
+
+            {heroBanner.image && (
+              <div className="lg:col-span-5 flex justify-center lg:justify-end">
+                <div className="relative w-64 h-64 sm:w-80 sm:h-80 lg:w-96 lg:h-96 shrink-0 aspect-square rounded-full overflow-hidden border-8 border-white/5 shadow-2xl relative">
+                  <img 
+                    src={heroBanner.image}
+                    alt="Hero Banner"
+                    className="w-full h-full object-cover rounded-full"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-
-        </div>
-
-        {/* Carousel indicators dots like mockup */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 lg:left-14 lg:translate-x-0 flex gap-2">
-          <span className="w-6 h-1.5 bg-white rounded-full"></span>
-          <span className="w-2 h-1.5 bg-white/30 rounded-full"></span>
-          <span className="w-2 h-1.5 bg-white/30 rounded-full"></span>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Search Bar section on Mobile */}
       <section className="block md:hidden">
@@ -665,6 +665,168 @@ export const CustomerHome: React.FC = () => {
           })}
         </div>
       </section>
+
+      {/* Dynamic Homepage Sections */}
+      {homepageSections
+        .filter(section => section.isEnabled)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(section => {
+          // In a real app, you would fetch data for each section here or pass the config to a reusable component.
+          // For now, we will render a generic horizontal scroll container.
+          if (section.type === "food_category") {
+            const displayProducts = products.filter(p => section.filterType === 'vendor' ? p.vendorId === section.filterValue : p.category === section.filterValue);
+            
+            if (displayProducts.length === 0) return null;
+
+            return (
+              <section key={section.id} className="space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-[#070329] uppercase">{section.title}</h2>
+                    {section.subtitle && <p className="text-[10px] text-gray-400 uppercase font-mono tracking-wider font-semibold">{section.subtitle}</p>}
+                  </div>
+                  <button className="text-xs font-bold text-[#0ea5e9] hover:underline flex items-center gap-1">
+                    See all
+                  </button>
+                </div>
+                <div className="flex overflow-x-auto snap-x space-x-4 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+                  {displayProducts.slice(0, 10).map(product => {
+                    const vendor = vendors.find(v => v.id === product.vendorId);
+                    return (
+                      <Link
+                        key={`${section.id}-${product.id}`}
+                        to={`/vendor/${product.vendorId}`}
+                        className="min-w-[200px] sm:min-w-[240px] bg-white rounded-3xl overflow-hidden border border-gray-100 hover:shadow-xl transition-all duration-300 flex flex-col group snap-start shrink-0 cursor-pointer"
+                      >
+                        <div className="h-32 overflow-hidden relative bg-gray-50">
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-xl shadow-sm border border-white/20">
+                            <span className="text-[10px] font-black text-gray-900">₦{product.price.toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="p-3">
+                          <h3 className="font-black text-[13px] text-[#070329] tracking-tight truncate">{product.name}</h3>
+                          <p className="text-[10px] text-gray-500 truncate mb-1">{product.description}</p>
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <Store className="w-3 h-3 text-gray-400" />
+                            <span className="text-[9px] font-bold text-gray-600 truncate">{vendor?.name || 'Unknown'}</span>
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          }
+          
+          return (
+            <section key={section.id} className="space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <h2 className="text-lg font-black tracking-tight text-[#070329] uppercase">{section.title}</h2>
+                  {section.subtitle && <p className="text-[10px] text-gray-400 uppercase font-mono tracking-wider font-semibold">{section.subtitle}</p>}
+                </div>
+                {section.type !== "promotional_banner" && (
+                  <button className="text-xs font-bold text-[#0ea5e9] hover:underline flex items-center gap-1">
+                    See all
+                  </button>
+                )}
+              </div>
+
+              {section.type === "promotional_banner" ? (
+                <div className="relative">
+                  {section.linkUrl ? (
+                    section.linkUrl.startsWith('http') ? (
+                      <a href={section.linkUrl} target="_blank" rel="noreferrer" className="block w-full h-40 rounded-3xl overflow-hidden relative shadow-lg cursor-pointer transform transition hover:-translate-y-1">
+                        <div 
+                          className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600"
+                          style={section.bannerImage ? { backgroundImage: `url(${section.bannerImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                        />
+                        <div className="absolute inset-0 bg-black/30" />
+                        <div className="absolute inset-0 p-6 flex flex-col justify-center">
+                          <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md w-max mb-2 border border-white/10 uppercase tracking-wider">Limited Time</span>
+                          <h3 className="text-2xl font-black text-white">{section.title}</h3>
+                          <p className="text-white/80 text-sm mt-1 max-w-sm">{section.subtitle || "Check out this amazing deal today!"}</p>
+                        </div>
+                      </a>
+                    ) : (
+                      <Link to={section.linkUrl} className="block w-full h-40 rounded-3xl overflow-hidden relative shadow-lg cursor-pointer transform transition hover:-translate-y-1">
+                        <div 
+                          className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600"
+                          style={section.bannerImage ? { backgroundImage: `url(${section.bannerImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                        />
+                        <div className="absolute inset-0 bg-black/30" />
+                        <div className="absolute inset-0 p-6 flex flex-col justify-center">
+                          <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md w-max mb-2 border border-white/10 uppercase tracking-wider">Limited Time</span>
+                          <h3 className="text-2xl font-black text-white">{section.title}</h3>
+                          <p className="text-white/80 text-sm mt-1 max-w-sm">{section.subtitle || "Check out this amazing deal today!"}</p>
+                        </div>
+                      </Link>
+                    )
+                  ) : (
+                    <div className="w-full h-40 rounded-3xl overflow-hidden relative shadow-lg transform transition">
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600"
+                        style={section.bannerImage ? { backgroundImage: `url(${section.bannerImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                      />
+                      <div className="absolute inset-0 bg-black/30" />
+                      <div className="absolute inset-0 p-6 flex flex-col justify-center">
+                        <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md w-max mb-2 border border-white/10 uppercase tracking-wider">Limited Time</span>
+                        <h3 className="text-2xl font-black text-white">{section.title}</h3>
+                        <p className="text-white/80 text-sm mt-1 max-w-sm">{section.subtitle || "Check out this amazing deal today!"}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex overflow-x-auto snap-x space-x-4 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+                  {vendors.slice(0, 5).map(vendor => (
+                    <Link
+                      key={`${section.id}-${vendor.id}`}
+                      to={`/vendor/${vendor.id}`}
+                      className="min-w-[280px] sm:min-w-[320px] bg-white rounded-3xl overflow-hidden border border-gray-100 hover:shadow-xl transition-all duration-300 flex flex-col group snap-start shrink-0 cursor-pointer"
+                    >
+                      <div className="h-36 overflow-hidden relative bg-gray-50">
+                        <img
+                          src={vendor.image}
+                          alt={vendor.name}
+                          className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${!isVendorOpen(vendor) ? "grayscale contrast-75 brightness-75" : ""}`}
+                        />
+                        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                          {section.type === "fast_delivery" && (
+                            <span className="bg-[#0ea5e9] text-white text-[9px] font-bold px-2 py-1.5 rounded-lg shadow-sm border border-[#0ea5e9]/20 flex items-center gap-1 uppercase tracking-wider font-mono">
+                              <Sparkles className="w-3 h-3" /> Flash Delivery
+                            </span>
+                          )}
+                          {section.type === "top_rated" && (
+                            <span className="bg-amber-400 text-amber-950 text-[9px] font-bold px-2 py-1.5 rounded-lg shadow-sm flex items-center gap-1 uppercase tracking-wider font-mono">
+                              <Star className="w-3 h-3 fill-amber-950" /> Top Rated
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="font-black text-[15px] text-[#070329] tracking-tight truncate pr-2">{vendor.name}</h3>
+                          <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded-md border border-gray-100 shrink-0">
+                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                            <span className="text-[10px] font-bold text-gray-700">{vendor.rating}</span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-gray-500 truncate mb-3 font-medium">{vendor.cuisine}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
 
       {/* Popular Restaurants section with cover cards */}
       <section className="space-y-6" id="restaurants-grid">

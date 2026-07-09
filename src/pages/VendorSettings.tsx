@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign, Lock } from "lucide-react";
-import { VendorCategory } from "../types";
+import { VendorCategory, DailyHours } from "../types";
 
 export const VendorSettings: React.FC = () => {
   const { currentUser, resetUserPin, currentVendor, updateVendorProfile, vendorCategories, currency, availableLocations = [] } = useDatabase();
@@ -33,10 +33,16 @@ export const VendorSettings: React.FC = () => {
   const [streetAddress, setStreetAddress] = useState(initialStreet);
   const [selectedDistrict, setSelectedDistrict] = useState(initialDistrict);
 
-  const [openingTime, setOpeningTime] = useState(currentVendor?.openingTime || "08:00");
-  const [closingTime, setClosingTime] = useState(currentVendor?.closingTime || "22:00");
-  const [openingDays, setOpeningDays] = useState<string[]>(
-    currentVendor?.openingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+  const [operatingHours, setOperatingHours] = useState<Record<string, DailyHours>>(
+    currentVendor?.operatingHours || {
+      "Monday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+      "Tuesday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+      "Wednesday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+      "Thursday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+      "Friday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+      "Saturday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+      "Sunday": { isOpen: true, openTime: "08:00", closeTime: "22:00" },
+    }
   );
   const [category, setCategory] = useState<string>(currentVendor?.category || "restaurant");
   const [prepTime, setPrepTime] = useState<number>(currentVendor?.prepTime || 20);
@@ -63,9 +69,21 @@ export const VendorSettings: React.FC = () => {
       setCuisine(currentVendor.cuisine || "Italian");
       setImage(currentVendor.image || "");
       setCoverImage(currentVendor.coverImage || "");
-      setOpeningTime(currentVendor.openingTime || "08:00");
-      setClosingTime(currentVendor.closingTime || "22:00");
-      setOpeningDays(currentVendor.openingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]);
+      if (currentVendor.operatingHours) {
+        setOperatingHours(currentVendor.operatingHours);
+      } else {
+        // Fallback for legacy
+        const defDays = currentVendor.openingDays || ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+        const fallbackHours: Record<string, DailyHours> = {};
+        ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].forEach(day => {
+          fallbackHours[day] = {
+            isOpen: defDays.includes(day),
+            openTime: currentVendor.openingTime || "08:00",
+            closeTime: currentVendor.closingTime || "22:00"
+          };
+        });
+        setOperatingHours(fallbackHours);
+      }
       setCategory(currentVendor.category || "restaurant");
       setPrepTime(currentVendor.prepTime || 20);
       setDeliveryFee(currentVendor.deliveryFee || 750);
@@ -137,9 +155,7 @@ export const VendorSettings: React.FC = () => {
         image,
         coverImage,
         address: finalAddress,
-        openingTime,
-        closingTime,
-        openingDays,
+        operatingHours,
         category,
         prepTime,
         deliveryFee,
@@ -217,18 +233,6 @@ export const VendorSettings: React.FC = () => {
 
       <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
         
-        {successStr && (
-          <div className="p-3.5 bg-green-50 text-green-700 border border-green-200 rounded-2xl text-xs font-semibold flex items-center gap-2">
-            <Check className="w-4 h-4 text-green-600" />
-            {successStr}
-          </div>
-        )}
-        {errorStr && (
-          <div className="p-3.5 bg-red-50 text-red-600 border border-red-200 rounded-2xl text-xs font-semibold">
-            {errorStr}
-          </div>
-        )}
-
         <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
           <div className="w-16 h-16 rounded-2xl bg-[#0ea5e9]/5 border border-[#0ea5e9]/10 text-[#0ea5e9] flex items-center justify-center p-1 shadow-md overflow-hidden relative">
             {image ? (
@@ -245,7 +249,7 @@ export const VendorSettings: React.FC = () => {
                 {currentVendor?.status || "approved"}
               </span>
               <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-0.5 rounded inline-block uppercase font-mono tracking-wider">
-                {openingTime} - {closingTime}
+                {operatingHours["Monday"]?.isOpen ? `${operatingHours["Monday"].openTime} - ${operatingHours["Monday"].closeTime}` : "Schedule Set"}
               </span>
             </div>
           </div>
@@ -290,61 +294,62 @@ export const VendorSettings: React.FC = () => {
               <Clock className="w-4 h-4 text-sky-500" />
               Hours of Operation (Opening & Closing)
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-600 block">Opening Time</label>
-                <input
-                  type="time"
-                  value={openingTime}
-                  onChange={(e) => setOpeningTime(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-gray-250 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-100 transition font-mono"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-600 block">Closing Time</label>
-                <input
-                  type="time"
-                  value={closingTime}
-                  onChange={(e) => setClosingTime(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-gray-250 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-100 transition font-mono"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Operating Days Selection */}
-            <div className="mt-4 border-t border-gray-200/60 pt-4">
-              <label className="text-[11px] font-bold text-gray-600 block mb-2">Operating Days</label>
-              <div className="flex flex-wrap gap-1.5">
-                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => {
-                  const isSelected = openingDays.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => {
-                        if (isSelected) {
-                          if (openingDays.length > 1) {
-                            setOpeningDays(openingDays.filter((d) => d !== day));
-                          }
-                        } else {
-                          setOpeningDays([...openingDays, day]);
-                        }
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
-                        isSelected
-                          ? "bg-sky-600 text-white shadow-sm"
-                          : "bg-white text-gray-500 hover:bg-gray-100 border border-gray-200"
-                      }`}
-                    >
-                      {day.substring(0, 3)}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[9px] text-gray-400 mt-1.5">Your store will automatically display as CLOSED and reject purchases on toggled-off days.</p>
+            <div className="space-y-3">
+              {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => {
+                const dayData = operatingHours[day];
+                return (
+                  <div key={day} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-150 rounded-xl">
+                    <div className="w-24">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={dayData?.isOpen || false}
+                          onChange={(e) => {
+                            setOperatingHours({
+                              ...operatingHours,
+                              [day]: { ...dayData, isOpen: e.target.checked }
+                            });
+                          }}
+                          className="w-4 h-4 text-sky-600 rounded border-gray-300 focus:ring-sky-500"
+                        />
+                        <span className="text-xs font-bold text-gray-700">{day.substring(0, 3)}</span>
+                      </label>
+                    </div>
+                    
+                    {dayData?.isOpen ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          type="time"
+                          value={dayData.openTime}
+                          onChange={(e) => {
+                            setOperatingHours({
+                              ...operatingHours,
+                              [day]: { ...dayData, openTime: e.target.value }
+                            });
+                          }}
+                          className="text-xs p-1.5 border border-gray-250 rounded-lg outline-none focus:ring-2 focus:ring-sky-100 font-mono"
+                        />
+                        <span className="text-[10px] text-gray-400 font-bold">TO</span>
+                        <input
+                          type="time"
+                          value={dayData.closeTime}
+                          onChange={(e) => {
+                            setOperatingHours({
+                              ...operatingHours,
+                              [day]: { ...dayData, closeTime: e.target.value }
+                            });
+                          }}
+                          className="text-xs p-1.5 border border-gray-250 rounded-lg outline-none focus:ring-2 focus:ring-sky-100 font-mono"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1">
+                        <span className="text-[10px] bg-gray-200 text-gray-500 font-bold px-2 py-0.5 rounded uppercase tracking-wider">Closed</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -652,6 +657,18 @@ export const VendorSettings: React.FC = () => {
         </form>
       </div>
 
+      {successStr && (
+        <div className="fixed bottom-6 right-6 p-4 bg-green-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-5">
+          <Check className="w-5 h-5 text-white" />
+          {successStr}
+        </div>
+      )}
+
+      {errorStr && (
+        <div className="fixed bottom-6 right-6 p-4 bg-red-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-5">
+          {errorStr}
+        </div>
+      )}
     </div>
   );
 };

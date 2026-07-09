@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { Footer } from "./Footer";
 import { getUserAvatarUrl } from "../pages/CustomerOrdersAndProfile";
 import { 
   Home, 
@@ -151,7 +152,10 @@ export const CustomerLayout: React.FC = () => {
   const [districtFilterQuery, setDistrictFilterQuery] = useState("");
 
   const cartTotalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotalPrice = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  const cartTotalPrice = cart.reduce((sum, item) => {
+    const addonCost = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
+    return sum + ((item.product.price + addonCost) * item.quantity);
+  }, 0);
 
   const handleLogout = () => {
     logout();
@@ -815,6 +819,7 @@ export const CustomerLayout: React.FC = () => {
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-8">
           <Outlet />
         </main>
+        <Footer />
       </div>
 
       {/* 3. Mobile Bottom Navigation bar (highly professional - fits screens in flow) */}

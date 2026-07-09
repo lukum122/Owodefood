@@ -16,6 +16,7 @@ import { CustomerHome } from "./pages/CustomerHome";
 import { CustomerVendorMenu } from "./pages/CustomerVendorMenu";
 import { CustomerCart, CustomerCheckout } from "./pages/CustomerCartAndCheckout";
 import { CustomerOrders, CustomerProfile } from "./pages/CustomerOrdersAndProfile";
+import { LegalPage } from "./pages/LegalPage";
 import { VendorOnboarding } from "./pages/VendorOnboarding";
 import { RiderOnboarding } from "./pages/RiderOnboarding";
 import { Login } from "./pages/Login";
@@ -44,6 +45,7 @@ import { AdminPOS } from "./pages/AdminPOS";
 import { AdminEmployees } from "./pages/AdminEmployees";
 import { AdminWallets } from "./pages/AdminWallets";
 import { AdminNotifications } from "./pages/AdminNotifications";
+import { AdminDiscovery } from "./pages/AdminDiscovery";
 
 export default function App() {
   return (
@@ -76,6 +78,7 @@ export default function App() {
             <Route path="vendor/:id" element={<CustomerVendorMenu />} />
             <Route path="cart" element={<CustomerCart />} />
             <Route path="checkout" element={<CustomerCheckout />} />
+            <Route path="legal/:pageId" element={<LegalPage />} />
 
             {/* Customer Protected Pages */}
             <Route path="orders" element={
@@ -150,6 +153,7 @@ export default function App() {
             <Route path="wallets" element={<AdminWallets />} />
             <Route path="pos" element={<AdminPOS />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="discovery" element={<AdminDiscovery />} />
             <Route path="notifications" element={<AdminNotifications />} />
           </Route>
 
