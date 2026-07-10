@@ -165,3 +165,58 @@ export const reviews = pgTable("reviews", {
   createdAt: text("created_at").notNull(),
 });
 
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id).notNull(),
+  userName: text("user_name").notNull(),
+  amount: integer("amount").notNull(),
+  type: text("type").notNull(), // deposit | purchase | refund | adjustment
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
+  status: text("status"), // approved | pending | declined
+  gateway: text("gateway"), // bank_transfer | monnify | paystack
+  reference: text("reference"),
+});
+
+export const appNotifications = pgTable("app_notifications", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // order | wallet | system | delivery
+  read: boolean("read").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  relatedId: text("related_id"),
+});
+
+export const receiptPickupOrders = pgTable("receipt_pickup_orders", {
+  id: text("id").primaryKey(),
+  customerId: text("customer_id").references(() => users.id).notNull(),
+  customerName: text("customer_name").notNull(),
+  customerPhone: text("customer_phone").notNull(),
+  vendorId: text("vendor_id").references(() => vendors.id).notNull(),
+  vendorName: text("vendor_name").notNull(),
+  vendorAddress: text("vendor_address").notNull(),
+  deliveryAddress: text("delivery_address").notNull(),
+  receiptImageOrQr: text("receipt_image_or_qr").notNull(),
+  receiptNote: text("receipt_note"),
+  deliveryFee: integer("delivery_fee").notNull(),
+  riderId: text("rider_id"),
+  riderName: text("rider_name"),
+  status: text("status").notNull(), // pending | accepted | picked_up | delivered | cancelled
+  paymentMethod: text("payment_method").notNull(),
+  paymentStatus: text("payment_status").notNull(), // paid | unpaid
+  serviceFee: integer("service_fee"),
+  totalAmount: integer("total_amount"),
+  createdAt: text("created_at").notNull(),
+});
+
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: text("created_at").notNull(),
+});

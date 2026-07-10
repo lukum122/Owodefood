@@ -232,15 +232,11 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         if (resJson.success) {
           setSuccess(`A 4-digit verification code has been sent to your email (${foundUser.email}) and phone!`);
         } else {
-          setSuccess(`[Dev Mode] Verification code is: ${code}`);
-          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the code above.`);
-
+          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Please check your connection or contact support.`);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } catch (err: any) {
-        setSuccess(`[Dev Mode] Verification code is: ${code}`);
-        setError("Network error. Use the code above.");
-
+        setError("Network error connecting to the server. Please try again later.");
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else if (forgotPinStep === "verify") {
@@ -294,7 +290,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
       setSuccess("Your security PIN has been successfully reset! Redirecting to login...");
       
-      setTimeout(() => {
+      setTimeout(async () => {
         setEmail(foundUserForReset.email);
         setStoredUserPin(newPin);
         setLoginPin("");
@@ -302,7 +298,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         setLoginPinStep(true);
         setShowForgotPinLink(false);
         setSuccess("Success! Access granted...");
-        login(foundUserForReset.email, selectedRole);
+        await login(foundUserForReset.email, newPin, selectedRole);
         const defaultRedirects: Record<UserRole, string> = {
           customer: "/",
           vendor: "/vendor/dashboard",
@@ -334,6 +330,16 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
+
+        // Check temporary email blacklist
+        const burnerDomains = ["mailinator.com", "yopmail.com", "tempmail.com", "10minutemail.com", "guerrillamail.com", "throwawaymail.com", "temp-mail.org", "fakeinbox.com"];
+        const emailDomain = email.trim().split("@")[1]?.toLowerCase();
+        if (emailDomain && burnerDomains.includes(emailDomain)) {
+          setError("Temporary or burner email addresses are not allowed for registration.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
         if (!firstName.trim() || !surname.trim() || !phone.trim()) {
           setError("Please define your first name, surname, and phone number.");
 
@@ -390,15 +396,11 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           if (resJson.success) {
             setSuccess(`Verification PIN successfully sent to ${email.trim().toLowerCase()}! Please check your inbox.`);
           } else {
-            setSuccess(`[Dev Mode] Verification PIN is: ${code}`);
-            setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the PIN above.`);
-
+            setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Please try again later.`);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }
         } catch (err: any) {
-          setSuccess(`[Dev Mode] Verification PIN is: ${code}`);
-          setError("Network error. Use the PIN above.");
-
+          setError("Network error connecting to the server. Please try again later.");
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } else {
@@ -426,7 +428,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           pin: createdPin,
         };
 
-        const res = register(fullName, cleansedEmail, phone, selectedRole, gender, extraPayload);
+        const res = await register(fullName, cleansedEmail, phone, selectedRole, gender, extraPayload);
         if (res.success) {
           setSuccess("Success! Your account is created & verified. Redirecting...");
           // Mark this initial device as trusted automatically!
@@ -542,13 +544,11 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             if (resJson.success) {
               setSuccess(`A verification code has been sent to ${foundUser.email} for this new device.`);
             } else {
-              setSuccess(`[Dev Mode] Device OTP is: ${otp}`);
-              setError(`Failed to send code: ${resJson.error || "SMTP error"}. Use the code above.`);
+              setError(`Failed to send code: ${resJson.error || "SMTP error"}. Please try again later.`);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           }).catch(() => {
-            setSuccess(`[Dev Mode] Device OTP is: ${otp}`);
-            setError("Network error. Use the code above.");
+            setError("Network error connecting to the server. Please try again later.");
             window.scrollTo({ top: 0, behavior: 'smooth' });
           });
           return;
@@ -556,7 +556,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         // Device is trusted and active, proceed to login
         localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
-        const res = login(email, selectedRole);
+        const res = await login(email, loginPin, selectedRole);
         if (res.success) {
           setSuccess("Success! Access granted...");
           setTimeout(() => {
@@ -594,7 +594,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
         }
 
-        const res = login(email, selectedRole);
+        const res = await login(email, loginPin, selectedRole);
         if (res.success) {
           setSuccess("Device verified! Access granted...");
           setTimeout(() => {
@@ -812,8 +812,11 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                   <input
                     type="tel"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. +234 803 123 4567"
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "");
+                      if (val.length <= 14) setPhone(val);
+                    }}
+                    placeholder="e.g. 2348031234567"
                     className="w-full text-sm p-3 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-[#070329]/10 outline-none font-medium text-[#070329]"
                     required
                   />
@@ -955,15 +958,11 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                         if (resJson.success) {
                           setSuccess(`A new verification PIN has been successfully sent to ${email.trim().toLowerCase()}!`);
                         } else {
-                          setSuccess(`[Dev Mode] New PIN is: ${otp}`);
-                          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Use the PIN above.`);
-
+                          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Please try again later.`);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }
                       } catch (err: any) {
-                        setSuccess(`[Dev Mode] New PIN is: ${otp}`);
-                        setError("Network error. Use the PIN above.");
-
+                        setError("Network error connecting to the server. Please try again later.");
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }
                     }}

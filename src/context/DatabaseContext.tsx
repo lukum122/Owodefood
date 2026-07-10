@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import { io, Socket } from "socket.io-client";
 import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
 
 export interface CartItem {
@@ -85,8 +86,8 @@ interface DatabaseContextType {
   removeEmployee: (id: string) => void;
   
   // Auth Actions
-  login: (email: string, role: UserRole) => { success: boolean; error?: string };
-  register: (name: string, email: string, phone: string, role: UserRole, gender?: string, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
+  login: (email: string, pin: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, email: string, phone: string, role: UserRole, gender?: string, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   overrideUserRole: (role: UserRole) => void; // Development booster
   updateProfile: (name: string, phone: string, gender?: string, profileImage?: string) => void;
@@ -102,7 +103,7 @@ interface DatabaseContextType {
   clearCart: () => void;
   
   // Checkout & Customer Actions
-  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => { success: boolean; orderId?: string };
+  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => Promise<{ success: boolean; orderId?: string }>;
   
   // Vendor Actions
   updateVendorOrder: (orderId: string, status: OrderStatus) => void;
@@ -159,7 +160,7 @@ interface DatabaseContextType {
   walletFundingMonnifyEnabled: boolean;
   walletFundingPaystackEnabled: boolean;
   updateWalletFundingModes: (bankTransfer: boolean, monnify: boolean, paystack: boolean) => void;
-  requestWalletFunding: (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => string;
+  requestWalletFunding: (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => Promise<string>;
   approveWalletFunding: (transactionId: string) => void;
   declineWalletFunding: (transactionId: string) => void;
 
@@ -1860,6 +1861,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     };
 
     loadFromCloudSQL();
+
+    // Smart Polling every 15 seconds to sync data in real-time across devices
+    const interval = setInterval(() => {
+      loadFromCloudSQL();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Automatically synchronize currentUser's roles if they have approved vendor/rider profiles or if their roles changed in the main users list.
@@ -2245,9 +2253,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   // Cloud SQL Sync helper
   const syncSave = async (type: string, payload: any) => {
     try {
+      const token = sessionStorage.getItem("fd_jwt_token");
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch("/api/sync/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ type, payload }),
       });
       if (!res.ok) {
@@ -2291,14 +2303,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // AUTH ACTIONS
-  const login = (identifier: string, role: UserRole) => {
-    const cleansed = identifier.trim().toLowerCase();
-    const user = users.find(u => 
-      u.email.toLowerCase() === cleansed || 
-      u.phone.replace(/[\s\-\+\(\)]/g, "") === cleansed.replace(/[\s\-\+\(\)]/g, "")
-    );
-    
-    if (user) {
+  const login = async (identifier: string, pin: string, role: UserRole) => {
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: identifier, pin })
+      });
+      const data = await response.json();
+      
+      if (!data.success) {
+        return { success: false, error: data.error || "Login failed" };
+      }
+      
+      const user = data.user;
       const userRoles = user.roles || [user.role];
       if (!userRoles.includes(role)) {
         return { success: false, error: `This account does not have the ${role} role. Available roles: ${userRoles.join(", ")}.` };
@@ -2307,6 +2325,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       const loggedInUser = { ...user, role, roles: userRoles };
       setCurrentUser(loggedInUser);
       sessionStorage.setItem("fd_session_user", JSON.stringify(loggedInUser));
+      sessionStorage.setItem("fd_jwt_token", data.token); // Store secure JWT
       
       if (role === "vendor") {
         const v = vendors.find(vend => vend.userId === user.id);
@@ -2316,12 +2335,12 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         setCurrentRider(r || null);
       }
       return { success: true };
-    } else {
-      return { success: false, error: "Account not found. Please click 'Register' if you need a new account." };
+    } catch (err) {
+      return { success: false, error: "Network error during secure login." };
     }
   };
 
-  const register = (
+  const register = async (
     name: string,
     email: string,
     phone: string,
@@ -2390,6 +2409,21 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     setCurrentUser(newUser);
     sessionStorage.setItem("fd_session_user", JSON.stringify(newUser));
+
+    if (extra?.pin) {
+      try {
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: newUser.email, pin: extra.pin })
+        });
+        const data = await response.json();
+        if (data.success) {
+          sessionStorage.setItem("fd_jwt_token", data.token);
+        }
+      } catch (e) {}
+    }
+
     return { success: true };
   };
 
@@ -2399,6 +2433,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     setCurrentRider(null);
     setCart([]);
     sessionStorage.removeItem("fd_session_user");
+    sessionStorage.removeItem("fd_jwt_token"); // Clear JWT on logout
   };
 
   const switchRole = (newRole: UserRole) => {
@@ -2705,7 +2740,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const clearCart = () => setCart([]);
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => {
+  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => {
     let activeUser = currentUser;
     if (!activeUser) {
       const savedSession = sessionStorage.getItem("fd_session_user");
@@ -2731,70 +2766,88 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
     const deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress);
     const serviceFee = calculateServiceFee(vendorObj.id, total);
-    const finalAmount = Math.round(total + tax + deliveryFee + serviceFee);
 
-    const newOrder: Order = {
-      id: "ord-" + Math.floor(100 + Math.random() * 900),
-      customerId: activeUser.id,
-      customerName: activeUser.name,
-      customerPhone: deliveryPhone || activeUser.phone || "N/A",
-      vendorId: vendorObj.id,
-      vendorName: vendorObj.name,
-      status: "pending",
-      totalAmount: finalAmount,
-      deliveryAddress,
-      paymentMethod,
-      createdAt: new Date().toISOString(),
-      serviceFee,
-      deliveryFee,
-      tax,
-      receiptImage,
-      items: cart.map(item => {
-        const addonCost = (item.selectedAddons || []).reduce((acc, ad) => acc + ((ad.price ?? 0) * (ad.quantity ?? 1)), 0);
-        return {
+    try {
+      const token = sessionStorage.getItem("fd_jwt_token");
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          customerId: activeUser.id,
+          customerName: activeUser.name,
+          customerPhone: deliveryPhone || activeUser.phone || "N/A",
+          vendorId: vendorObj.id,
+          vendorName: vendorObj.name,
+          deliveryAddress,
+          paymentMethod,
+          serviceFee,
+          deliveryFee,
+          tax,
+          items: cart.map(item => ({
+            productId: item.product.id,
+            name: item.product.name,
+            price: item.product.price,
+            quantity: item.quantity,
+            selectedAddons: item.selectedAddons
+          }))
+        })
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Checkout failed");
+        return { success: false };
+      }
+
+      clearCart();
+
+      // Trigger role-based notifications
+      addNotification(
+        activeUser.id,
+        "Order Placed Successfully! 🍲",
+        `Your order #${data.orderId} with ${vendorObj.name} has been placed.`,
+        "order",
+        data.orderId
+      );
+
+      // Create local order object for immediate UI update
+      const newOrder: Order = {
+        id: data.orderId,
+        customerId: activeUser.id,
+        customerName: activeUser.name,
+        customerPhone: deliveryPhone || activeUser.phone || "N/A",
+        vendorId: vendorObj.id,
+        vendorName: vendorObj.name,
+        status: "pending",
+        totalAmount: data.finalTotal || total,
+        deliveryAddress,
+        paymentMethod,
+        createdAt: new Date().toISOString(),
+        serviceFee,
+        deliveryFee,
+        tax,
+        items: cart.map(item => ({
           id: "oi-" + generateId(),
-          orderId: "", // will be referenced
+          orderId: data.orderId,
           productId: item.product.id,
           name: item.product.name,
-          price: item.product.price + addonCost,
-          quantity: item.quantity,
-          selectedAddons: item.selectedAddons || []
-        };
-      })
-    };
+          price: item.product.price,
+          quantity: item.quantity
+        }))
+      };
+      
+      const updatedOrders = [newOrder, ...orders];
+      setOrders(updatedOrders);
+      // We don't call persistOrders because the server already saved it.
 
-    const updatedOrders = [newOrder, ...orders];
-    persistOrders(updatedOrders);
-    clearCart();
-
-    // Trigger role-based notifications
-    addNotification(
-      activeUser.id,
-      "Order Placed Successfully! 🍲",
-      `Your order #${newOrder.id} with ${vendorObj.name} has been placed for ${currency}${finalAmount.toLocaleString()}.`,
-      "order",
-      newOrder.id
-    );
-
-    if (vendorObj.userId) {
-      addNotification(
-        vendorObj.userId,
-        "New Order Received! 🍳",
-        `Order #${newOrder.id} has been received from ${activeUser.name}. Total: ${currency}${finalAmount.toLocaleString()}.`,
-        "order",
-        newOrder.id
-      );
+      return { success: true, orderId: data.orderId };
+    } catch (error) {
+      console.error("Checkout error:", error);
+      return { success: false };
     }
-
-    addNotification(
-      "admin-1",
-      "New Marketplace Order! 📈",
-      `Order #${newOrder.id} for ${currency}${finalAmount.toLocaleString()} was placed at ${vendorObj.name} by ${activeUser.name}.`,
-      "order",
-      newOrder.id
-    );
-
-    return { success: true, orderId: newOrder.id };
   };
 
   const addReview = (vendorId: string, rating: number, comment: string) => {
@@ -2918,59 +2971,79 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const requestWalletFunding = (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => {
-    const txId = "tx-" + generateId();
+  const requestWalletFunding = async (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => {
     const userObj = users.find(u => u.id === userId);
     const userName = userObj ? userObj.name : "System User";
     
-    const isInstant = gateway === "paystack" || gateway === "monnify";
-    const status = isInstant ? "approved" as const : "pending" as const;
+    try {
+      const token = sessionStorage.getItem("fd_jwt_token");
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const newTx: WalletTransaction = {
-      id: txId,
-      userId,
-      userName,
-      amount,
-      type: "deposit",
-      note: `Wallet recharge via ${gateway === "bank_transfer" ? "Local Bank Transfer" : gateway === "paystack" ? "Paystack Gateway" : "Monnify Gateway"}`,
-      createdAt: new Date().toISOString(),
-      status,
-      gateway,
-      reference: reference || `OWD-TX-${Math.floor(100000 + Math.random() * 900000)}`
-    };
-
-    setWalletTransactions(prev => [newTx, ...prev]);
-
-    if (isInstant) {
-      setUserBalances(prev => {
-        const current = prev[userId] || 0;
-        return { ...prev, [userId]: current + amount };
+      const res = await fetch("/api/wallet/fund", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ userId, userName, amount, gateway, reference: reference || `OWD-TX-${Math.floor(100000 + Math.random() * 900000)}` })
       });
+      const data = await res.json();
+      
+      if (!data.success) {
+        alert(data.error || "Funding request failed");
+        return "";
+      }
 
-      addNotification(
+      const txId = data.transactionId;
+      const isInstant = gateway === "paystack" || gateway === "monnify";
+      const status = isInstant ? "approved" as const : "pending" as const;
+
+      const newTx: WalletTransaction = {
+        id: txId,
         userId,
-        "Wallet Funded! 💰",
-        `Your wallet balance has been credited with ${currency}${amount.toLocaleString()} via ${gateway === "paystack" ? "Paystack" : "Monnify"}.`,
-        "wallet"
-      );
-    } else {
-      addNotification(
-        "admin-1",
-        "Pending Wallet Funding Request ⏳",
-        `User ${userName} submitted a wallet funding request of ${currency}${amount.toLocaleString()} via Bank Transfer. Reference: ${newTx.reference}. Approval required!`,
-        "wallet",
-        txId
-      );
-      addNotification(
-        "admin",
-        "New Funding Request 💰",
-        `${userName} requested wallet crediting of ${currency}${amount.toLocaleString()} via Bank Transfer. Check Wallet Management HQ.`,
-        "wallet",
-        txId
-      );
-    }
+        userName,
+        amount,
+        type: "deposit",
+        note: `Wallet recharge via ${gateway === "bank_transfer" ? "Local Bank Transfer" : gateway === "paystack" ? "Paystack Gateway" : "Monnify Gateway"}`,
+        createdAt: new Date().toISOString(),
+        status,
+        gateway,
+        reference: reference || `OWD-TX-${Math.floor(100000 + Math.random() * 900000)}`
+      };
 
-    return txId;
+      setWalletTransactions(prev => [newTx, ...prev]);
+
+      if (isInstant) {
+        setUserBalances(prev => {
+          const current = prev[userId] || 0;
+          return { ...prev, [userId]: current + amount };
+        });
+
+        addNotification(
+          userId,
+          "Wallet Funded! 💰",
+          `Your wallet balance has been credited with ${currency}${amount.toLocaleString()} via ${gateway === "paystack" ? "Paystack" : "Monnify"}.`,
+          "wallet"
+        );
+      } else {
+        addNotification(
+          "admin-1",
+          "Pending Wallet Funding Request ⏳",
+          `User ${userName} submitted a wallet funding request of ${currency}${amount.toLocaleString()} via Bank Transfer. Reference: ${newTx.reference}. Approval required!`,
+          "wallet",
+          txId
+        );
+        addNotification(
+          "admin",
+          "New Funding Request 💰",
+          `User ${userName} submitted a wallet funding request of ${currency}${amount.toLocaleString()} via Bank Transfer.`,
+          "wallet"
+        );
+      }
+
+      return txId;
+    } catch (error) {
+      console.error("Wallet funding failed:", error);
+      return "";
+    }
   };
 
   const approveWalletFunding = (transactionId: string) => {
@@ -3685,6 +3758,81 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const cancelReceiptPickupOrder = (orderId: string) => {
     updateReceiptPickupStatus(orderId, "cancelled");
   };
+
+  const socketRef = useRef<Socket | null>(null);
+
+  const publicVapidKey = "BPEg3-o75k9oT_P58tN3X8w3D0aC7CgT8Qd2lE_244FqL9c-859ZpA34A_R-V9t-V7h48x3Yp8M06xR61O4hXwI";
+  
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  useEffect(() => {
+    if (currentUser) {
+      // 1. Connect Socket.io
+      socketRef.current = io({ path: "/socket.io" });
+      socketRef.current.emit("join", currentUser.id);
+      
+      // If user is a rider, join the riders room
+      if (currentUser.roles?.includes("rider")) {
+        socketRef.current.emit("join", "riders");
+      }
+
+      socketRef.current.on("new_order", (data) => {
+        // Play a "Ding" sound
+        try {
+          const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+          audio.play();
+        } catch(e) {}
+        alert(`New Order Received! Order ID: ${data.orderId}`);
+      });
+
+      socketRef.current.on("new_delivery_job", (data) => {
+        // Play a "Ding" sound for riders
+        try {
+          const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+          audio.play();
+        } catch(e) {}
+        alert(`New Delivery Job Available! Order ID: ${data.orderId}`);
+      });
+
+      // 2. Request Web Push Subscription if PWA/ServiceWorker is ready
+      if ("serviceWorker" in navigator && "PushManager" in window) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+          }).then((subscription) => {
+            // Send subscription to backend
+            const token = sessionStorage.getItem("fd_jwt_token");
+            if (token) {
+              fetch("/api/push/subscribe", {
+                method: "POST",
+                body: JSON.stringify({ subscription }),
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${token}`
+                }
+              });
+            }
+          }).catch(console.error);
+        });
+      }
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [currentUser]);
 
   return (
     <DatabaseContext.Provider

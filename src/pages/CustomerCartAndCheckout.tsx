@@ -409,7 +409,7 @@ export const CustomerCheckout: React.FC = () => {
     }, 2500);
   };
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deliveryAddress.trim()) {
       setErrorWord("Please state a physical drop-off address.");
@@ -438,8 +438,17 @@ export const CustomerCheckout: React.FC = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
+
+      // Check temporary email blacklist
+      const burnerDomains = ["mailinator.com", "yopmail.com", "tempmail.com", "10minutemail.com", "guerrillamail.com", "throwawaymail.com", "temp-mail.org", "fakeinbox.com"];
+      const emailDomain = guestEmail.split("@")[1]?.toLowerCase();
+      if (emailDomain && burnerDomains.includes(emailDomain)) {
+        setErrorWord("Temporary or burner email addresses are not allowed for registration.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
       
-      const regRes = register(
+      const regRes = await register(
         guestName.trim(),
         guestEmail.trim().toLowerCase(),
         deliveryPhone.trim(),
@@ -771,8 +780,11 @@ export const CustomerCheckout: React.FC = () => {
               <input
                 type="tel"
                 value={deliveryPhone}
-                onChange={(e) => setDeliveryPhone(e.target.value)}
-                placeholder="Enter active phone number (e.g., +234 801 234 5678)"
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  if (val.length <= 14) setDeliveryPhone(val);
+                }}
+                placeholder="Enter active phone number (e.g., 2348012345678)"
                 className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
                 required
               />
