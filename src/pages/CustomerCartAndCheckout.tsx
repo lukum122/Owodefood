@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
-import { CartItem } from "../types";
 import { isVendorOpen } from "../types";
+import { CartItem } from "../context/DatabaseContext";
 import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle, Wallet, Shield, Lock, KeyRound, Copy, AlertCircle, User, Mail } from "lucide-react";
 
 export const CustomerCart: React.FC = () => {
@@ -283,6 +283,7 @@ export const CustomerCheckout: React.FC = () => {
     extremeLocationTiers,
     savedAddresses,
     register,
+    login,
     getUserWalletBalance
   } = useDatabase();
   const navigate = useNavigate();
@@ -448,18 +449,31 @@ export const CustomerCheckout: React.FC = () => {
         return;
       }
       
+      // Pass a default pin so the register function fetches a valid JWT token for checkout
+      const defaultGuestPin = "1234";
       const regRes = await register(
         guestName.trim(),
         guestEmail.trim().toLowerCase(),
         deliveryPhone.trim(),
-        "customer"
+        "customer",
+        undefined,
+        { pin: defaultGuestPin }
       );
       
       if (!regRes.success) {
-        setErrorWord(regRes.error || "Could not register guest user details. If you have an account already, please sign in.");
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
+        if (regRes.error?.includes("already exists") || regRes.error?.includes("already")) {
+          // Attempt silent login for returning guest
+          const loginRes = await login(guestEmail.trim().toLowerCase(), defaultGuestPin, "customer");
+          if (!loginRes.success) {
+            setErrorWord("This email is registered to an actual account. Please sign in instead of using guest checkout.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+        } else {
+          setErrorWord(regRes.error || "Could not register guest user details. If you have an account already, please sign in.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
       }
     }
 
@@ -487,7 +501,7 @@ export const CustomerCheckout: React.FC = () => {
       }
     }
 
-    const { success } = placeOrder(
+    const { success } = await placeOrder(
       deliveryAddress.trim(),
       paymentMethod,
       deliveryPhone.trim(),
@@ -781,8 +795,8 @@ export const CustomerCheckout: React.FC = () => {
                 type="tel"
                 value={deliveryPhone}
                 onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, "");
-                  if (val.length <= 14) setDeliveryPhone(val);
+                  const val = e.target.value.replace(/[^\d+]/g, "");
+                  if (val.length <= 15) setDeliveryPhone(val);
                 }}
                 placeholder="Enter active phone number (e.g., 2348012345678)"
                 className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
