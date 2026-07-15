@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign, Lock } from "lucide-react";
-import { VendorCategory, DailyHours } from "../types";
+import { VendorCategory, DailyHours } from "../types"; // imported DailyHours
 
 export const VendorSettings: React.FC = () => {
   const { currentUser, resetUserPin, currentVendor, updateVendorProfile, vendorCategories, currency, availableLocations = [] } = useDatabase();

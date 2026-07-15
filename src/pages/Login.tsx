@@ -556,7 +556,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         // Device is trusted and active, proceed to login
         localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
-        const res = await login(email, loginPin, selectedRole);
+        const res = await login(identifier, loginPin, selectedRole);
         if (res.success) {
           setSuccess("Success! Access granted...");
           setTimeout(() => {
@@ -594,7 +594,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
         }
 
-        const res = await login(email, loginPin, selectedRole);
+        const res = await login(identifier, loginPin, selectedRole);
         if (res.success) {
           setSuccess("Device verified! Access granted...");
           setTimeout(() => {

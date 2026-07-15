@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { db } from "./src/db/index.ts";
+import { db, runMigrations } from "./src/db/index.ts";
 import {
   users,
   vendors,
@@ -43,12 +43,20 @@ const JWT_SECRET = process.env.JWT_SECRET || "secure_fallback_secret_xyz123";
 // Middleware to verify JWT token securely
 const verifyTokenOptional = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
+  const xAuthHeader = req.headers["x-auth-token"] as string;
+  let token = "";
+  
   if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
+    token = authHeader.split(" ")[1];
+  } else if (xAuthHeader) {
+    token = xAuthHeader;
+  }
+
+  if (token) {
     try {
       (req as any).user = jwt.verify(token, JWT_SECRET);
-    } catch (e) {
-      // invalid token
+    } catch (e: any) {
+      (req as any).jwtError = e.message;
     }
   }
   next();
@@ -86,10 +94,12 @@ app.use(cors({
   origin: process.env.NODE_ENV === "production" ? false : "http://localhost:5173"
 }));
 
-// Rate limiting for auth endpoints (5 requests per 15 minutes)
+app.set("trust proxy", 1);
+
+// Rate limiting for auth endpoints (100 requests per 15 minutes)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
-  max: 5,
+  max: 100,
   message: { error: "Too many requests from this IP, please try again after 15 minutes." },
   standardHeaders: true, 
   legacyHeaders: false,
@@ -260,8 +270,10 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
 // Backend JWT Authentication Login
 app.post("/api/login", authLimiter, async (req, res) => {
   try {
-    const { email, pin } = req.body;
+    let { email, pin } = req.body;
     if (!email || !pin) return res.status(400).json({ error: "Missing email or PIN" });
+
+    email = email.trim().toLowerCase();
 
     const existingUsers = await db.select().from(users).where(eq(users.email, email));
     const user = existingUsers[0];
@@ -277,9 +289,9 @@ app.post("/api/login", authLimiter, async (req, res) => {
     );
 
     res.json({ success: true, token, user });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Login error:", error);
-    res.status(500).json({ error: "Login process failed" });
+    res.status(500).json({ error: "Login process failed: " + (error.message || String(error)) });
   }
 });
 
@@ -340,16 +352,59 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     const reqUser = (req as any).user;
 
     // Secure authentication check:
-    // Unauthenticated users are ONLY allowed to perform USER_UPSERT to register themselves.
-    if (!reqUser && type !== "USER_UPSERT") {
-      return res.status(401).json({ error: "Unauthorized: Please log in." });
-    }
-
+    // Unauthenticated users are ONLY allowed to perform USER_UPSERT to register themselves,
+    // or perform bulk seeding if the database is completely empty.
+    
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin"));
 
     // Secure admin-only operations:
-    const adminOnlyActions = ["PRODUCT_DELETE", "VENDOR_UPSERT", "USERS_BULK", "SYSTEM_SETTING_UPSERT"];
-    if (adminOnlyActions.includes(type) && !isAdmin) {
+    const adminOnlyActions = [
+      "PRODUCT_DELETE", "VENDOR_UPSERT", "SYSTEM_SETTING_UPSERT",
+      "USERS_BULK", "VENDORS_BULK", "PRODUCTS_BULK", "RIDERS_BULK", 
+      "ORDERS_BULK", "PAYMENT_GATEWAYS_BULK", "EXTREME_LOCATION_TIERS_BULK", 
+      "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "REVIEWS_BULK"
+    ];
+    
+    let isTargetEmpty = false;
+    if (adminOnlyActions.includes(type)) {
+      if (type === "USERS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(users);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "VENDORS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(vendors);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "PRODUCTS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(products);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "RIDERS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(riders);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "ORDERS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(orders);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "PAYMENT_GATEWAYS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(paymentGateways);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "EXTREME_LOCATION_TIERS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(extremeLocationTiers);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "EXTREME_LOCATIONS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(extremeLocations);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "EMPLOYEES_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(employees);
+        isTargetEmpty = Number(c[0].count) === 0;
+      } else if (type === "REVIEWS_BULK") {
+        const c = await db.select({ count: sql<number>`count(*)` }).from(reviews);
+        isTargetEmpty = Number(c[0].count) === 0;
+      }
+    }
+
+    if (!reqUser && type !== "USER_UPSERT" && !isTargetEmpty) {
+      return res.status(401).json({ error: "Unauthorized: Please log in." });
+    }
+
+    if (adminOnlyActions.includes(type) && !isAdmin && !isTargetEmpty) {
       return res.status(403).json({ error: "Forbidden: Admin access required" });
     }
     if (!type || !payload) {
@@ -1175,8 +1230,11 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       return res.status(400).json({ error: "Missing required checkout fields" });
     }
 
-    if (!req.user || req.user.id !== customerId) {
-      return res.status(403).json({ error: "Unauthorized: Invalid JWT token or user ID mismatch during checkout." });
+    if (!req.user) {
+      return res.status(403).json({ error: `Unauthorized: Invalid JWT token. Details: ${req.jwtError || 'Missing token'}` });
+    }
+    if (req.user.id !== customerId) {
+      return res.status(403).json({ error: `Unauthorized: User ID mismatch. Token ID: ${req.user.id}, Expected: ${customerId}` });
     }
 
     // 1. Validate prices server-side
@@ -1387,6 +1445,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    // Automatically apply database migrations on cPanel boot
+    await runMigrations();
+
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
@@ -1394,8 +1455,8 @@ async function startServer() {
     });
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
   });
 }
 

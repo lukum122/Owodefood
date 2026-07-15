@@ -34,6 +34,12 @@ export interface VendorCategoryInfo {
   color: string;
 }
 
+export interface DailyHours {
+  isOpen: boolean;
+  openTime: string;
+  closeTime: string;
+}
+
 export interface Vendor {
   id: string;
   userId: string;
@@ -48,6 +54,7 @@ export interface Vendor {
   openingTime?: string;
   closingTime?: string;
   openingDays?: string[]; // e.g., ["Monday", "Tuesday", etc.]
+  operatingHours?: Record<string, DailyHours>; // More detailed daily hours mapping
   coverImage?: string;
   category?: VendorCategory;
   prepTime?: number; // preparation/packing time in minutes
@@ -299,3 +306,56 @@ export interface ReceiptPickupOrder {
   createdAt: string;
 }
 
+export interface SystemSurgeConfig {
+  isSurgeActive: boolean;
+  surgeFee: number;
+  isRainActive: boolean;
+  rainFee: number;
+  isNightActive: boolean;
+  nightFee: number;
+  nightStartTime: string;
+  nightEndTime: string;
+}
+
+export interface LegalContent {
+  terms: string;
+  privacy: string;
+  cookies: string;
+  refund: string;
+}
+
+export interface ContactInfo {
+  address: string;
+  phone: string;
+  email: string;
+  facebook: string;
+  twitter: string;
+  instagram: string;
+}
+
+export interface HomepageSection {
+  id: string;
+  title: string;
+  subtitle?: string;
+  type: string;
+  isEnabled: boolean;
+  sortOrder: number;
+}
+
+export interface Collection {
+  id: string;
+  name: string;
+  description?: string;
+  vendorIds?: string[];
+  productIds?: string[];
+  imageUrl?: string;
+}
+
+export interface HeroBannerConfig {
+  isEnabled: boolean;
+  badgeText: string;
+  title: string;
+  description: string;
+  backgroundColor: string;
+  image: string;
+}

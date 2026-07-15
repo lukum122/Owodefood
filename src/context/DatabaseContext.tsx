@@ -649,9 +649,46 @@ const getInitialEmployeesSeed = (): Employee[] => [
 const getInitialReviewsSeed = (): Review[] => [];
 
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentVendor, setCurrentVendor] = useState<Vendor | null>(null);
-  const [currentRider, setCurrentRider] = useState<Rider | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = sessionStorage.getItem("fd_session_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [currentVendor, setCurrentVendor] = useState<Vendor | null>(() => {
+    try {
+      const savedUserStr = sessionStorage.getItem("fd_session_user");
+      if (!savedUserStr) return null;
+      const user = JSON.parse(savedUserStr);
+      if (user.role !== "vendor") return null;
+      
+      const savedVendors = localStorage.getItem("fd_vendors");
+      if (savedVendors) {
+        const vendorsList = JSON.parse(savedVendors);
+        return vendorsList.find((v: Vendor) => v.userId === user.id) || null;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [currentRider, setCurrentRider] = useState<Rider | null>(() => {
+    try {
+      const savedUserStr = sessionStorage.getItem("fd_session_user");
+      if (!savedUserStr) return null;
+      const user = JSON.parse(savedUserStr);
+      if (user.role !== "rider") return null;
+      
+      const savedRiders = localStorage.getItem("fd_riders");
+      if (savedRiders) {
+        const ridersList = JSON.parse(savedRiders);
+        return ridersList.find((r: Rider) => r.userId === user.id) || null;
+      }
+    } catch {}
+    return null;
+  });
   
   const [users, setUsers] = useState<User[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -2255,7 +2292,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     try {
       const token = sessionStorage.getItem("fd_jwt_token");
       const headers: any = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
 
       const res = await fetch("/api/sync/save", {
         method: "POST",
@@ -2409,6 +2449,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     setCurrentUser(newUser);
     sessionStorage.setItem("fd_session_user", JSON.stringify(newUser));
+
+    // Ensure the backend has this user before attempting login to get the JWT
+    await syncSave("USER_UPSERT", newUser);
 
     if (extra?.pin) {
       try {
@@ -2768,9 +2811,34 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const serviceFee = calculateServiceFee(vendorObj.id, total);
 
     try {
-      const token = sessionStorage.getItem("fd_jwt_token");
+      let token = sessionStorage.getItem("fd_jwt_token");
+      
+      // Auto-recover JWT for old sessions if PIN is available
+      if (!token && activeUser?.pin && activeUser?.email) {
+        try {
+          const loginRes = await fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: activeUser.email, pin: activeUser.pin })
+          });
+          const loginData = await loginRes.json();
+          if (loginData.success) {
+            token = loginData.token;
+            sessionStorage.setItem("fd_jwt_token", token);
+          }
+        } catch (e) {}
+      }
+
+      if (!token) {
+        alert("Your session does not have a secure token. Please log out completely and log back in to refresh your session.");
+        return { success: false };
+      }
+
       const headers: any = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
 
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -2797,8 +2865,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       });
 
       const data = await res.json();
-      if (!data.success) {
-        alert(data.error || "Checkout failed");
+      if (!data.success || res.status === 401 || res.status === 403) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem("fd_jwt_token");
+          alert(data.error + "\n\nYour secure session has expired or is invalid. Please log out and log back in to get a fresh token.");
+        } else {
+          alert(data.error || "Checkout failed");
+        }
         return { success: false };
       }
 
@@ -2978,7 +3051,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     try {
       const token = sessionStorage.getItem("fd_jwt_token");
       const headers: any = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
 
       const res = await fetch("/api/wallet/fund", {
         method: "POST",
@@ -3645,7 +3721,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       updateUserWalletBalance(
         currentUser.id,
         -totalAmount,
-        "payment",
+        "purchase",
         `Payment for receipt pickup from ${orderData.vendorName}`
       );
     }
@@ -3668,18 +3744,18 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       "New Receipt Pickup & Delivery Request",
       `${orderData.customerName} requested pickup from ${orderData.vendorName} for delivery to ${orderData.deliveryAddress}.`,
       "delivery",
-      orderId
+      newOrder.id
     );
 
     addNotification(
       orderData.vendorId,
       "Receipt Pickup Scheduled",
-      `A customer (${orderData.customerName}) has scheduled a receipt/QR-code pickup at your store. Ref: #${orderId}`,
+      `A customer (${orderData.customerName}) has scheduled a receipt/QR-code pickup at your store. Ref: #${newOrder.id}`,
       "delivery",
-      orderId
+      newOrder.id
     );
 
-    return { success: true, orderId };
+    return { success: true, orderId: newOrder.id };
   };
 
   const acceptReceiptPickupDelivery = (orderId: string, riderId: string) => {
@@ -3818,7 +3894,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
                 body: JSON.stringify({ subscription }),
                 headers: {
                   "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}`
+                  "Authorization": `Bearer ${token}`,
+                  "X-Auth-Token": token
                 }
               });
             }
