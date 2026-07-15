@@ -78,6 +78,8 @@ interface DatabaseContextType {
   updateLegalContent: (content: Partial<LegalContent>) => void;
   contactInfo: ContactInfo;
   updateContactInfo: (info: Partial<ContactInfo>) => void;
+  saveSystemSettings: () => Promise<void>;
+  saveDeliveryZones: () => Promise<void>;
 
   // Employee Management
   employees: Employee[];
@@ -651,7 +653,7 @@ const getInitialReviewsSeed = (): Review[] => [];
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
-      const saved = sessionStorage.getItem("fd_session_user");
+      const saved = localStorage.getItem("fd_session_user");
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -660,7 +662,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [currentVendor, setCurrentVendor] = useState<Vendor | null>(() => {
     try {
-      const savedUserStr = sessionStorage.getItem("fd_session_user");
+      const savedUserStr = localStorage.getItem("fd_session_user");
       if (!savedUserStr) return null;
       const user = JSON.parse(savedUserStr);
       if (user.role !== "vendor") return null;
@@ -676,7 +678,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [currentRider, setCurrentRider] = useState<Rider | null>(() => {
     try {
-      const savedUserStr = sessionStorage.getItem("fd_session_user");
+      const savedUserStr = localStorage.getItem("fd_session_user");
       if (!savedUserStr) return null;
       const user = JSON.parse(savedUserStr);
       if (user.role !== "rider") return null;
@@ -1275,6 +1277,23 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             if (data.systemSettings.walletFundingBankTransferEnabled) setWalletFundingBankTransferEnabled(data.systemSettings.walletFundingBankTransferEnabled === "true");
             if (data.systemSettings.walletFundingMonnifyEnabled) setWalletFundingMonnifyEnabled(data.systemSettings.walletFundingMonnifyEnabled === "true");
             if (data.systemSettings.walletFundingPaystackEnabled) setWalletFundingPaystackEnabled(data.systemSettings.walletFundingPaystackEnabled === "true");
+            if (data.systemSettings.contactInfo) {
+              try { setContactInfo(JSON.parse(data.systemSettings.contactInfo)); } catch(e){}
+            }
+            if (data.systemSettings.legalContent) {
+              try { setLegalContent(JSON.parse(data.systemSettings.legalContent)); } catch(e){}
+            }
+            if (data.systemSettings.currency) setCurrency(data.systemSettings.currency);
+            if (data.systemSettings.coverageGuideText) setCoverageGuideText(data.systemSettings.coverageGuideText);
+            if (data.systemSettings.globalServiceFeeType) setGlobalServiceFeeType(data.systemSettings.globalServiceFeeType as any);
+            if (data.systemSettings.globalServiceFeeValue) setGlobalServiceFeeValue(Number(data.systemSettings.globalServiceFeeValue));
+            if (data.systemSettings.globalFreeDelivery) setGlobalFreeDelivery(data.systemSettings.globalFreeDelivery === "true");
+            if (data.systemSettings.surgeConfig) {
+              try { setSurgeConfig(JSON.parse(data.systemSettings.surgeConfig)); } catch(e){}
+            }
+            if (data.systemSettings.receiptPickupConfig) {
+              try { setReceiptPickupConfig(JSON.parse(data.systemSettings.receiptPickupConfig)); } catch(e){}
+            }
           }
 
           // Compute and set available locations
@@ -1341,7 +1360,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           }
 
           // Restore session or auto-login
-          const savedSession = sessionStorage.getItem("fd_session_user");
+          const savedSession = localStorage.getItem("fd_session_user");
           if (savedSession) {
             const u = JSON.parse(savedSession);
             const latestDbUser = data.users.find((user: any) => user.id === u.id || user.email.toLowerCase() === u.email.toLowerCase());
@@ -1353,7 +1372,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
                 ...latestDbUser,
                 role: activeRole
               };
-              sessionStorage.setItem("fd_session_user", JSON.stringify(activeUser));
+              localStorage.setItem("fd_session_user", JSON.stringify(activeUser));
             }
             setCurrentUser(activeUser);
             if (activeUser.role === "vendor") {
@@ -1664,7 +1683,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       setOrders(initialOrders);
 
       // 6. Restore active session
-      const savedSessionUser = sessionStorage.getItem("fd_session_user");
+      const savedSessionUser = localStorage.getItem("fd_session_user");
       if (savedSessionUser) {
         const u: User = JSON.parse(savedSessionUser);
         const latestDbUser = initialUsers.find(user => user.id === u.id || user.email.toLowerCase() === u.email.toLowerCase());
@@ -1676,7 +1695,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             ...latestDbUser,
             role: activeRole
           };
-          sessionStorage.setItem("fd_session_user", JSON.stringify(activeUser));
+          localStorage.setItem("fd_session_user", JSON.stringify(activeUser));
         }
         setCurrentUser(activeUser);
         if (activeUser.role === "vendor") {
@@ -1944,7 +1963,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       };
       
       setCurrentUser(updatedUser);
-      sessionStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+      localStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
       
       // Keep the users list in sync as well
       if (latestDbUser) {
@@ -2092,6 +2111,35 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       localStorage.setItem("fd_contact_info", JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const saveSystemSettings = async () => {
+    const payload = [
+      { key: "platformCommissionRate", value: String(platformCommissionRate) },
+      { key: "riderCommissionType", value: riderCommissionType },
+      { key: "riderCommissionValue", value: String(riderCommissionValue) },
+      { key: "vatEnabled", value: String(vatEnabled) },
+      { key: "vatRate", value: String(vatRate) },
+      { key: "maxCartItems", value: String(maxCartItems) },
+      { key: "walletFundingBankTransferEnabled", value: String(walletFundingBankTransferEnabled) },
+      { key: "walletFundingMonnifyEnabled", value: String(walletFundingMonnifyEnabled) },
+      { key: "walletFundingPaystackEnabled", value: String(walletFundingPaystackEnabled) },
+      { key: "contactInfo", value: JSON.stringify(contactInfo) },
+      { key: "legalContent", value: JSON.stringify(legalContent) },
+      { key: "currency", value: currency },
+      { key: "coverageGuideText", value: coverageGuideText },
+      { key: "globalServiceFeeType", value: globalServiceFeeType },
+      { key: "globalServiceFeeValue", value: String(globalServiceFeeValue) },
+      { key: "globalFreeDelivery", value: String(globalFreeDelivery) },
+      { key: "surgeConfig", value: JSON.stringify(surgeConfig) },
+      { key: "receiptPickupConfig", value: JSON.stringify(receiptPickupConfig) }
+    ];
+    await syncSave("SYSTEM_SETTINGS_BULK", payload);
+  };
+
+  const saveDeliveryZones = async () => {
+    await syncSave("EXTREME_LOCATION_TIERS_BULK", extremeLocationTiers);
+    await syncSave("EXTREME_LOCATIONS_BULK", extremeLocations);
   };
 
   const updateCurrency = (symbol: string) => {
@@ -2290,7 +2338,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   // Cloud SQL Sync helper
   const syncSave = async (type: string, payload: any) => {
     try {
-      const token = sessionStorage.getItem("fd_jwt_token");
+      const token = localStorage.getItem("fd_jwt_token");
       const headers: any = { "Content-Type": "application/json" };
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -2364,8 +2412,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       
       const loggedInUser = { ...user, role, roles: userRoles };
       setCurrentUser(loggedInUser);
-      sessionStorage.setItem("fd_session_user", JSON.stringify(loggedInUser));
-      sessionStorage.setItem("fd_jwt_token", data.token); // Store secure JWT
+      localStorage.setItem("fd_session_user", JSON.stringify(loggedInUser));
+      localStorage.setItem("fd_jwt_token", data.token); // Store secure JWT
       
       if (role === "vendor") {
         const v = vendors.find(vend => vend.userId === user.id);
@@ -2448,7 +2496,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
 
     setCurrentUser(newUser);
-    sessionStorage.setItem("fd_session_user", JSON.stringify(newUser));
+    localStorage.setItem("fd_session_user", JSON.stringify(newUser));
 
     // Ensure the backend has this user before attempting login to get the JWT
     await syncSave("USER_UPSERT", newUser);
@@ -2462,7 +2510,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         });
         const data = await response.json();
         if (data.success) {
-          sessionStorage.setItem("fd_jwt_token", data.token);
+          localStorage.setItem("fd_jwt_token", data.token);
         }
       } catch (e) {}
     }
@@ -2475,8 +2523,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     setCurrentVendor(null);
     setCurrentRider(null);
     setCart([]);
-    sessionStorage.removeItem("fd_session_user");
-    sessionStorage.removeItem("fd_jwt_token"); // Clear JWT on logout
+    localStorage.removeItem("fd_session_user");
+    localStorage.removeItem("fd_jwt_token"); // Clear JWT on logout
   };
 
   const switchRole = (newRole: UserRole) => {
@@ -2488,7 +2536,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
     const updated = { ...currentUser, role: newRole, roles: userRoles };
     setCurrentUser(updated);
-    sessionStorage.setItem("fd_session_user", JSON.stringify(updated));
+    localStorage.setItem("fd_session_user", JSON.stringify(updated));
 
     if (newRole === "vendor") {
       const v = vendors.find(vend => vend.userId === currentUser.id);
@@ -2619,7 +2667,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
 
     setCurrentUser(targetUser);
-    sessionStorage.setItem("fd_session_user", JSON.stringify(targetUser));
+    localStorage.setItem("fd_session_user", JSON.stringify(targetUser));
 
     if (role === "vendor") {
       let v = vendors.find(vend => vend.userId === targetUser?.id);
@@ -2665,7 +2713,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updatedUsers = users.map(u => u.id === currentUser.id ? updated : u);
     persistUsers(updatedUsers);
     setCurrentUser(updated);
-    sessionStorage.setItem("fd_session_user", JSON.stringify(updated));
+    localStorage.setItem("fd_session_user", JSON.stringify(updated));
 
     // Also sync the secondary user profiles if matching
     if (currentUser.role === "vendor") {
@@ -2691,7 +2739,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     if (currentUser && currentUser.id === userId) {
       const updatedUser = { ...currentUser, pin: newPin };
       setCurrentUser(updatedUser);
-      sessionStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+      localStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
     }
   };
 
@@ -2786,7 +2834,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => {
     let activeUser = currentUser;
     if (!activeUser) {
-      const savedSession = sessionStorage.getItem("fd_session_user");
+      const savedSession = localStorage.getItem("fd_session_user");
       if (savedSession) {
         try {
           activeUser = JSON.parse(savedSession);
@@ -2811,7 +2859,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const serviceFee = calculateServiceFee(vendorObj.id, total);
 
     try {
-      let token = sessionStorage.getItem("fd_jwt_token");
+      let token = localStorage.getItem("fd_jwt_token");
       
       // Auto-recover JWT for old sessions if PIN is available
       if (!token && activeUser?.pin && activeUser?.email) {
@@ -2824,7 +2872,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           const loginData = await loginRes.json();
           if (loginData.success) {
             token = loginData.token;
-            sessionStorage.setItem("fd_jwt_token", token);
+            localStorage.setItem("fd_jwt_token", token);
           }
         } catch (e) {}
       }
@@ -2867,7 +2915,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       const data = await res.json();
       if (!data.success || res.status === 401 || res.status === 403) {
         if (res.status === 401 || res.status === 403) {
-          sessionStorage.removeItem("fd_jwt_token");
+          localStorage.removeItem("fd_jwt_token");
           alert(data.error + "\n\nYour secure session has expired or is invalid. Please log out and log back in to get a fresh token.");
         } else {
           alert(data.error || "Checkout failed");
@@ -3049,7 +3097,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const userName = userObj ? userObj.name : "System User";
     
     try {
-      const token = sessionStorage.getItem("fd_jwt_token");
+      const token = localStorage.getItem("fd_jwt_token");
       const headers: any = { "Content-Type": "application/json" };
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -3368,7 +3416,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             if (currentUser && currentUser.id === u.id) {
               const updatedSession = { ...currentUser, roles: updatedRoles };
               setCurrentUser(updatedSession);
-              sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+              localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
             }
             return updatedUser;
           }
@@ -3401,7 +3449,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             if (currentUser && currentUser.id === u.id) {
               const updatedSession = { ...currentUser, roles: updatedRoles };
               setCurrentUser(updatedSession);
-              sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+              localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
             }
             return updatedUser;
           }
@@ -3531,7 +3579,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         if (currentUser && currentUser.id === userId) {
           const updatedSession = { ...currentUser, role, roles: updatedRoles };
           setCurrentUser(updatedSession);
-          sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+          localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
         }
         return updatedUser;
       }
@@ -3616,7 +3664,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         if (currentUser && currentUser.id === userId) {
           const updatedSession = { ...currentUser, ...updatedUser };
           setCurrentUser(updatedSession);
-          sessionStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+          localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
         }
         return updatedUser;
       }
@@ -3887,7 +3935,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
           }).then((subscription) => {
             // Send subscription to backend
-            const token = sessionStorage.getItem("fd_jwt_token");
+            const token = localStorage.getItem("fd_jwt_token");
             if (token) {
               fetch("/api/push/subscribe", {
                 method: "POST",
@@ -3955,6 +4003,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         updateLegalContent,
         contactInfo,
         updateContactInfo,
+        saveSystemSettings,
+        saveDeliveryZones,
         calculateServiceFee,
         calculateDeliveryFee,
         currency,

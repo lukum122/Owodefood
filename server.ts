@@ -362,7 +362,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       "PRODUCT_DELETE", "VENDOR_UPSERT", "SYSTEM_SETTING_UPSERT",
       "USERS_BULK", "VENDORS_BULK", "PRODUCTS_BULK", "RIDERS_BULK", 
       "ORDERS_BULK", "PAYMENT_GATEWAYS_BULK", "EXTREME_LOCATION_TIERS_BULK", 
-      "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "REVIEWS_BULK"
+      "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "REVIEWS_BULK", "SYSTEM_SETTINGS_BULK"
     ];
     
     let isTargetEmpty = false;
@@ -1118,6 +1118,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               status: emp.status,
               permissions: emp.permissions,
             },
+          });
+        }
+        break;
+
+      case "SYSTEM_SETTINGS_BULK":
+        for (const setting of payload) {
+          await db.insert(systemSettings).values({
+            key: setting.key,
+            value: setting.value,
+          }).onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: setting.value },
           });
         }
         break;

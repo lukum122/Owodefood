@@ -436,17 +436,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           if (registeredUser) {
             localStorage.setItem(`trusted_device_${registeredUser.id}`, "true");
           }
-          setTimeout(() => {
-            const defaultRedirects: Record<UserRole, string> = {
-              customer: "/",
-              vendor: "/vendor/dashboard",
-              rider: "/rider/dashboard",
-              admin: "/admin/dashboard",
-              employee: "/admin/dashboard",
-              super_admin: "/admin/dashboard",
-            };
-            navigate(defaultRedirects[selectedRole] || "/");
-          }, 1000);
         } else {
           setError(res.error || "Failed to create account.");
 
@@ -559,13 +548,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         const res = await login(identifier, loginPin, selectedRole);
         if (res.success) {
           setSuccess("Success! Access granted...");
-          setTimeout(() => {
-            const defaultRedirects: Record<UserRole, string> = {
-              customer: "/", vendor: "/vendor/dashboard", rider: "/rider/dashboard",
-              admin: "/admin/dashboard", employee: "/admin/dashboard", super_admin: "/admin/dashboard",
-            };
-            navigate(defaultRedirects[selectedRole] || "/");
-          }, 600);
         } else {
           setError(res.error || "Authentication process failed.");
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -597,13 +579,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         const res = await login(identifier, loginPin, selectedRole);
         if (res.success) {
           setSuccess("Device verified! Access granted...");
-          setTimeout(() => {
-            const defaultRedirects: Record<UserRole, string> = {
-              customer: "/", vendor: "/vendor/dashboard", rider: "/rider/dashboard",
-              admin: "/admin/dashboard", employee: "/admin/dashboard", super_admin: "/admin/dashboard",
-            };
-            navigate(defaultRedirects[selectedRole] || "/");
-          }, 600);
         } else {
           setError(res.error || "Authentication process failed after device verification.");
           window.scrollTo({ top: 0, behavior: 'smooth' });

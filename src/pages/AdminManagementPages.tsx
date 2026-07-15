@@ -2508,6 +2508,8 @@ export const AdminSettings: React.FC = () => {
     updateLegalContent,
     contactInfo,
     updateContactInfo,
+    saveSystemSettings,
+    saveDeliveryZones,
     currency,
     updateCurrency,
     
@@ -3750,6 +3752,30 @@ export const AdminSettings: React.FC = () => {
         </div>
       </div>
 
+      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+              <Settings className="w-5 h-5 text-gray-400" />
+              General Service Settings
+            </h2>
+            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+              Global parameters affecting vendor operations, customer limits, and tax rates.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("General Settings Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
+          >
+            <Save className="w-4 h-4" /> Save Settings
+          </button>
+        </div>
+      </div>
+
       {/* SURGE PRICING & WEATHER CONDITIONS */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
         <div className="mb-6">
@@ -3877,15 +3903,51 @@ export const AdminSettings: React.FC = () => {
         </div>
       </div>
 
+      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+              <Map className="w-5 h-5 text-gray-400" />
+              Kwara Delivery Zones & Tier Configurations
+            </h2>
+            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+              Manage geographical zones, extreme locations, and their designated delivery surcharges.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              await saveDeliveryZones();
+              setSuccessWord("Delivery Zones Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
+          >
+            <Save className="w-4 h-4" /> Save Zones
+          </button>
+        </div>
+      </div>
+
       {/* LEGAL & POLICIES CONTENT */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
-        <div className="mb-6">
-          <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
-            Legal & Policies Content
-          </h2>
-          <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-            Update the terms and policies displayed to customers on the frontend. Use simple text or markdown format.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+              Legal & Policies Content
+            </h2>
+            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+              Update the terms and policies displayed to customers on the frontend. Use simple text or markdown format.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Legal Policies Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
+          >
+            <Save className="w-4 h-4" /> Save Policies
+          </button>
         </div>
 
         <div className="space-y-6">
@@ -3933,13 +3995,25 @@ export const AdminSettings: React.FC = () => {
 
       {/* CONTACT & SOCIAL LINKS */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
-        <div className="mb-6">
-          <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
-            Contact & Social Links
-          </h2>
-          <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-            Update the contact information and social media links displayed in the customer footer.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
+              Contact & Social Links
+            </h2>
+            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+              Update the contact information and social media links displayed in the customer footer.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Contact Info Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
+          >
+            <Save className="w-4 h-4" /> Save Contact Info
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
