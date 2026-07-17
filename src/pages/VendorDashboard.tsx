@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { DollarSign, Clock, ListCollapse, UtensilsCrossed, Sparkles, TrendingUp, ShieldAlert, Star, ChevronRight } from "lucide-react";
 
 export const VendorDashboard: React.FC = () => {
-  const { currentVendor, orders, products, updateProduct } = useDatabase();
+  const { currentVendor, orders, products, updateProduct, currency } = useDatabase();
   const navigate = useNavigate();
 
   if (!currentVendor) {
@@ -87,7 +87,7 @@ export const VendorDashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Net Store Income</span>
-            <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">₦{earnings.toLocaleString()}</h3>
+            <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">{currency}{earnings.toLocaleString()}</h3>
           </div>
         </div>
 
@@ -159,7 +159,7 @@ export const VendorDashboard: React.FC = () => {
                       <span className="text-[10px] text-gray-400">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <span className="block text-[11px] text-gray-500 font-medium">To: {order.customerName} : {order.deliveryAddress}</span>
-                    <span className="text-[10px] text-blue-600 font-bold block">{order.items.length} items : ₦{(order.totalAmount ?? 0).toLocaleString()}</span>
+                    <span className="text-[10px] text-blue-600 font-bold block">{order.items.length} items : {currency}{(order.totalAmount ?? 0).toLocaleString()}</span>
                   </div>
 
                   <span className={`py-1 px-2 rounded-lg font-bold text-[10px] capitalize ${
@@ -209,7 +209,7 @@ export const VendorDashboard: React.FC = () => {
                   </div>
                   <div className="min-w-0">
                     <span className="font-bold text-xs text-gray-900 block truncate">{p.name}</span>
-                    <span className="text-[10px] text-gray-400 block font-mono">₦{(p.price ?? 0).toLocaleString()}</span>
+                    <span className="text-[10px] text-gray-400 block font-mono">{currency}{(p.price ?? 0).toLocaleString()}</span>
                   </div>
                 </div>
 

@@ -662,16 +662,19 @@ export const CustomerProfile: React.FC = () => {
   };
 
   const handleSwitchRole = (newRole: UserRole) => {
-    switchRole(newRole);
+    if (currentUser) {
+      const updated = { ...currentUser, role: newRole };
+      localStorage.setItem("fd_session_user", JSON.stringify(updated));
+    }
     // Dynamic dashboard redirection based on authorized modules
     if (newRole === "customer") {
-      navigate("/");
+      window.location.href = "/";
     } else if (newRole === "vendor") {
-      navigate("/vendor/dashboard");
+      window.location.href = "/vendor/dashboard";
     } else if (newRole === "rider") {
-      navigate("/rider/dashboard");
+      window.location.href = "/rider/dashboard";
     } else if (newRole === "admin" || newRole === "employee" || newRole === "super_admin") {
-      navigate("/admin/dashboard");
+      window.location.href = "/admin/dashboard";
     }
   };
 

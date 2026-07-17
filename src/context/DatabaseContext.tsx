@@ -20,6 +20,9 @@ interface DatabaseContextType {
   riders: Rider[];
   cart: CartItem[];
   categories: Category[];
+  addProductCategory: (category: Omit<Category, "id">) => void;
+  updateProductCategory: (id: string, updates: Partial<Category>) => void;
+  deleteProductCategory: (id: string) => void;
 
   // Homepage Dynamic Engine
   homepageSections: HomepageSection[];
@@ -754,11 +757,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [receiptPickupConfig, setReceiptPickupConfig] = useState<ReceiptPickupConfig>(() => {
     try {
       const saved = localStorage.getItem("fd_receipt_pickup_config");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed) return parsed;
+      }
     } catch {}
     return {
       isEnabled: true,
-      flatServiceFee: 200 // default
+      flatServiceFee: 50
     };
   });
 
@@ -1044,7 +1050,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   
   const [globalServiceFeeType, setGlobalServiceFeeType] = useState<"category" | "flat" | "percentage">("category");
   const [globalServiceFeeValue, setGlobalServiceFeeValue] = useState<number>(0);
-  const [globalFreeDelivery, setGlobalFreeDelivery] = useState<boolean>(false);
+  const [globalFreeDelivery, setGlobalFreeDelivery] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("fd_global_free_delivery");
+      if (saved) return saved === "true";
+    } catch {}
+    return false;
+  });
   const [surgeConfig, setSurgeConfig] = useState<SystemSurgeConfig>({
     isSurgeActive: false,
     surgeFee: 0,
@@ -1055,19 +1067,31 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     nightStartTime: "22:00",
     nightEndTime: "06:00"
   });
-  const [legalContent, setLegalContent] = useState<LegalContent>({
-    terms: "Welcome to our Terms of Service...",
-    privacy: "Your privacy is important to us...",
-    cookies: "We use cookies to improve your experience...",
-    refund: "Our refund policy allows for refunds within 24 hours under certain conditions."
+  const [legalContent, setLegalContent] = useState<LegalContent>(() => {
+    try {
+      const saved = localStorage.getItem("fd_legal_content");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      terms: "Welcome to our Terms of Service...",
+      privacy: "Your privacy is important to us...",
+      cookies: "We use cookies to improve your experience...",
+      refund: "Our refund policy allows for refunds within 24 hours under certain conditions."
+    };
   });
-  const [contactInfo, setContactInfo] = useState<ContactInfo>({
-    address: "123 Owode Street, Tanke, Ilorin, Nigeria",
-    phone: "+234 (0) 800 000 0000",
-    email: "support@owodefood.com",
-    facebook: "https://facebook.com",
-    twitter: "https://twitter.com",
-    instagram: "https://instagram.com"
+  const [contactInfo, setContactInfo] = useState<ContactInfo>(() => {
+    try {
+      const saved = localStorage.getItem("fd_contact_info");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      address: "123 Owode Street, Tanke, Ilorin, Nigeria",
+      phone: "+234 (0) 800 000 0000",
+      email: "support@owodefood.com",
+      facebook: "https://facebook.com",
+      twitter: "https://twitter.com",
+      instagram: "https://instagram.com"
+    };
   });
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [currency, setCurrency] = useState<string>("₦");
@@ -1080,13 +1104,49 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const [vatRate, setVatRate] = useState<number>(7.5);
   const [maxCartItems, setMaxCartItems] = useState<number>(12);
   
-  const categories: Category[] = [
-    { id: "1", name: "Burgers", icon: "🍔" },
-    { id: "2", name: "Pizza", icon: "🍕" },
-    { id: "3", name: "Chicken", icon: "🍗" },
-    { id: "4", name: "Drinks", icon: "🥤" },
-    { id: "5", name: "Desserts", icon: "🍰" },
-  ];
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const saved = localStorage.getItem("fd_product_categories");
+      if (saved) return JSON.parse(saved);
+      return [
+        { id: "1", name: "Burgers", icon: "🍔" },
+        { id: "2", name: "Pizza", icon: "🍕" },
+        { id: "3", name: "Chicken", icon: "🍗" },
+        { id: "4", name: "Drinks", icon: "🥤" },
+        { id: "5", name: "Desserts", icon: "🍰" },
+      ];
+    } catch {
+      return [
+        { id: "1", name: "Burgers", icon: "🍔" },
+        { id: "2", name: "Pizza", icon: "🍕" },
+        { id: "3", name: "Chicken", icon: "🍗" },
+        { id: "4", name: "Drinks", icon: "🥤" },
+        { id: "5", name: "Desserts", icon: "🍰" },
+      ];
+    }
+  });
+
+  const addProductCategory = (category: Omit<Category, "id">) => {
+    const newCategory: Category = { ...category, id: `cat-${Date.now()}` };
+    const updated = [...categories, newCategory];
+    setCategories(updated);
+    localStorage.setItem("fd_product_categories", JSON.stringify(updated));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
+  };
+
+  const updateProductCategory = (id: string, updates: Partial<Category>) => {
+    const updated = categories.map(c => c.id === id ? { ...c, ...updates } : c);
+    setCategories(updated);
+    localStorage.setItem("fd_product_categories", JSON.stringify(updated));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
+  };
+
+  const deleteProductCategory = (id: string) => {
+    const updated = categories.filter(c => c.id !== id);
+    setCategories(updated);
+    localStorage.setItem("fd_product_categories", JSON.stringify(updated));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
+  };
 
   // Load initial data from Cloud SQL or fallback to Local Storage / Seeds
   useEffect(() => {
@@ -1189,6 +1249,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             mergedOrders = initialOrders;
             ordersUpdated = true;
           }
+          mergedOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
           setOrders(mergedOrders);
           localStorage.setItem("fd_orders", JSON.stringify(mergedOrders));
           if (ordersUpdated) {
@@ -1220,21 +1281,21 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             localStorage.setItem("fd_saved_addresses", JSON.stringify(data.savedAddresses));
           }
 
-          if (data.extremeLocationTiers && data.extremeLocationTiers.length > 0) {
+          if (data.extremeLocationTiers) {
             setExtremeLocationTiers(data.extremeLocationTiers);
-            localStorage.setItem("fd_extreme_tiers", JSON.stringify(data.extremeLocationTiers));
+            localStorage.setItem("fd_extreme_location_tiers", JSON.stringify(data.extremeLocationTiers));
           } else {
             const tiers = [
-              { id: "tier-1", name: "Tier 1: Outer Suburbs", surcharge: 1000 },
-              { id: "tier-2", name: "Tier 2: Extreme Outskirts", surcharge: 2000 },
-              { id: "tier-3", name: "Tier 3: Ultra Remote / Borders", surcharge: 3500 }
+              { id: "tier-1", name: "Tier 1: Moderately Far", surcharge: 300, description: "Outside central but accessible." },
+              { id: "tier-2", name: "Tier 2: Distant / Outskirts", surcharge: 600, description: "Requires extra fuel and time." },
+              { id: "tier-3", name: "Tier 3: Remote / Borderline", surcharge: 1000, description: "Hard to reach, extreme ends of the city." }
             ];
             setExtremeLocationTiers(tiers);
-            localStorage.setItem("fd_extreme_tiers", JSON.stringify(tiers));
+            localStorage.setItem("fd_extreme_location_tiers", JSON.stringify(tiers));
             await syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
           }
 
-          if (data.extremeLocations && data.extremeLocations.length > 0) {
+          if (data.extremeLocations) {
             setExtremeLocations(data.extremeLocations);
             localStorage.setItem("fd_extreme_locations", JSON.stringify(data.extremeLocations));
           } else {
@@ -1243,10 +1304,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
               { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
               { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
               { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
-              { id: "ex-5", name: "Shao", tierId: "tier-2" },
-              { id: "ex-6", name: "Oke-Oyi", tierId: "tier-2" },
-              { id: "ex-7", name: "Ganmo Outer Bounds", tierId: "tier-3" },
-              { id: "ex-8", name: "Afono", tierId: "tier-3" }
+              { id: "ex-5", name: "Ganmo", tierId: "tier-2" },
+              { id: "ex-6", name: "Amoyo", tierId: "tier-3" },
+              { id: "ex-7", name: "Shao", tierId: "tier-3" }
             ];
             setExtremeLocations(extreme);
             localStorage.setItem("fd_extreme_locations", JSON.stringify(extreme));
@@ -1292,15 +1352,19 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
               try { setSurgeConfig(JSON.parse(data.systemSettings.surgeConfig)); } catch(e){}
             }
             if (data.systemSettings.receiptPickupConfig) {
-              try { setReceiptPickupConfig(JSON.parse(data.systemSettings.receiptPickupConfig)); } catch(e){}
+              try { 
+                const parsed = JSON.parse(data.systemSettings.receiptPickupConfig);
+                if (parsed) setReceiptPickupConfig(parsed); 
+              } catch(e){}
             }
           }
 
           // Compute and set available locations
-          const savedAvailableLocations = localStorage.getItem("fd_available_locations");
           let initialAvailableLocations: string[] = [];
-          if (savedAvailableLocations) {
-            initialAvailableLocations = JSON.parse(savedAvailableLocations);
+          if (data.systemSettings.availableLocations) {
+            try { initialAvailableLocations = JSON.parse(data.systemSettings.availableLocations); } catch(e){}
+          } else if (localStorage.getItem("fd_available_locations")) {
+            initialAvailableLocations = JSON.parse(localStorage.getItem("fd_available_locations")!);
           } else {
             initialAvailableLocations = [
               "Tanke, Ilorin, Kwara",
@@ -1311,32 +1375,27 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
               "Post Office Area, Ilorin, Kwara"
             ];
           }
-          const extremeLocationsToUse = (data.extremeLocations && data.extremeLocations.length > 0)
+          const extremeLocationsToUse = data.extremeLocations 
             ? data.extremeLocations
             : [
                 { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
                 { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
                 { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
                 { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
-                { id: "ex-5", name: "Shao", tierId: "tier-2" },
-                { id: "ex-6", name: "Oke-Oyi", tierId: "tier-2" },
-                { id: "ex-7", name: "Ganmo Outer Bounds", tierId: "tier-3" },
-                { id: "ex-8", name: "Afono", tierId: "tier-3" }
+                { id: "ex-5", name: "Ganmo", tierId: "tier-2" },
+                { id: "ex-6", name: "Amoyo", tierId: "tier-3" },
+                { id: "ex-7", name: "Shao", tierId: "tier-3" }
               ];
           const finalLocations = [...initialAvailableLocations];
-          extremeLocationsToUse.forEach((ex: any) => {
-            if (!finalLocations.includes(ex.name)) {
-              finalLocations.push(ex.name);
-            }
-          });
           localStorage.setItem("fd_available_locations", JSON.stringify(finalLocations));
           setAvailableLocations(finalLocations);
 
           // Restore vendor categories
-          const savedVendorCategories = localStorage.getItem("fd_vendor_categories");
           let initialCategories: VendorCategoryInfo[] = [];
-          if (savedVendorCategories) {
-            initialCategories = JSON.parse(savedVendorCategories);
+          if (data.systemSettings.vendorCategories) {
+            try { initialCategories = JSON.parse(data.systemSettings.vendorCategories); } catch(e){}
+          } else if (localStorage.getItem("fd_vendor_categories")) {
+            initialCategories = JSON.parse(localStorage.getItem("fd_vendor_categories")!);
           } else {
             initialCategories = [
               { id: "restaurant", name: "Restaurants", iconName: "UtensilsCrossed", color: "orange" },
@@ -1348,15 +1407,30 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           }
           setVendorCategories(initialCategories);
 
-          const savedCurrency = localStorage.getItem("fd_currency");
-          if (savedCurrency) {
-            setCurrency(savedCurrency);
+          if (data.systemSettings.currency) {
+            setCurrency(data.systemSettings.currency);
+            localStorage.setItem("fd_currency", data.systemSettings.currency);
+          } else if (localStorage.getItem("fd_currency")) {
+            setCurrency(localStorage.getItem("fd_currency")!);
+          }
+
+          if (data.systemSettings.productCategories) {
+            try { 
+              const parsed = JSON.parse(data.systemSettings.productCategories);
+              setCategories(parsed);
+              localStorage.setItem("fd_product_categories", JSON.stringify(parsed));
+            } catch(e){}
           }
 
           // Restore category service fees
-          const savedCategoryFees = localStorage.getItem("fd_category_service_fees");
-          if (savedCategoryFees) {
-            setCategoryServiceFees(JSON.parse(savedCategoryFees));
+          if (data.systemSettings.categoryServiceFees) {
+            try { 
+              const parsed = JSON.parse(data.systemSettings.categoryServiceFees);
+              setCategoryServiceFees(parsed);
+              localStorage.setItem("fd_category_service_fees", JSON.stringify(parsed));
+            } catch(e){}
+          } else if (localStorage.getItem("fd_category_service_fees")) {
+            setCategoryServiceFees(JSON.parse(localStorage.getItem("fd_category_service_fees")!));
           }
 
           // Restore session or auto-login
@@ -1367,10 +1441,19 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             let activeUser = u;
             if (latestDbUser) {
               const authorizedRoles = latestDbUser.roles || [latestDbUser.role];
+              
+              // Dynamically inject derived roles based on vendor/rider status
+              const hasApprovedVendor = data.vendors?.some((v: any) => v.userId === latestDbUser.id && v.status === "approved");
+              const hasApprovedRider = data.riders?.some((r: any) => r.userId === latestDbUser.id && r.status === "approved");
+              
+              if (hasApprovedVendor && !authorizedRoles.includes("vendor")) authorizedRoles.push("vendor");
+              if (hasApprovedRider && !authorizedRoles.includes("rider")) authorizedRoles.push("rider");
+
               const activeRole = authorizedRoles.includes(u.role) ? u.role : (latestDbUser.role || "customer");
               activeUser = {
                 ...latestDbUser,
-                role: activeRole
+                role: activeRole,
+                roles: authorizedRoles
               };
               localStorage.setItem("fd_session_user", JSON.stringify(activeUser));
             }
@@ -1680,6 +1763,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         ];
         localStorage.setItem("fd_orders", JSON.stringify(initialOrders));
       }
+      initialOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setOrders(initialOrders);
 
       // 6. Restore active session
@@ -1690,10 +1774,18 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         let activeUser = u;
         if (latestDbUser) {
           const authorizedRoles = latestDbUser.roles || [latestDbUser.role];
+          
+          const hasApprovedVendor = initialVendors?.some((v: any) => v.userId === latestDbUser.id && v.status === "approved");
+          const hasApprovedRider = initialRiders?.some((r: any) => r.userId === latestDbUser.id && r.status === "approved");
+          
+          if (hasApprovedVendor && !authorizedRoles.includes("vendor")) authorizedRoles.push("vendor");
+          if (hasApprovedRider && !authorizedRoles.includes("rider")) authorizedRoles.push("rider");
+
           const activeRole = authorizedRoles.includes(u.role) ? u.role : (latestDbUser.role || "customer");
           activeUser = {
             ...latestDbUser,
-            role: activeRole
+            role: activeRole,
+            roles: authorizedRoles
           };
           localStorage.setItem("fd_session_user", JSON.stringify(activeUser));
         }
@@ -1948,7 +2040,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
     
     // Also, if latestDbUser is different in core profile fields (name, phone, pin, roles)
-    const rolesChanged = JSON.stringify(currentUser.roles) !== JSON.stringify(updatedRoles);
+    // To safely check for role changes regardless of order:
+    const rolesChanged = currentUser.roles?.length !== updatedRoles.length || 
+                         !(currentUser.roles || []).every(r => updatedRoles.includes(r));
     const nameChanged = latestDbUser && currentUser.name !== latestDbUser.name;
     const phoneChanged = latestDbUser && currentUser.phone !== latestDbUser.phone;
     const pinChanged = latestDbUser && currentUser.pin !== latestDbUser.pin;
@@ -1980,6 +2074,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const updateAvailableLocations = (locations: string[]) => {
     setAvailableLocations(locations);
     localStorage.setItem("fd_available_locations", JSON.stringify(locations));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "availableLocations", value: JSON.stringify(locations) });
   };
 
   const updateCoverageGuideText = (text: string) => {
@@ -2005,7 +2100,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = extremeLocations.filter(item => item.id !== id);
     setExtremeLocations(updated);
     localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
-    syncSave("EXTREME_LOCATION_DELETE", { id });
+    syncSave("EXTREME_LOCATIONS_DELETE", { id });
   };
 
   const updateExtremeLocations = (locations: ExtremeLocation[]) => {
@@ -2046,17 +2141,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updated = { ...categoryServiceFees, [category]: fee };
     setCategoryServiceFees(updated);
     localStorage.setItem("fd_category_service_fees", JSON.stringify(updated));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "categoryServiceFees", value: JSON.stringify(updated) });
   };
 
   const addVendorCategory = (newCat: VendorCategoryInfo) => {
     const updatedCats = [...vendorCategories, newCat];
     setVendorCategories(updatedCats);
     localStorage.setItem("fd_vendor_categories", JSON.stringify(updatedCats));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "vendorCategories", value: JSON.stringify(updatedCats) });
 
     if (categoryServiceFees[newCat.id] === undefined) {
       const updatedFees = { ...categoryServiceFees, [newCat.id]: 300 };
       setCategoryServiceFees(updatedFees);
       localStorage.setItem("fd_category_service_fees", JSON.stringify(updatedFees));
+      syncSave("SYSTEM_SETTING_UPSERT", { key: "categoryServiceFees", value: JSON.stringify(updatedFees) });
     }
   };
 
@@ -2064,17 +2162,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const updatedCats = vendorCategories.filter(c => c.id !== catId);
     setVendorCategories(updatedCats);
     localStorage.setItem("fd_vendor_categories", JSON.stringify(updatedCats));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "vendorCategories", value: JSON.stringify(updatedCats) });
 
     const updatedFees = { ...categoryServiceFees };
     delete updatedFees[catId];
     setCategoryServiceFees(updatedFees);
     localStorage.setItem("fd_category_service_fees", JSON.stringify(updatedFees));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "categoryServiceFees", value: JSON.stringify(updatedFees) });
   };
 
   const updateVendorCategory = (catId: string, updatedFields: Partial<Omit<VendorCategoryInfo, "id">>) => {
     const updatedCats = vendorCategories.map(c => c.id === catId ? { ...c, ...updatedFields } : c);
     setVendorCategories(updatedCats);
     localStorage.setItem("fd_vendor_categories", JSON.stringify(updatedCats));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "vendorCategories", value: JSON.stringify(updatedCats) });
   };
 
   const updateGlobalServiceFeeSettings = (type: "category" | "flat" | "percentage", value: number) => {
@@ -2132,7 +2233,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       { key: "globalServiceFeeValue", value: String(globalServiceFeeValue) },
       { key: "globalFreeDelivery", value: String(globalFreeDelivery) },
       { key: "surgeConfig", value: JSON.stringify(surgeConfig) },
-      { key: "receiptPickupConfig", value: JSON.stringify(receiptPickupConfig) }
+      { key: "receiptPickupConfig", value: JSON.stringify(receiptPickupConfig) },
+      { key: "categoryServiceFees", value: JSON.stringify(categoryServiceFees) }
     ];
     await syncSave("SYSTEM_SETTINGS_BULK", payload);
   };
@@ -2711,18 +2813,15 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     if (!currentUser) return;
     const updated = { ...currentUser, name, phone, gender, profileImage };
     const updatedUsers = users.map(u => u.id === currentUser.id ? updated : u);
-    persistUsers(updatedUsers);
+    setUsers(updatedUsers);
+    localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
+    syncSave("USER_UPSERT", updated);
     setCurrentUser(updated);
     localStorage.setItem("fd_session_user", JSON.stringify(updated));
 
     // Also sync the secondary user profiles if matching
     if (currentUser.role === "vendor") {
-      const v = vendors.find(vend => vend.userId === currentUser.id);
-      if (v) {
-        const updatedV = { ...v, name };
-        persistVendors(vendors.map(item => item.id === v.id ? updatedV : item));
-        setCurrentVendor(updatedV);
-      }
+      // Do not overwrite Vendor Name
     } else if (currentUser.role === "rider") {
       const r = riders.find(rid => rid.userId === currentUser.id);
       if (r) {
@@ -2735,7 +2834,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
   const resetUserPin = (userId: string, newPin: string) => {
     const updatedUsers = users.map(u => u.id === userId ? { ...u, pin: newPin } : u);
-    persistUsers(updatedUsers);
+    setUsers(updatedUsers);
+    localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
+    const targetUser = updatedUsers.find(u => u.id === userId);
+    if (targetUser) syncSave("USER_UPSERT", targetUser);
+    
     if (currentUser && currentUser.id === userId) {
       const updatedUser = { ...currentUser, pin: newPin };
       setCurrentUser(updatedUser);
@@ -2933,6 +3036,25 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         "order",
         data.orderId
       );
+
+      addNotification(
+        vendorObj.userId,
+        "New Order Received! 🔔",
+        `You have received a new order #${data.orderId} from ${activeUser.name}.`,
+        "system",
+        data.orderId
+      );
+
+      const allAdmins = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
+      allAdmins.forEach(admin => {
+        addNotification(
+          admin.id,
+          "New Order Alert 🚀",
+          `Order #${data.orderId} was just placed at ${vendorObj.name}.`,
+          "system",
+          data.orderId
+        );
+      });
 
       // Create local order object for immediate UI update
       const newOrder: Order = {
@@ -3244,7 +3366,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       }
       return o;
     });
-    persistOrders(updatedOrders);
+    setOrders(updatedOrders);
+    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
+    const targetOrder = updatedOrders.find(o => o.id === orderId);
+    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
 
     // Notify Customer about status change
     let statusText = status as string;
@@ -3291,7 +3416,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const updateVendorProfile = (profileData: Partial<Vendor>) => {
     if (!currentVendor) return;
     const updated = { ...currentVendor, ...profileData };
-    persistVendors(vendors.map(v => v.id === currentVendor.id ? updated : v));
+    const updatedVendors = vendors.map(v => v.id === currentVendor.id ? updated : v);
+    setVendors(updatedVendors);
+    localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
+    syncSave("VENDOR_UPSERT", updated);
     setCurrentVendor(updated);
   };
 
@@ -3300,7 +3428,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const rider = riders.find(r => r.id === riderId);
     if (!rider) return;
 
-    persistOrders(orders.map(o => {
+    const updatedOrders = orders.map(o => {
       if (o.id === orderId) {
         // Trigger customer notification
         addNotification(
@@ -3340,14 +3468,19 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         };
       }
       return o;
-    }));
+    });
+    
+    setOrders(updatedOrders);
+    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
+    const targetOrder = updatedOrders.find(o => o.id === orderId);
+    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
   };
 
   const updateDeliveryStatus = (orderId: string, status: OrderStatus) => {
     let orderToUpdate = orders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
 
-    persistOrders(orders.map(o => {
+    const updatedOrders = orders.map(o => {
       if (o.id === orderId) {
         if (status === "delivered") {
           // Notify customer
@@ -3390,13 +3523,21 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         return { ...o, status };
       }
       return o;
-    }));
+    });
+
+    setOrders(updatedOrders);
+    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
+    const targetOrder = updatedOrders.find(o => o.id === orderId);
+    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
   };
 
   const updateRiderProfile = (profileData: Partial<Rider>) => {
     if (!currentRider) return;
     const updated = { ...currentRider, ...profileData };
-    persistRiders(riders.map(r => r.id === currentRider.id ? updated : r));
+    const updatedRiders = riders.map(r => r.id === currentRider.id ? updated : r);
+    setRiders(updatedRiders);
+    localStorage.setItem("fd_riders", JSON.stringify(updatedRiders));
+    syncSave("RIDER_UPSERT", updated);
     setCurrentRider(updated);
   };
 
@@ -3539,7 +3680,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         userId: newUserId,
         name: extra?.businessName || `${name}'s Eatery`,
         description: `Freshly prepared ${extra?.cuisine || "delicious"} food.`,
-        cuisine: extra?.cuisine || "Continental",
+        cuisine: "N/A", // Deprecated field
+        category: extra?.cuisine || "restaurant",
         image: "/images/chicken.png",
         rating: 5.0,
         address: "Food Street Market, District 1",
@@ -3595,7 +3737,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           userId,
           name: `${targetUser.name}'s Eatery`,
           description: "Premium platform vendor.",
-          cuisine: "Continental",
+          cuisine: "N/A", // Deprecated field
+          category: "restaurant",
           image: "/images/pizza.png",
           rating: 5.0,
           address: "Kwara Delivery Zone",
@@ -3662,7 +3805,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           pin: fields.pin
         };
         if (currentUser && currentUser.id === userId) {
-          const updatedSession = { ...currentUser, ...updatedUser };
+          const keepCurrentRole = updatedRoles.includes(currentUser.role);
+          const newSessionRole = keepCurrentRole ? currentUser.role : activeRole;
+          const updatedSession = { ...currentUser, ...updatedUser, role: newSessionRole };
           setCurrentUser(updatedSession);
           localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
         }
@@ -3678,21 +3823,33 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       targetRoles.unshift("customer");
     }
 
-    // If role includes vendor, onboard them automatically if they don't exist
-    if (targetRoles.includes("vendor") && !vendors.some(v => v.userId === userId)) {
-      const newVendor: Vendor = {
-        id: "v-" + generateId(),
-        userId,
-        name: extra?.businessName || `${fields.name.trim()}'s Eatery`,
-        description: `Premium platform vendor serving ${extra?.cuisine || "delicious"} food.`,
-        cuisine: extra?.cuisine || "Continental",
-        image: "/images/burger.png",
-        rating: 5.0,
-        address: "Kwara Delivery Zone",
-        status: "approved",
-        createdAt: new Date().toISOString()
-      };
-      persistVendors([...vendors, newVendor]);
+    // If role includes vendor, onboard them automatically if they don't exist, OR update if they do
+    if (targetRoles.includes("vendor")) {
+      const existingVendor = vendors.find(v => v.userId === userId);
+      if (!existingVendor) {
+        const newVendor: Vendor = {
+          id: "v-" + generateId(),
+          userId,
+          name: extra?.businessName || `${fields.name.trim()}'s Eatery`,
+          description: `Premium platform vendor serving ${extra?.cuisine || "delicious"} food.`,
+          cuisine: "N/A", // Deprecated field
+          category: extra?.cuisine || "restaurant",
+          image: "/images/burger.png",
+          rating: 5.0,
+          address: "Kwara Delivery Zone",
+          status: "approved",
+          createdAt: new Date().toISOString()
+        };
+        persistVendors([...vendors, newVendor]);
+      } else if (extra?.businessName || extra?.cuisine) {
+        // Update existing vendor if admin provided new details
+        const updatedVendor = {
+          ...existingVendor,
+          name: extra.businessName || existingVendor.name,
+          category: extra.cuisine || existingVendor.category
+        };
+        persistVendors(vendors.map(v => v.id === existingVendor.id ? updatedVendor : v));
+      }
     }
     
     if (targetRoles.includes("rider") && !riders.some(r => r.userId === userId)) {
@@ -3751,7 +3908,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // --- RECEIPT PICKUP & DELIVERY FUNCTIONS ---
-  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "serviceFee" | "totalAmount" | "createdAt">) => {
+  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => {
     if (!currentUser) return { success: false, error: "Not logged in" };
     
     // Auto-approve if standard method, else pending
@@ -3776,11 +3933,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     const newOrder: ReceiptPickupOrder = {
       ...orderData,
-      id: "rp-" + Math.random().toString(36).substr(2, 9),
+      id: "owf-rp-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
       status: "pending",
       paymentStatus: orderData.paymentMethod === "wallet" ? "paid" : "unpaid",
-      serviceFee: receiptPickupConfig.flatServiceFee,
-      totalAmount: orderData.deliveryFee + receiptPickupConfig.flatServiceFee,
       createdAt: new Date().toISOString()
     };
 
@@ -3904,6 +4059,14 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       socketRef.current = io({ path: "/socket.io" });
       socketRef.current.emit("join", currentUser.id);
       
+      if (currentVendor) {
+        socketRef.current.emit("join", currentVendor.id);
+      }
+
+      if (currentUser.roles?.includes("admin") || currentUser.roles?.includes("super_admin")) {
+        socketRef.current.emit("join", "admin");
+      }
+      
       // If user is a rider, join the riders room
       if (currentUser.roles?.includes("rider")) {
         socketRef.current.emit("join", "riders");
@@ -3972,6 +4135,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         riders,
         cart,
         categories,
+        addProductCategory,
+        updateProductCategory,
+        deleteProductCategory,
         homepageSections,
         updateHomepageSections,
         collections,

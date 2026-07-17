@@ -1680,7 +1680,7 @@ export const AdminRiders: React.FC = () => {
 
 /* 4. CUSTOMERS DIRECTORY SCREEN */
 export const AdminCustomers: React.FC = () => {
-  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin } = useDatabase();
+  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin, vendorCategories, vendors } = useDatabase();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   
   // Filtering & search states
@@ -1707,6 +1707,8 @@ export const AdminCustomers: React.FC = () => {
   const [editRoles, setEditRoles] = useState<UserRole[]>([]);
   const [editPin, setEditPin] = useState("");
   const [editFormError, setEditFormError] = useState("");
+  const [editVendorBusinessName, setEditVendorBusinessName] = useState("");
+  const [editVendorCategory, setEditVendorCategory] = useState("");
 
   const handleStartEditUser = (user: User) => {
     setEditingUserId(user.id);
@@ -1717,6 +1719,17 @@ export const AdminCustomers: React.FC = () => {
     setEditRoles(user.roles || [user.role]);
     setEditPin(user.pin || "1234");
     setEditFormError("");
+    
+    // Prep vendor data if they are already a vendor
+    const existingVendor = vendors.find(v => v.userId === user.id);
+    if (existingVendor) {
+      setEditVendorBusinessName(existingVendor.name);
+      setEditVendorCategory(existingVendor.category);
+    } else {
+      setEditVendorBusinessName("");
+      setEditVendorCategory("");
+    }
+    
     setIsEditModalOpen(true);
   };
 
@@ -1739,8 +1752,15 @@ export const AdminCustomers: React.FC = () => {
       return;
     }
 
-    // Default primary role is the first one in editRoles, or the current editRole if still in list
-    const primaryRole = editRoles.includes(editRole) ? editRole : editRoles[0];
+    // Set primary role to highest privilege if they just got assigned a new role
+    let primaryRole = editRoles.includes(editRole) ? editRole : editRoles[0];
+    if (editRoles.includes("vendor") && editRole === "customer") {
+      primaryRole = "vendor";
+    } else if (editRoles.includes("rider") && editRole === "customer") {
+      primaryRole = "rider";
+    } else if (editRoles.includes("admin") && editRole !== "admin") {
+      primaryRole = "admin";
+    }
 
     const result = adminUpdateUser(editingUserId!, {
       name: editName.trim(),
@@ -1749,6 +1769,9 @@ export const AdminCustomers: React.FC = () => {
       role: primaryRole,
       roles: editRoles,
       pin: editPin
+    }, {
+      businessName: editRoles.includes("vendor") ? editVendorBusinessName || undefined : undefined,
+      cuisine: editRoles.includes("vendor") ? editVendorCategory || undefined : undefined
     });
 
     if (result.success) {
@@ -1761,7 +1784,7 @@ export const AdminCustomers: React.FC = () => {
 
   // Custom metadata for roles
   const [vendorBusinessName, setVendorBusinessName] = useState("");
-  const [vendorCuisine, setVendorCuisine] = useState("");
+  const [vendorCategory, setVendorCategory] = useState("");
   const [riderVehicleType, setRiderVehicleType] = useState<Rider["vehicleType"]>("motorcycle");
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
@@ -1788,7 +1811,7 @@ export const AdminCustomers: React.FC = () => {
 
     const extra = {
       businessName: newRoles.includes("vendor") ? vendorBusinessName || undefined : undefined,
-      cuisine: newRoles.includes("vendor") ? vendorCuisine || undefined : undefined,
+      cuisine: newRoles.includes("vendor") ? vendorCategory || undefined : undefined,
       vehicleType: newRoles.includes("rider") ? riderVehicleType : undefined,
       pin: newPin,
       roles: newRoles
@@ -2103,14 +2126,17 @@ export const AdminCustomers: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1">Primary Food / Cuisine Category</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Nigerian Local Rice, Burgers"
-                          value={vendorCuisine}
-                          onChange={(e) => setVendorCuisine(e.target.value)}
-                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-200 transition font-sans"
-                        />
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">Vendor Category</label>
+                        <select
+                          value={vendorCategory}
+                          onChange={(e) => setVendorCategory(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-200 transition font-sans cursor-pointer"
+                        >
+                          <option value="" disabled>Select a category...</option>
+                          {vendorCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -2260,6 +2286,38 @@ export const AdminCustomers: React.FC = () => {
                     })}
                   </div>
                 </div>
+
+
+                {editRoles.includes("vendor") && (
+                  <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 space-y-3 animate-in slide-in-from-top-2 duration-150">
+                    <span className="text-[9px] uppercase font-mono font-black text-amber-700 tracking-wider">Vendor Setup Config</span>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">Eatery / Business Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Tunde's Grill House"
+                          value={editVendorBusinessName}
+                          onChange={(e) => setEditVendorBusinessName(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-200 transition font-sans"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">Vendor Category</label>
+                        <select
+                          value={editVendorCategory}
+                          onChange={(e) => setEditVendorCategory(e.target.value)}
+                          className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-200 transition font-sans cursor-pointer"
+                        >
+                          <option value="" disabled>Select a category...</option>
+                          {vendorCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -2497,6 +2555,10 @@ export const AdminSettings: React.FC = () => {
     addVendorCategory, 
     removeVendorCategory,
     updateVendorCategory,
+    categories,
+    addProductCategory,
+    updateProductCategory,
+    deleteProductCategory,
     globalServiceFeeType,
     globalServiceFeeValue,
     updateGlobalServiceFeeSettings,
@@ -2573,6 +2635,15 @@ export const AdminSettings: React.FC = () => {
   const [editingCatIcon, setEditingCatIcon] = useState("ShoppingBag");
   const [editingCatColor, setEditingCatColor] = useState("orange");
 
+  const [selectedVendorCatId, setSelectedVendorCatId] = useState<string | null>(null);
+  const [newProdCatName, setNewProdCatName] = useState("");
+  const [newProdCatIcon, setNewProdCatIcon] = useState("🍔");
+
+  const [editingProdCatId, setEditingProdCatId] = useState<string | null>(null);
+  const [editingProdCatName, setEditingProdCatName] = useState("");
+  const [editingProdCatIcon, setEditingProdCatIcon] = useState("🍔");
+  const [editingProdCatVendorCatId, setEditingProdCatVendorCatId] = useState<string | null>(null);
+
   const [editingLocIndex, setEditingLocIndex] = useState<number | null>(null);
   const [editingLocValue, setEditingLocValue] = useState("");
 
@@ -2639,6 +2710,57 @@ export const AdminSettings: React.FC = () => {
       setSuccessWord("Vendor category removed successfully.");
       setTimeout(() => setSuccessWord(""), 3000);
     }
+  };
+
+  const handleAddProductCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProdCatName.trim() || !selectedVendorCatId) {
+      alert("Both name and Vendor Category are required.");
+      return;
+    }
+    const sanitizedId = "pcat-" + newProdCatName.trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "-" + Date.now().toString().slice(-4);
+    
+    addProductCategory({
+      id: sanitizedId,
+      name: newProdCatName.trim(),
+      icon: newProdCatIcon || "🍔",
+      vendorCategoryId: selectedVendorCatId
+    });
+    setNewProdCatName("");
+    setSuccessWord("Product Category added successfully!");
+    setTimeout(() => setSuccessWord(""), 3000);
+  };
+
+  const handleRemoveProductCategory = (id: string) => {
+    if (confirm("Are you sure you want to delete this product category?")) {
+      deleteProductCategory(id);
+      setSuccessWord("Product Category removed.");
+      setTimeout(() => setSuccessWord(""), 3000);
+    }
+  };
+
+  const handleStartEditProductCategory = (cat: any) => {
+    setEditingProdCatId(cat.id);
+    setEditingProdCatName(cat.name);
+    setEditingProdCatIcon(cat.icon || "🍔");
+    setEditingProdCatVendorCatId(cat.vendorCategoryId);
+  };
+
+  const handleSaveEditProductCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProdCatId) return;
+    if (!editingProdCatName.trim() || !editingProdCatVendorCatId) {
+      alert("Both name and Vendor Category are required.");
+      return;
+    }
+    updateProductCategory(editingProdCatId, {
+      name: editingProdCatName.trim(),
+      icon: editingProdCatIcon,
+      vendorCategoryId: editingProdCatVendorCatId
+    });
+    setEditingProdCatId(null);
+    setSuccessWord("Product Category updated successfully!");
+    setTimeout(() => setSuccessWord(""), 3000);
   };
 
   const [localGateways, setLocalGateways] = useState<PaymentGateway[]>(paymentGateways || []);
@@ -2915,14 +3037,14 @@ export const AdminSettings: React.FC = () => {
               {/* Feature Toggle */}
               <button
                 type="button"
-                onClick={() => updateReceiptPickupConfig({ ...receiptPickupConfig, isEnabled: !receiptPickupConfig.isEnabled })}
+                onClick={() => updateReceiptPickupConfig({ ...receiptPickupConfig, isEnabled: !receiptPickupConfig?.isEnabled })}
                 className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
-                  receiptPickupConfig.isEnabled ? "bg-green-500" : "bg-gray-200"
+                  receiptPickupConfig?.isEnabled ? "bg-green-500" : "bg-gray-200"
                 }`}
               >
                 <div
                   className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-200 ${
-                    receiptPickupConfig.isEnabled ? "translate-x-5" : "translate-x-0"
+                    receiptPickupConfig?.isEnabled ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
               </button>
@@ -2930,19 +3052,32 @@ export const AdminSettings: React.FC = () => {
           </div>
         </div>
 
-        <div className={`space-y-4 ${!receiptPickupConfig.isEnabled ? "opacity-50 pointer-events-none" : ""}`}>
+        <div className={`space-y-4 ${!receiptPickupConfig?.isEnabled ? "opacity-50 pointer-events-none" : ""}`}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-650 block">Flat Service Fee ({currency})</label>
               <input
                 type="number"
-                value={receiptPickupConfig.flatServiceFee}
-                onChange={(e) => updateReceiptPickupConfig({ ...receiptPickupConfig, flatServiceFee: Number(e.target.value) })}
+                value={receiptPickupConfig?.flatServiceFee ?? 0}
+                onChange={(e) => updateReceiptPickupConfig({ ...(receiptPickupConfig || {isEnabled: true, flatServiceFee: 50}), flatServiceFee: Number(e.target.value) })}
                 className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-sky-100 font-mono font-bold"
                 required
               />
               <p className="text-[10px] text-gray-400 mt-1">This fee is charged to the customer in addition to the vendor's delivery dispatch fee.</p>
             </div>
+          </div>
+          <div className="pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              type="button"
+              onClick={async () => {
+                await saveSystemSettings();
+                setSuccessWord("Receipt Pickup Config Saved!");
+                setTimeout(() => setSuccessWord(""), 3000);
+              }}
+              className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+            >
+              <Save className="w-4 h-4" /> Save Receipt Pickup
+            </button>
           </div>
         </div>
       </div>
@@ -2990,11 +3125,11 @@ export const AdminSettings: React.FC = () => {
           {globalServiceFeeType !== "category" && (
             <div className="p-4 bg-teal-50/30 rounded-2xl border border-teal-100 space-y-1.5 animate-fade-in">
               <label className="text-xs font-bold text-teal-800">
-                {globalServiceFeeType === "flat" ? "Global Flat Service Fee (₦)" : "Global Service Fee Percentage (%)"}
+                {globalServiceFeeType === "flat" ? `Global Flat Service Fee (${currency})` : "Global Service Fee Percentage (%)"}
               </label>
               <div className="relative max-w-xs">
                 <span className="absolute left-3.5 top-3.5 text-xs font-black text-gray-400">
-                  {globalServiceFeeType === "flat" ? "₦" : "%"}
+                  {globalServiceFeeType === "flat" ? currency : "%"}
                 </span>
                 <input
                   type="number"
@@ -3070,6 +3205,20 @@ export const AdminSettings: React.FC = () => {
               />
             </div>
           </div>
+
+          <div className="pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              type="button"
+              onClick={async () => {
+                await saveSystemSettings();
+                setSuccessWord("Global Settings Saved!");
+                setTimeout(() => setSuccessWord(""), 3000);
+              }}
+              className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+            >
+              <Save className="w-4 h-4" /> Save Global Settings
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3108,6 +3257,20 @@ export const AdminSettings: React.FC = () => {
               </div>
             );
           })}
+        </div>
+
+        <div className="pt-4 border-t border-gray-100 flex justify-end">
+          <button
+            type="button"
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Category Fees Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="px-5 py-2.5 bg-[#070329] hover:bg-opacity-90 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <Save className="w-4 h-4" /> Save Category Fees
+          </button>
         </div>
       </div>
 
@@ -3341,6 +3504,166 @@ export const AdminSettings: React.FC = () => {
         </form>
       </div>
 
+      {/* CARD: Manage Product Categories */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-amber-600 text-white flex items-center justify-center p-1 shadow-md shadow-amber-100">
+            <UtensilsCrossed className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Product Categories</h3>
+            <span className="text-xs text-gray-400 block mt-0.5">Manage sub-categories (cuisines, item types) linked to Vendor Categories.</span>
+          </div>
+        </div>
+
+        <div className="space-y-2.5">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-gray-400 font-bold block">Active Product Categories ({categories.length})</span>
+          <div className="divide-y divide-gray-100 bg-gray-50/50 rounded-2xl p-4 border border-gray-100">
+            {categories.length > 0 ? (
+              categories.map(cat => {
+                const parentVendorCat = vendorCategories.find(v => v.id === cat.vendorCategoryId);
+                const isGlobal = cat.vendorCategoryId === "global";
+                const isEditing = editingProdCatId === cat.id;
+
+                if (isEditing) {
+                  return (
+                    <div key={cat.id} className="py-3 first:pt-0 last:pb-0 animate-in fade-in duration-200">
+                      <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-100 flex flex-col sm:flex-row gap-3">
+                        <input
+                          type="text"
+                          value={editingProdCatIcon}
+                          onChange={(e) => setEditingProdCatIcon(e.target.value)}
+                          className="w-full sm:w-16 text-xs p-2 text-center border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-300"
+                          placeholder="Icon"
+                        />
+                        <input
+                          type="text"
+                          value={editingProdCatName}
+                          onChange={(e) => setEditingProdCatName(e.target.value)}
+                          className="w-full text-xs p-2 border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-300 font-semibold"
+                          placeholder="Category Name"
+                        />
+                        <select
+                          value={editingProdCatVendorCatId || ""}
+                          onChange={(e) => setEditingProdCatVendorCatId(e.target.value)}
+                          className="w-full text-xs p-2 border border-amber-200 rounded-lg outline-none focus:ring-2 focus:ring-amber-300"
+                        >
+                          <option value="global">Global (Applies to all)</option>
+                          {vendorCategories.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                          <button
+                            onClick={handleSaveEditProductCategory}
+                            className="bg-amber-600 hover:bg-amber-700 text-white p-2 rounded-lg transition"
+                            title="Save Changes"
+                          >
+                            <Save className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingProdCatId(null)}
+                            className="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2 rounded-lg transition"
+                            title="Cancel Edit"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={cat.id} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center border border-gray-100 bg-white text-lg">
+                        {cat.icon || "🍔"}
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold text-gray-800 block">{cat.name}</span>
+                        <span className="text-[9px] font-mono text-gray-400">
+                          ID: {cat.id} | Vendor Cat: <span className="text-amber-600 font-bold">{isGlobal ? "Global" : (parentVendorCat?.name || "Unknown")}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleStartEditProductCategory(cat)}
+                        className="text-gray-400 hover:text-amber-600 transition p-1 cursor-pointer"
+                        title="Edit product category"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveProductCategory(cat.id)}
+                        className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
+                        title="Delete product category"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-gray-400 text-xs text-center py-4">No product categories created yet.</p>
+            )}
+          </div>
+        </div>
+
+        <form onSubmit={handleAddProductCategory} className="space-y-4 pt-2">
+          <span className="text-[10px] uppercase font-mono tracking-widest text-amber-600 font-bold block">Register New Product Category</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Category Name</label>
+              <input
+                type="text"
+                value={newProdCatName}
+                onChange={(e) => setNewProdCatName(e.target.value)}
+                placeholder="e.g. Desserts, Burgers"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-amber-100 font-semibold"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Emoji Icon</label>
+              <input
+                type="text"
+                value={newProdCatIcon}
+                onChange={(e) => setNewProdCatIcon(e.target.value)}
+                placeholder="e.g. 🍰"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-amber-100 text-center"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-gray-600">Parent Vendor Category</label>
+              <select
+                value={selectedVendorCatId || ""}
+                onChange={(e) => setSelectedVendorCatId(e.target.value)}
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-amber-100 font-semibold cursor-pointer"
+                required
+              >
+                <option value="" disabled>Select Vendor Category...</option>
+                <option value="global">Global (Applies to all)</option>
+                {vendorCategories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              className="py-2.5 px-5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-amber-200" />
+              Add Product Category
+            </button>
+          </div>
+        </form>
+      </div>
+
       {/* CARD 2: Service Delivery Locations */}
       <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
         <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
@@ -3500,6 +3823,20 @@ export const AdminSettings: React.FC = () => {
             </button>
           </div>
         </form>
+
+        <div className="pt-4 border-t border-gray-100 flex justify-end">
+          <button
+            type="button"
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Locations Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <Save className="w-4 h-4" /> Save Locations
+          </button>
+        </div>
       </div>
 
       {/* CARD 2B: Configure Tier Surcharge Pricing */}
@@ -3540,6 +3877,20 @@ export const AdminSettings: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="pt-4 border-t border-gray-100 flex justify-end">
+          <button
+            type="button"
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Tiers Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <Save className="w-4 h-4" /> Save Tiers
+          </button>
         </div>
       </div>
 
@@ -3750,31 +4101,22 @@ export const AdminSettings: React.FC = () => {
             );
           })}
         </div>
-      </div>
 
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
-              <Settings className="w-5 h-5 text-gray-400" />
-              General Service Settings
-            </h2>
-            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-              Global parameters affecting vendor operations, customer limits, and tax rates.
-            </p>
-          </div>
+        <div className="pt-4 border-t border-gray-100 flex justify-end">
           <button
+            type="button"
             onClick={async () => {
               await saveSystemSettings();
-              setSuccessWord("General Settings Saved!");
+              setSuccessWord("Payment Gateways Saved!");
               setTimeout(() => setSuccessWord(""), 3000);
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
           >
-            <Save className="w-4 h-4" /> Save Settings
+            <Save className="w-4 h-4" /> Save Gateways
           </button>
         </div>
       </div>
+
 
       {/* SURGE PRICING & WEATHER CONDITIONS */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
@@ -3901,53 +4243,33 @@ export const AdminSettings: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
 
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
-              <Map className="w-5 h-5 text-gray-400" />
-              Kwara Delivery Zones & Tier Configurations
-            </h2>
-            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-              Manage geographical zones, extreme locations, and their designated delivery surcharges.
-            </p>
-          </div>
+        <div className="pt-6 border-t border-gray-100 flex justify-end mt-6">
           <button
             onClick={async () => {
-              await saveDeliveryZones();
-              setSuccessWord("Delivery Zones Saved!");
+              await saveSystemSettings();
+              setSuccessWord("Surge Settings Saved!");
               setTimeout(() => setSuccessWord(""), 3000);
             }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
           >
-            <Save className="w-4 h-4" /> Save Zones
+            <Save className="w-4 h-4" /> Save Surge Config
           </button>
         </div>
       </div>
+
 
       {/* LEGAL & POLICIES CONTENT */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-150 mt-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h2 className="text-sm font-black text-gray-900 tracking-tight uppercase flex items-center gap-2">
-              Legal & Policies Content
+              Legal & Compliance
             </h2>
             <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-              Update the terms and policies displayed to customers on the frontend. Use simple text or markdown format.
+              Update platform terms, privacy policy, and refund conditions displayed to users during onboarding.
             </p>
           </div>
-          <button
-            onClick={async () => {
-              await saveSystemSettings();
-              setSuccessWord("Legal Policies Saved!");
-              setTimeout(() => setSuccessWord(""), 3000);
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
-          >
-            <Save className="w-4 h-4" /> Save Policies
-          </button>
         </div>
 
         <div className="space-y-6">
@@ -3991,6 +4313,19 @@ export const AdminSettings: React.FC = () => {
             />
           </div>
         </div>
+        
+        <div className="pt-6 border-t border-gray-100 flex justify-end mt-6">
+          <button
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Legal Policies Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
+          >
+            <Save className="w-4 h-4" /> Save Policies
+          </button>
+        </div>
       </div>
 
       {/* CONTACT & SOCIAL LINKS */}
@@ -4004,16 +4339,6 @@ export const AdminSettings: React.FC = () => {
               Update the contact information and social media links displayed in the customer footer.
             </p>
           </div>
-          <button
-            onClick={async () => {
-              await saveSystemSettings();
-              setSuccessWord("Contact Info Saved!");
-              setTimeout(() => setSuccessWord(""), 3000);
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors"
-          >
-            <Save className="w-4 h-4" /> Save Contact Info
-          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4076,6 +4401,19 @@ export const AdminSettings: React.FC = () => {
               className="w-full text-xs p-3 border border-gray-250 rounded-xl bg-white outline-none focus:ring-2 focus:ring-sky-100"
             />
           </div>
+        </div>
+        
+        <div className="pt-6 border-t border-gray-100 flex justify-end mt-6">
+          <button
+            onClick={async () => {
+              await saveSystemSettings();
+              setSuccessWord("Contact Info Saved!");
+              setTimeout(() => setSuccessWord(""), 3000);
+            }}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-black text-white text-xs font-bold rounded-xl hover:bg-gray-800 transition-colors shadow-sm"
+          >
+            <Save className="w-4 h-4" /> Save Contact Info
+          </button>
         </div>
       </div>
     </div>

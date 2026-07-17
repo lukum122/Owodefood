@@ -4,7 +4,7 @@ import { OrderStatus } from "../types";
 import { Check, X, Flame, ShieldCheck, ShoppingBag, MapPin, Phone, User, Clock } from "lucide-react";
 
 export const VendorOrders: React.FC = () => {
-  const { currentVendor, orders, updateVendorOrder } = useDatabase();
+  const { currentVendor, orders, updateVendorOrder, currency } = useDatabase();
 
   if (!currentVendor) {
     return <div className="text-sm font-semibold text-gray-500">No store record configured.</div>;
@@ -67,7 +67,7 @@ export const VendorOrders: React.FC = () => {
                       <p className="text-[10px] text-gray-400 mt-1 pl-1">Placed {new Date(order.createdAt).toLocaleTimeString()}</p>
                     </div>
 
-                    <span className="font-extrabold text-gray-950 text-base font-mono">₦{(order.totalAmount ?? 0).toLocaleString()}</span>
+                    <span className="font-extrabold text-gray-950 text-base font-mono">{currency}{(order.totalAmount ?? 0).toLocaleString()}</span>
                   </div>
 
                   {/* Customer receipt details & Recipient parameters */}
@@ -79,13 +79,13 @@ export const VendorOrders: React.FC = () => {
                         {order.items.map((oi) => (
                           <div key={oi.id} className="py-2 flex justify-between">
                             <span className="text-gray-700">{oi.name} <b className="text-gray-900">x{oi.quantity}</b></span>
-                            <span className="font-bold text-gray-800 font-mono">₦{((oi.price ?? 0) * oi.quantity).toLocaleString()}</span>
+                            <span className="font-bold text-gray-800 font-mono">{currency}{((oi.price ?? 0) * oi.quantity).toLocaleString()}</span>
                           </div>
                         ))}
                         {order.serviceFee !== undefined && order.serviceFee !== null && (
                           <div className="py-2 flex justify-between text-[11px] font-medium border-t border-dashed border-gray-250 mt-1 pt-2">
                             <span className="text-gray-500">Service Fee</span>
-                            <span className="font-extrabold text-gray-700 font-mono">₦{(order.serviceFee ?? 0).toLocaleString()}</span>
+                            <span className="font-extrabold text-gray-700 font-mono">{currency}{(order.serviceFee ?? 0).toLocaleString()}</span>
                           </div>
                         )}
                       </div>
@@ -206,7 +206,7 @@ export const VendorOrders: React.FC = () => {
                     <span className="text-[10px] text-gray-400 font-mono italic">{new Date(ho.createdAt).toLocaleDateString()}</span>
                   </div>
                   
-                  <span className="font-bold text-gray-900 font-mono">₦{(ho.totalAmount ?? 0).toLocaleString()}</span>
+                  <span className="font-bold text-gray-900 font-mono">{currency}{(ho.totalAmount ?? 0).toLocaleString()}</span>
                 </div>
               ))}
             </div>

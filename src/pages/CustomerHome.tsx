@@ -6,7 +6,7 @@ import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, Layou
 import * as LucideIcons from "lucide-react";
 
 export const CustomerHome: React.FC = () => {
-  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser, homepageSections = [], heroBanner } = useDatabase();
+  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser, homepageSections = [], heroBanner, currency } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -705,7 +705,7 @@ export const CustomerHome: React.FC = () => {
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           />
                           <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-xl shadow-sm border border-white/20">
-                            <span className="text-[10px] font-black text-gray-900">₦{product.price.toLocaleString()}</span>
+                            <span className="text-[10px] font-black text-gray-900">{currency}{product.price.toLocaleString()}</span>
                           </div>
                         </div>
                         <div className="p-3">
@@ -917,7 +917,7 @@ export const CustomerHome: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between font-semibold">
                       <span className="text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold">
-                        ₦{(vendor.deliveryFee ?? 750).toLocaleString()} delivery
+                        {currency}{(vendor.deliveryFee ?? 750).toLocaleString()} delivery
                       </span>
                       
                       {isVendorOpen(vendor) ? (

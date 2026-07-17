@@ -60,7 +60,7 @@ export const VendorLayout: React.FC = () => {
           
           <div className="flex items-center gap-1.5 text-[11px] text-gray-300">
             <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500 shrink-0" />
-            <span>{currentVendor.rating.toFixed(1)} Rating</span>
+            <span>{currentVendor.rating ? currentVendor.rating.toFixed(1) : "5.0"} Rating</span>
           </div>
 
           <div className="mt-3 flex items-center gap-2">
@@ -189,15 +189,18 @@ export const VendorLayout: React.FC = () => {
                   value={currentUser?.role || "vendor"}
                   onChange={(e) => {
                     const selectedRole = e.target.value as UserRole;
-                    switchRole(selectedRole);
+                    if (currentUser) {
+                      const updated = { ...currentUser, role: selectedRole };
+                      localStorage.setItem("fd_session_user", JSON.stringify(updated));
+                    }
                     if (selectedRole === "customer") {
-                      navigate("/");
+                      window.location.href = "/";
                     } else if (selectedRole === "vendor") {
-                      navigate("/vendor/dashboard");
+                      window.location.href = "/vendor/dashboard";
                     } else if (selectedRole === "rider") {
-                      navigate("/rider/dashboard");
+                      window.location.href = "/rider/dashboard";
                     } else {
-                      navigate("/admin/dashboard");
+                      window.location.href = "/admin/dashboard";
                     }
                   }}
                   className="text-[10px] sm:text-xs font-bold font-mono text-green-700 bg-green-50 border border-green-200 rounded-xl pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-4 focus:ring-green-100 cursor-pointer appearance-none"

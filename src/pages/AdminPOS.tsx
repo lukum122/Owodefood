@@ -246,7 +246,7 @@ export const AdminPOS: React.FC = () => {
     }
 
     const newOrder: Order = {
-      id: "ord-" + Math.floor(1000 + Math.random() * 9000),
+      id: "owf-" + Math.floor(1000 + Math.random() * 9000),
       customerId,
       customerName,
       customerPhone,

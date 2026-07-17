@@ -8,6 +8,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentVendor, products, addProduct, updateProduct, deleteProduct, categories, currency } = useDatabase();
+  
+  const filteredCategories = categories.filter(c => !c.vendorCategoryId || c.vendorCategoryId === currentVendor?.category || c.vendorCategoryId === "global");
 
   // Selected state if editing
   const [name, setName] = useState("");
@@ -416,11 +418,13 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100"
                 >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                  <option value="Platter">Italian / Pasta</option>
-                  <option value="Spicy">Curries & Wok</option>
+                  {filteredCategories.length > 0 ? (
+                    filteredCategories.map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No categories available</option>
+                  )}
                 </select>
               </div>
 

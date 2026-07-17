@@ -8,7 +8,6 @@ export const VendorSettings: React.FC = () => {
 
   const [name, setName] = useState(currentVendor?.name || "");
   const [description, setDescription] = useState(currentVendor?.description || "");
-  const [cuisine, setCuisine] = useState(currentVendor?.cuisine || "Italian");
   const [image, setImage] = useState(currentVendor?.image || "");
   const [coverImage, setCoverImage] = useState(currentVendor?.coverImage || "");
 
@@ -67,7 +66,6 @@ export const VendorSettings: React.FC = () => {
     if (currentVendor) {
       setName(currentVendor.name || "");
       setDescription(currentVendor.description || "");
-      setCuisine(currentVendor.cuisine || "Italian");
       setImage(currentVendor.image || "");
       setCoverImage(currentVendor.coverImage || "");
       if (currentVendor.operatingHours) {
@@ -143,7 +141,7 @@ export const VendorSettings: React.FC = () => {
     setErrorStr("");
     setSuccessStr("");
 
-    if (!name || !description || !cuisine || !streetAddress) {
+    if (!name || !description || !category || !streetAddress) {
       setErrorStr("All basic business credentials must be populated before saving.");
       return;
     }
@@ -153,12 +151,12 @@ export const VendorSettings: React.FC = () => {
       updateVendorProfile({
         name,
         description,
-        cuisine,
+        category,
+        cuisine: "N/A", // Deprecated field
         image,
         coverImage,
         address: finalAddress,
         operatingHours,
-        category,
         prepTime,
         deliveryFee,
         receiptPickupEnabled,
@@ -246,7 +244,7 @@ export const VendorSettings: React.FC = () => {
           </div>
           <div>
             <h3 className="font-bold text-lg text-gray-950">{currentVendor?.name || "Unconfigured Eatery"}</h3>
-            <span className="text-xs text-gray-400 block mt-0.5">{cuisine} Partner • Rating: {currentVendor?.rating.toFixed(1) || "5.0"}</span>
+            <span className="text-xs text-gray-400 block mt-0.5">{category} Partner • Rating: {currentVendor?.rating ? currentVendor.rating.toFixed(1) : "5.0"}</span>
             <div className="flex gap-2 items-center mt-2">
               <span className="text-[10px] bg-sky-50 text-sky-700 font-bold px-2.5 py-0.5 rounded inline-block uppercase font-mono tracking-wider">
                 {currentVendor?.status || "approved"}
@@ -273,20 +271,17 @@ export const VendorSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-600 block">Primary Cuisine Type</label>
+              <label className="text-xs font-bold text-gray-600 block">Vendor Category</label>
               <select
-                value={cuisine}
-                onChange={(e) => setCuisine(e.target.value)}
-                className="w-full text-xs p-3.5 border border-gray-250 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition cursor-pointer"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full text-xs p-3.5 border border-gray-250 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition cursor-pointer font-semibold"
               >
-                <option value="Italian">Italian Pizza & Pasta</option>
-                <option value="Burgers">American Hamburgers</option>
-                <option value="Sushi">Nippon Sushi & Sashimi</option>
-                <option value="Asian">Stir noodles & dumplings</option>
-                <option value="Desserts">Plated sweet waffles</option>
-                <option value="Salads">Healthy Salads</option>
-                <option value="Chicken">Delicious Crispy Chicken</option>
-                <option value="Drinks">Drinks & Beverages</option>
+                {vendorCategories && vendorCategories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -363,21 +358,7 @@ export const VendorSettings: React.FC = () => {
               Merchant Category & Delivery Logistics
             </h4>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-600 block">Merchant Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-gray-250 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-100 transition cursor-pointer font-semibold"
-                >
-                  {vendorCategories && vendorCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-gray-600 block">Prep / Packing Time (mins)</label>

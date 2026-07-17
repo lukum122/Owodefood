@@ -359,15 +359,18 @@ export const AdminLayout: React.FC = () => {
                   value={currentUser?.role || "employee"}
                   onChange={(e) => {
                     const selectedRole = e.target.value as UserRole;
-                    switchRole(selectedRole);
+                    if (currentUser) {
+                      const updated = { ...currentUser, role: selectedRole };
+                      localStorage.setItem("fd_session_user", JSON.stringify(updated));
+                    }
                     if (selectedRole === "customer") {
-                      navigate("/");
+                      window.location.href = "/";
                     } else if (selectedRole === "vendor") {
-                      navigate("/vendor/dashboard");
+                      window.location.href = "/vendor/dashboard";
                     } else if (selectedRole === "rider") {
-                      navigate("/rider/dashboard");
+                      window.location.href = "/rider/dashboard";
                     } else {
-                      navigate("/admin/dashboard");
+                      window.location.href = "/admin/dashboard";
                     }
                   }}
                   className="text-[10px] sm:text-xs font-bold font-mono text-purple-700 bg-purple-50 border border-purple-200 rounded-xl pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-4 focus:ring-purple-100 cursor-pointer appearance-none"

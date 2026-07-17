@@ -3,6 +3,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { db, runMigrations } from "./src/db/index.ts";
+import bcrypt from "bcryptjs";
 import {
   users,
   vendors,
@@ -268,18 +269,33 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
 });
 
 // Backend JWT Authentication Login
-app.post("/api/login", authLimiter, async (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   try {
-    let { email, pin } = req.body;
-    if (!email || !pin) return res.status(400).json({ error: "Missing email or PIN" });
+    const { email, pin } = req.body;
+    const userResult = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
-    email = email.trim().toLowerCase();
+    if (userResult.length === 0) {
+      return res.status(401).json({ error: "Invalid email or PIN" });
+    }
 
-    const existingUsers = await db.select().from(users).where(eq(users.email, email));
-    const user = existingUsers[0];
+    const user = userResult[0];
 
-    if (!user || user.pin !== pin) {
-      return res.status(401).json({ error: "Invalid credentials" });
+    // Check PIN with bcrypt or plaintext migration
+    let pinValid = false;
+    if (user.pin && (user.pin.startsWith("$2a$") || user.pin.startsWith("$2b$"))) {
+      pinValid = await bcrypt.compare(pin, user.pin);
+    } else {
+      // Plaintext migration
+      if (user.pin === pin) {
+        pinValid = true;
+        // Hash and save immediately
+        const hashedPin = await bcrypt.hash(pin, 10);
+        await db.update(users).set({ pin: hashedPin }).where(eq(users.id, user.id));
+      }
+    }
+
+    if (!pinValid) {
+      return res.status(401).json({ error: "Invalid email or PIN" });
     }
 
     const token = jwt.sign(
@@ -296,24 +312,67 @@ app.post("/api/login", authLimiter, async (req, res) => {
 });
 
 // 2. Database Synchronization Endpoint: LOAD
-app.get("/api/sync/load", async (req, res) => {
+app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const allUsers = await db.select().from(users);
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || superAdminEmails.includes(reqUser.email));
+    
+    // Always load public baseline data
     const allVendors = await db.select().from(vendors);
     const allProducts = await db.select().from(products);
-    const allOrders = await db.select().from(orders);
-    const allOrderItems = await db.select().from(orderItems);
-    const allRiders = await db.select().from(riders);
     const allPaymentGateways = await db.select().from(paymentGateways);
-    const allSavedAddresses = await db.select().from(userSavedAddresses);
     const allExtremeLocationTiers = await db.select().from(extremeLocationTiers);
     const allExtremeLocations = await db.select().from(extremeLocations);
-    const allEmployees = await db.select().from(employees);
     const allSystemSettings = await db.select().from(systemSettings);
     const allReviews = await db.select().from(reviews);
-    const allWalletTransactions = await db.select().from(walletTransactions);
-    const allAppNotifications = await db.select().from(appNotifications);
-    const allReceiptPickupOrders = await db.select().from(receiptPickupOrders);
+
+    let allUsers: any[] = [];
+    let allOrders: any[] = [];
+    let allOrderItems: any[] = [];
+    let allRiders: any[] = [];
+    let allSavedAddresses: any[] = [];
+    let allEmployees: any[] = [];
+    let allWalletTransactions: any[] = [];
+    let allAppNotifications: any[] = [];
+    let allReceiptPickupOrders: any[] = [];
+
+    if (isAdmin) {
+      // Admins get everything
+      allUsers = await db.select().from(users);
+      allOrders = await db.select().from(orders);
+      allOrderItems = await db.select().from(orderItems);
+      allRiders = await db.select().from(riders);
+      allSavedAddresses = await db.select().from(userSavedAddresses);
+      allEmployees = await db.select().from(employees);
+      allWalletTransactions = await db.select().from(walletTransactions);
+      allAppNotifications = await db.select().from(appNotifications);
+      allReceiptPickupOrders = await db.select().from(receiptPickupOrders);
+    } else if (reqUser) {
+      // Regular user / Vendor / Rider - Tenant Isolation
+      allUsers = await db.select().from(users).where(eq(users.id, reqUser.id));
+      
+      const userVendor = allVendors.find(v => v.userId === reqUser.id);
+      
+      const ordersFilter = userVendor 
+        ? sql`${orders.customerId} = ${reqUser.id} OR ${orders.vendorId} = ${userVendor.id}`
+        : eq(orders.customerId, reqUser.id);
+        
+      allOrders = await db.select().from(orders).where(ordersFilter);
+      
+      if (allOrders.length > 0) {
+        const orderIds = allOrders.map(o => o.id);
+        allOrderItems = await db.select().from(orderItems).where(sql`${orderItems.orderId} IN (${sql.join(orderIds, sql`, `)})`);
+      }
+      
+      if (reqUser.roles?.includes("rider")) {
+        allRiders = await db.select().from(riders).where(eq(riders.userId, reqUser.id));
+      }
+      
+      allSavedAddresses = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id));
+      allWalletTransactions = await db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id));
+      allAppNotifications = await db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id));
+    }
 
     res.json({
       users: allUsers,
@@ -355,14 +414,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     // Unauthenticated users are ONLY allowed to perform USER_UPSERT to register themselves,
     // or perform bulk seeding if the database is completely empty.
     
-    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin"));
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || superAdminEmails.includes(reqUser.email));
 
     // Secure admin-only operations:
     const adminOnlyActions = [
-      "PRODUCT_DELETE", "VENDOR_UPSERT", "SYSTEM_SETTING_UPSERT",
-      "USERS_BULK", "VENDORS_BULK", "PRODUCTS_BULK", "RIDERS_BULK", 
-      "ORDERS_BULK", "PAYMENT_GATEWAYS_BULK", "EXTREME_LOCATION_TIERS_BULK", 
-      "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "REVIEWS_BULK", "SYSTEM_SETTINGS_BULK"
+      "SYSTEM_SETTING_UPSERT", "PAYMENT_GATEWAYS_BULK", "EXTREME_LOCATION_TIERS_BULK", 
+      "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "SYSTEM_SETTINGS_BULK",
+      "USERS_BULK", "VENDORS_BULK", "ORDERS_BULK", "RIDERS_BULK", "PRODUCTS_BULK"
     ];
     
     let isTargetEmpty = false;
@@ -454,8 +513,17 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           name: payload.name,
           phone: payload.phone,
           gender: payload.gender || null,
-          pin: payload.pin || null,
         };
+
+        if (payload.pin && (!existing[0]?.pin || existing[0]?.pin !== payload.pin)) {
+          if (payload.pin.startsWith("$2a$") || payload.pin.startsWith("$2b$")) {
+            setBlock.pin = payload.pin;
+          } else {
+            setBlock.pin = await bcrypt.hash(payload.pin, 10);
+          }
+        } else if (existing[0]?.pin) {
+          setBlock.pin = existing[0].pin;
+        }
 
         if (isAdmin) {
           setBlock.role = finalRole;
@@ -470,7 +538,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           role: finalRole,
           gender: payload.gender || null,
           createdAt: payload.createdAt || new Date().toISOString(),
-          pin: payload.pin || null,
+          pin: setBlock.pin || null,
           roles: finalRoles,
         }).onConflictDoUpdate({
           target: users.id,
@@ -1064,17 +1132,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "EXTREME_LOCATIONS_BULK":
+        await db.delete(extremeLocations);
         for (const el of payload) {
           await db.insert(extremeLocations).values({
             id: el.id,
             name: el.name,
             tierId: el.tierId,
-          }).onConflictDoUpdate({
-            target: extremeLocations.id,
-            set: {
-              name: el.name,
-              tierId: el.tierId,
-            },
           });
         }
         break;
@@ -1124,12 +1187,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 
       case "SYSTEM_SETTINGS_BULK":
         for (const setting of payload) {
+          if (!setting.key || setting.value === undefined || setting.value === null) continue;
           await db.insert(systemSettings).values({
             key: setting.key,
-            value: setting.value,
+            value: String(setting.value),
           }).onConflictDoUpdate({
             target: systemSettings.key,
-            set: { value: setting.value },
+            set: { value: String(setting.value) },
           });
         }
         break;
@@ -1298,7 +1362,7 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     }
 
     // 3. Create Order
-    const orderId = Math.random().toString(36).substring(2, 11);
+    const orderId = "owf-" + Math.random().toString(36).substring(2, 9).toUpperCase();
     await db.insert(orders).values({
       id: orderId,
       customerId,

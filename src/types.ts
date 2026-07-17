@@ -172,6 +172,7 @@ export interface Category {
   id: string;
   name: string;
   icon: string;
+  vendorCategoryId?: string;
 }
 
 export interface ReceiptPickupConfig {

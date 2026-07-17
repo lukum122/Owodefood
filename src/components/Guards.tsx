@@ -10,7 +10,7 @@ interface GuardProps {
 }
 
 export const AuthGuard: React.FC<GuardProps> = ({ children, allowedRoles }) => {
-  const { currentUser } = useDatabase();
+  const { currentUser, switchRole } = useDatabase();
   const location = useLocation();
 
   if (!currentUser) {
@@ -18,7 +18,32 @@ export const AuthGuard: React.FC<GuardProps> = ({ children, allowedRoles }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  React.useEffect(() => {
+    if (currentUser && allowedRoles && !allowedRoles.includes(currentUser.role)) {
+      const userRoles = currentUser.roles || [currentUser.role];
+      const hasRole = allowedRoles.some(r => userRoles.includes(r));
+      if (hasRole) {
+        // Auto-switch to the required role
+        const targetRole = allowedRoles.find(r => userRoles.includes(r)) || allowedRoles[0];
+        const updated = { ...currentUser, role: targetRole, roles: userRoles };
+        localStorage.setItem("fd_session_user", JSON.stringify(updated));
+        
+        if (switchRole) {
+          switchRole(targetRole);
+        } else {
+          window.location.reload();
+        }
+      }
+    }
+  }, [currentUser, allowedRoles]);
+
   if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
+    const userRoles = currentUser.roles || [currentUser.role];
+    const hasRole = allowedRoles.some(r => userRoles.includes(r));
+    if (hasRole) {
+      // Show nothing while auto-switching
+      return null;
+    }
     return <AccessDeniedScreen currentRole={currentUser.role} requiredRoles={allowedRoles} />;
   }
 

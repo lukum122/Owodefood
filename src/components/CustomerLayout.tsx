@@ -765,15 +765,18 @@ export const CustomerLayout: React.FC = () => {
                               }
 
                               return (
-                                <button
-                                  key={role}
-                                  onClick={() => {
-                                    switchRole(role);
-                                    setShowProfilePopover(false);
-                                    navigate(path);
-                                  }}
-                                  className={`w-full flex items-center justify-between p-2 rounded-xl transition text-xs font-bold text-left cursor-pointer border-none ${colorClass}`}
-                                >
+                                  <button
+                                    key={role}
+                                    onClick={() => {
+                                      if (currentUser) {
+                                        const updated = { ...currentUser, role: role as any };
+                                        localStorage.setItem("fd_session_user", JSON.stringify(updated));
+                                      }
+                                      setShowProfilePopover(false);
+                                      window.location.href = path;
+                                    }}
+                                    className={`w-full flex items-center justify-between p-2 rounded-xl transition text-xs font-bold text-left cursor-pointer border-none ${colorClass}`}
+                                  >
                                   <div className="flex items-center gap-2">
                                     <Icon className="w-3.5 h-3.5" />
                                     <span>{label}</span>
