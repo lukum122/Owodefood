@@ -1391,9 +1391,34 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       });
     }
 
+    const newOrderPayload = {
+      id: orderId,
+      customerId,
+      customerName,
+      customerPhone,
+      vendorId,
+      vendorName,
+      status: "pending",
+      totalAmount: finalTotal,
+      deliveryAddress,
+      paymentMethod,
+      serviceFee,
+      deliveryFee,
+      tax,
+      createdAt: new Date().toISOString(),
+      items: items.map((item: any) => ({
+        id: Math.random().toString(36).substring(2, 11),
+        orderId,
+        productId: item.productId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity
+      }))
+    };
+
     // Emit Socket Event (To be added via Socket.io later)
-    io.to(vendorId).emit("new_order", { orderId, vendorId });
-    io.to("admin").emit("new_order", { orderId, vendorId });
+    io.to(vendorId).emit("new_order", { orderId, vendorId, order: newOrderPayload });
+    io.to("admin").emit("new_order", { orderId, vendorId, order: newOrderPayload });
 
     // Web Push Notification to Vendor and Admin
     const sendPush = async (targetId: string, title: string, message: string) => {

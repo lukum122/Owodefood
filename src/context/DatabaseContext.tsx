@@ -4079,6 +4079,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           audio.play();
         } catch(e) {}
         alert(`New Order Received! Order ID: ${data.orderId}`);
+
+        if (data.order) {
+          setOrders(prev => {
+            if (prev.find(o => o.id === data.order.id)) return prev;
+            return [data.order, ...prev];
+          });
+        }
       });
 
       socketRef.current.on("new_delivery_job", (data) => {
