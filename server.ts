@@ -2,7 +2,8 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { db, runMigrations } from "./src/db/index.ts";
+import { db, runMigrations, pool } from "./src/db/index.ts";
+import { seedDefaultData } from "./src/db/seed.ts";
 import bcrypt from "bcryptjs";
 import {
   users,
@@ -22,6 +23,7 @@ import {
   appNotifications,
   receiptPickupOrders,
   pushSubscriptions,
+  auditLogs,
 } from "./src/db/schema.ts";
 import { eq, sql, inArray } from "drizzle-orm";
 import nodemailer from "nodemailer";
@@ -316,7 +318,7 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
-    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || superAdminEmails.includes(reqUser.email));
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
     
     // Always load public baseline data
     const allVendors = await db.select().from(vendors);
@@ -415,7 +417,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     // or perform bulk seeding if the database is completely empty.
     
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
-    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || superAdminEmails.includes(reqUser.email));
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
 
     // Secure admin-only operations:
     const adminOnlyActions = [
@@ -1290,7 +1292,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       default:
         return res.status(400).json({ error: `Unknown synchronization type: ${type}` });
     }
-
+    io.emit("sync_update", { type, payload });
     res.json({ success: true });
   } catch (error) {
     console.error("Cloud SQL sync save failed:", error);
@@ -1472,17 +1474,28 @@ app.post("/api/wallet/fund", verifyTokenOptional, async (req: any, res: any) => 
     }
 
     const txId = Math.random().toString(36).substring(2, 11);
-    await db.insert(walletTransactions).values({
-      id: txId,
-      userId,
-      userName,
-      amount,
-      type: "deposit",
-      status: gateway === "bank_transfer" ? "pending" : "approved",
-      gateway,
-      reference,
-      createdAt: new Date().toISOString(),
-      note: `Wallet funding via ${gateway}`
+    await db.transaction(async (tx) => {
+      await tx.insert(walletTransactions).values({
+        id: txId,
+        userId,
+        userName,
+        amount,
+        type: "deposit",
+        status: gateway === "bank_transfer" ? "pending" : "approved",
+        gateway,
+        reference,
+        createdAt: new Date().toISOString(),
+        note: `Wallet funding via ${gateway}`
+      });
+
+      await tx.insert(auditLogs).values({
+        id: Math.random().toString(36).substring(2, 11),
+        userId,
+        action: "WALLET_FUND",
+        resource: `walletTransactions:${txId}`,
+        details: `Funded ${amount} NGN via ${gateway}`,
+        createdAt: new Date().toISOString()
+      });
     });
 
     res.json({ success: true, transactionId: txId });
@@ -1537,28 +1550,109 @@ app.post("/api/push/subscribe", verifyTokenOptional, async (req: any, res: any) 
 });
 
 
+// Structured logger
+const logger = {
+  server: (msg: string, ...args: any[]) => console.log(`[SERVER] ${new Date().toISOString()} - ${msg}`, ...args),
+  db: (msg: string, ...args: any[]) => console.log(`[DB] ${new Date().toISOString()} - ${msg}`, ...args),
+  error: (msg: string, ...args: any[]) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`, ...args),
+};
+
+// Global Error Handlers
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught Exception:", error);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
+
+// Health check endpoint
+app.get("/api/health", async (req, res) => {
+  try {
+    const dbStatus = await pool.query("SELECT 1 AS status");
+    res.json({
+      status: "healthy",
+      database: dbStatus.rowCount === 1 ? "connected" : "error",
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || "1.0.0"
+    });
+  } catch (err) {
+    logger.error("Health check failed:", err);
+    res.status(503).json({ status: "unhealthy", database: "disconnected" });
+  }
+});
+
+function validateEnvironment() {
+  const requiredEnvVars = ["DATABASE_URL", "JWT_SECRET"];
+  const missing = requiredEnvVars.filter((v) => !process.env[v]);
+  if (missing.length > 0) {
+    logger.error(`Missing required environment variables: ${missing.join(", ")}`);
+    process.exit(1);
+  }
+}
+
+async function gracefulShutdown(signal: string) {
+  logger.server(`Received ${signal}. Shutting down gracefully...`);
+  server.close(async () => {
+    logger.server("HTTP server closed.");
+    try {
+      await pool.end();
+      logger.db("Database pool closed.");
+      process.exit(0);
+    } catch (err) {
+      logger.error("Error during database pool closure:", err);
+      process.exit(1);
+    }
+  });
+  
+  // Force close after 10s
+  setTimeout(() => {
+    logger.error("Could not close connections in time, forcefully shutting down");
+    process.exit(1);
+  }, 10000);
+}
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+
 // Serve frontend with Vite integration
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Automatically apply database migrations on cPanel boot
-    await runMigrations();
+  try {
+    validateEnvironment();
+    logger.server("Environment validated successfully.");
 
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    if (process.env.RUN_MIGRATIONS_ON_STARTUP === "true" || process.env.NODE_ENV === "production") {
+      logger.db("Running database migrations...");
+      await runMigrations();
+    }
+
+    if (process.env.RUN_SEEDING_ON_STARTUP === "true" || process.env.NODE_ENV === "production") {
+      logger.db("Running version-aware database seeding...");
+      await seedDefaultData();
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+
+    server.listen(PORT, () => {
+      logger.server(`Server running on port ${PORT}`);
     });
+  } catch (error) {
+    logger.error("Failed to start server:", error);
+    process.exit(1);
   }
-
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
 }
 
 startServer();

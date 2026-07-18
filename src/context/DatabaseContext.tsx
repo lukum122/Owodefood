@@ -730,8 +730,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_collections", JSON.stringify(collections));
   }, [collections]);
 
-  const updateHomepageSections = (sections: HomepageSection[]) => setHomepageSections(sections);
-  const updateCollections = (colls: Collection[]) => setCollections(colls);
+  const updateHomepageSections = (sections: HomepageSection[]) => {
+    setHomepageSections(sections);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "homepageSections", value: JSON.stringify(sections) });
+  };
+  const updateCollections = (colls: Collection[]) => {
+    setCollections(colls);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "collections", value: JSON.stringify(colls) });
+  };
 
   const [heroBanner, setHeroBanner] = useState<HeroBannerConfig>(() => {
     try {
@@ -752,7 +758,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_hero_banner", JSON.stringify(heroBanner));
   }, [heroBanner]);
 
-  const updateHeroBanner = (config: HeroBannerConfig) => setHeroBanner(config);
+  const updateHeroBanner = (config: HeroBannerConfig) => {
+    setHeroBanner(config);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "heroBanner", value: JSON.stringify(config) });
+  };
 
   const [receiptPickupConfig, setReceiptPickupConfig] = useState<ReceiptPickupConfig>(() => {
     try {
@@ -772,7 +781,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_receipt_pickup_config", JSON.stringify(receiptPickupConfig));
   }, [receiptPickupConfig]);
 
-  const updateReceiptPickupConfig = (config: ReceiptPickupConfig) => setReceiptPickupConfig(config);
+  const updateReceiptPickupConfig = (config: ReceiptPickupConfig) => {
+    setReceiptPickupConfig(config);
+    localStorage.setItem("fd_receipt_pickup_config", JSON.stringify(config));
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "receiptPickupConfig", value: JSON.stringify(config) });
+  };
 
   const [receiptPickupOrders, setReceiptPickupOrders] = useState<ReceiptPickupOrder[]>(() => {
     try {
@@ -1152,7 +1165,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   useEffect(() => {
     const loadFromCloudSQL = async () => {
       try {
-        const res = await fetch("/api/sync/load");
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch("/api/sync/load", { headers });
         if (!res.ok) throw new Error("Backend load failed");
         const data = await res.json();
 
@@ -1355,6 +1374,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
               try { 
                 const parsed = JSON.parse(data.systemSettings.receiptPickupConfig);
                 if (parsed) setReceiptPickupConfig(parsed); 
+              } catch(e){}
+            }
+            if (data.systemSettings.heroBanner) {
+              try { 
+                const parsed = JSON.parse(data.systemSettings.heroBanner);
+                setHeroBanner(parsed); 
+              } catch(e){}
+            }
+            if (data.systemSettings.homepageSections) {
+              try { 
+                const parsed = JSON.parse(data.systemSettings.homepageSections);
+                setHomepageSections(parsed); 
+              } catch(e){}
+            }
+            if (data.systemSettings.collections) {
+              try { 
+                const parsed = JSON.parse(data.systemSettings.collections);
+                setCollections(parsed); 
               } catch(e){}
             }
           }
@@ -2010,12 +2047,18 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     loadFromCloudSQL();
 
+    const handleSyncEvent = () => loadFromCloudSQL();
+    window.addEventListener("sync_update_event", handleSyncEvent);
+
     // Smart Polling every 15 seconds to sync data in real-time across devices
     const interval = setInterval(() => {
       loadFromCloudSQL();
     }, 15000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("sync_update_event", handleSyncEvent);
+    };
   }, []);
 
   // Automatically synchronize currentUser's roles if they have approved vendor/rider profiles or if their roles changed in the main users list.
@@ -4095,6 +4138,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           audio.play();
         } catch(e) {}
         alert(`New Delivery Job Available! Order ID: ${data.orderId}`);
+      });
+
+      socketRef.current.on("sync_update", () => {
+        window.dispatchEvent(new Event("sync_update_event"));
       });
 
       // 2. Request Web Push Subscription if PWA/ServiceWorker is ready

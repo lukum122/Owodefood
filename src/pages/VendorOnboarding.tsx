@@ -95,6 +95,7 @@ export const VendorOnboarding: React.FC = () => {
         verificationDoc: verificationDoc
       });
       if (res.success) {
+        window.scrollTo(0, 0);
         setSuccessMsg("Your application was submitted successfully! An administrator will review your credentials shortly.");
         // Clear fields
         setBusinessName("");

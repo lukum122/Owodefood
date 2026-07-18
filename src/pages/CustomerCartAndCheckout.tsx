@@ -509,6 +509,7 @@ export const CustomerCheckout: React.FC = () => {
     );
     if (success) {
       setIsOrdered(true);
+      window.scrollTo(0, 0);
       setTimeout(() => {
         navigate("/orders");
       }, 2000);

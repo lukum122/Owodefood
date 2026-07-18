@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 owodefood-cpanel-build.zip
+deployable-cpanel.zip

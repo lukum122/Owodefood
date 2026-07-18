@@ -1846,7 +1846,6 @@ export const AdminCustomers: React.FC = () => {
       setNewRoles(["customer"]);
       setNewPin("1234");
       setVendorBusinessName("");
-      setVendorCuisine("");
       setRiderVehicleType("motorcycle");
       setIsCreateModalOpen(false);
     } else {

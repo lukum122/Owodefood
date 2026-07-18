@@ -39,7 +39,7 @@ export const createPool = () => {
   return new Pool();
 };
 
-const pool = createPool();
+export const pool = createPool();
 
 pool.on("error", (err) => {
   console.error("Unexpected error on idle SQL pool client:", err);
@@ -55,5 +55,6 @@ export const runMigrations = async () => {
     console.log("[Database] Migrations applied successfully!");
   } catch (error) {
     console.error("[Database] Migration failed:", error);
+    throw error;
   }
 };

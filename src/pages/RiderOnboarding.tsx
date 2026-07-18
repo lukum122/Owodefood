@@ -89,6 +89,7 @@ export const RiderOnboarding: React.FC = () => {
         verificationDoc: verificationDoc
       });
       if (res.success) {
+        window.scrollTo(0, 0);
         setSuccessMsg("Your dispatch rider registration was submitted successfully! An administrator will verify your credentials.");
         // Clear fields
         setLicenseNo("");

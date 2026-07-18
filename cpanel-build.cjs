@@ -20,7 +20,7 @@ try {
     }
 
     // Using tar (built into Windows 10+ and Linux) to create the zip
-    const filesToZip = 'dist drizzle server.js package.json .env';
+    const filesToZip = 'dist drizzle server.js package.json';
     execSync(`tar -a -c -f deployable-cpanel.zip ${filesToZip}`, { stdio: 'inherit' });
 
     console.log('\n✅ DONE! Upload deployable-cpanel.zip to your cPanel File Manager and extract it.');

@@ -220,3 +220,12 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   auth: text("auth").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const auditLogs = pgTable("audit_logs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  action: text("action").notNull(),
+  resource: text("resource").notNull(),
+  details: text("details"),
+  createdAt: text("created_at").notNull(),
+});
