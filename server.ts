@@ -545,6 +545,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               phone: u.phone,
               gender: u.gender || null,
               pin: u.pin || null,
+              role: u.role,
+              roles: u.roles || null,
             },
           });
         }

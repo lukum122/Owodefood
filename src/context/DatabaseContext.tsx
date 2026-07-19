@@ -131,7 +131,7 @@ interface DatabaseContextType {
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => void;
   adminCreateOrder: (order: Order) => void;
   adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => { success: boolean; error?: string };
-  adminUpdateUser: (userId: string, fields: { name: string; email: string; phone: string; role: UserRole; pin: string; roles?: UserRole[] }) => { success: boolean; error?: string };
+  adminUpdateUser: (userId: string, fields: { name: string; email: string; phone: string; role: UserRole; pin?: string; roles?: UserRole[] }, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
   adminUpdateUserRole: (userId: string, role: UserRole) => void;
 
   // Coverage Guide & Extreme Locations & Saved Addresses (Kwara coverage expansion)
@@ -3851,7 +3851,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
   const adminUpdateUser = (
     userId: string,
-    fields: { name: string; email: string; phone: string; role: UserRole; pin: string; roles?: UserRole[] },
+    fields: { name: string; email: string; phone: string; role: UserRole; pin?: string; roles?: UserRole[] },
     extra?: { businessName?: string; cuisine?: string; vehicleType?: Rider["vehicleType"] }
   ) => {
     const cleansedEmail = fields.email.trim().toLowerCase();
@@ -3874,7 +3874,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           phone: fields.phone.trim(),
           role: activeRole,
           roles: updatedRoles,
-          pin: fields.pin
+          pin: fields.pin !== undefined ? fields.pin : u.pin
         };
         if (currentUser && currentUser.id === userId) {
           const keepCurrentRole = updatedRoles.includes(currentUser.role);
@@ -4290,6 +4290,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         overrideUserRole,
         updateProfile,
         resetUserPin,
+        applyForVendor,
+        applyForRider,
         addToCart,
         removeFromCart,
         updateCartQuantity,

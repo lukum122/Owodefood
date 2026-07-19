@@ -1705,7 +1705,6 @@ export const AdminCustomers: React.FC = () => {
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState<UserRole>("customer");
   const [editRoles, setEditRoles] = useState<UserRole[]>([]);
-  const [editPin, setEditPin] = useState("");
   const [editFormError, setEditFormError] = useState("");
   const [editVendorBusinessName, setEditVendorBusinessName] = useState("");
   const [editVendorCategory, setEditVendorCategory] = useState("");
@@ -1717,7 +1716,6 @@ export const AdminCustomers: React.FC = () => {
     setEditPhone(user.phone);
     setEditRole(user.role);
     setEditRoles(user.roles || [user.role]);
-    setEditPin(user.pin || "1234");
     setEditFormError("");
     
     // Prep vendor data if they are already a vendor
@@ -1747,11 +1745,6 @@ export const AdminCustomers: React.FC = () => {
       return;
     }
 
-    if (editPin.length !== 4 || isNaN(Number(editPin))) {
-      setEditFormError("Security PIN must be exactly 4 digits.");
-      return;
-    }
-
     // Set primary role to highest privilege if they just got assigned a new role
     let primaryRole = editRoles.includes(editRole) ? editRole : editRoles[0];
     if (editRoles.includes("vendor") && editRole === "customer") {
@@ -1767,8 +1760,7 @@ export const AdminCustomers: React.FC = () => {
       email: editEmail.trim().toLowerCase(),
       phone: editPhone.trim(),
       role: primaryRole,
-      roles: editRoles,
-      pin: editPin
+      roles: editRoles
     }, {
       businessName: editRoles.includes("vendor") ? editVendorBusinessName || undefined : undefined,
       cuisine: editRoles.includes("vendor") ? editVendorCategory || undefined : undefined
@@ -2317,29 +2309,6 @@ export const AdminCustomers: React.FC = () => {
                     </div>
                   </div>
                 )}
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider">Login Security PIN</label>
-                    <button
-                      type="button"
-                      onClick={() => setEditPin(Math.floor(1000 + Math.random() * 9000).toString())}
-                      className="text-[10px] text-purple-600 font-extrabold hover:underline cursor-pointer"
-                    >
-                      🎲 Generate Random PIN
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={4}
-                    required
-                    placeholder="e.g. 1234"
-                    value={editPin}
-                    onChange={(e) => setEditPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-purple-50/50 transition font-mono tracking-widest font-black"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-0.5">The user will enter this 4-digit security PIN to authorize logins.</p>
-                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
