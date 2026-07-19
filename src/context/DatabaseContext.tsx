@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
+import { hasRole } from "../roleHelper";
 
 export interface CartItem {
   id: string;
@@ -2810,7 +2811,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   // Helper designed for review to switch roles seamlessly
   const overrideUserRole = (role: UserRole) => {
     // Finds or creates a sample user for that role
-    let targetUser = users.find(u => u.role === role);
+    let targetUser = users.find(u => hasRole(u, role));
     if (!targetUser) {
       // Auto-creates a robust preset so developer has immediate access
       const id = `${role}-guest`;

@@ -289,7 +289,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
       
       setTimeout(async () => {
         setEmail(foundUserForReset.email);
-        setStoredUserPin(newPin);
+
         setLoginPin("");
         setForgotPinStep(null);
         setLoginPinStep(true);

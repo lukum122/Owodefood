@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { AppNotification, User } from "../types";
+import { hasRole } from "../roleHelper";
 import { 
   Bell, 
   Send, 
@@ -104,7 +105,7 @@ export const AdminNotifications: React.FC = () => {
       } 
       else if (targetType === "role") {
         // Filter users of role
-        const targetUsers = users.filter(u => u.role === selectedRole);
+        const targetUsers = users.filter(u => hasRole(u, selectedRole));
         if (targetUsers.length === 0) {
           setErrorMsg(`No active user profiles found with the role of '${selectedRole}'.`);
           return;

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
+import { hasRole } from "../roleHelper";
 import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
@@ -1858,7 +1859,7 @@ export const AdminCustomers: React.FC = () => {
 
   // Filter the list of users based on search query and role filter
   const filteredUsers = users.filter((u) => {
-    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+    const matchesRole = roleFilter === "all" || hasRole(u, roleFilter);
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
       u.name.toLowerCase().includes(searchLower) ||
@@ -2368,7 +2369,7 @@ export const AdminCustomers: React.FC = () => {
                 : "bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100"
             }`}
           >
-            Administrators ({users.filter(u => u.role === "admin").length})
+            Administrators ({users.filter(u => hasRole(u, "admin")).length})
           </button>
           <button
             onClick={() => setRoleFilter("customer")}
@@ -2378,7 +2379,7 @@ export const AdminCustomers: React.FC = () => {
                 : "bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100"
             }`}
           >
-            Consumers ({users.filter(u => u.role === "customer").length})
+            Consumers ({users.filter(u => hasRole(u, "customer")).length})
           </button>
           <button
             onClick={() => setRoleFilter("rider")}
@@ -2388,7 +2389,7 @@ export const AdminCustomers: React.FC = () => {
                 : "bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100"
             }`}
           >
-            Riders ({users.filter(u => u.role === "rider").length})
+            Riders ({users.filter(u => hasRole(u, "rider")).length})
           </button>
           <button
             onClick={() => setRoleFilter("vendor")}
@@ -2398,7 +2399,7 @@ export const AdminCustomers: React.FC = () => {
                 : "bg-amber-50 text-amber-700 border-amber-100 hover:bg-amber-100"
             }`}
           >
-            Vendors ({users.filter(u => u.role === "vendor").length})
+            Vendors ({users.filter(u => hasRole(u, "vendor")).length})
           </button>
         </div>
 

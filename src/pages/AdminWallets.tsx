@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { WalletTransaction, User } from "../types";
+import { hasRole } from "../roleHelper";
 import { Coins, Plus, Minus, Search, ArrowUpRight, ArrowDownLeft, ShieldAlert, CheckCircle, RefreshCw, X, FileText, Landmark, CreditCard } from "lucide-react";
 
 export const AdminWallets: React.FC = () => {
@@ -53,7 +54,7 @@ export const AdminWallets: React.FC = () => {
   // Filter users
   const filteredUsers = users.filter(u => {
     const balance = getUserWalletBalance(u.id);
-    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+    const matchesRole = roleFilter === "all" || hasRole(u, roleFilter);
     const matchesSearch = 
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||

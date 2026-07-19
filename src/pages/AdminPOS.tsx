@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Product, Vendor, Addon, Order, User, OrderStatus } from "../types";
+import { hasRole } from "../roleHelper";
 import { 
   Search, 
   ShoppingCart, 
@@ -75,7 +76,7 @@ export const AdminPOS: React.FC = () => {
 
   // 1. Get all customers
   const customers = useMemo(() => {
-    return users.filter(u => u.role === "customer");
+    return users.filter(u => hasRole(u, "customer"));
   }, [users]);
 
   // 2. Get active unique categories

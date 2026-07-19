@@ -1,6 +1,7 @@
 import React from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { DollarSign, ShoppingBag, Store, Bike, Users, Shield, TrendingUp, UsersRound, Award, CheckCircle } from "lucide-react";
+import { hasRole } from "../roleHelper";
 
 export const AdminDashboard: React.FC = () => {
   const { 
@@ -32,7 +33,7 @@ export const AdminDashboard: React.FC = () => {
   const commission = vendorCommission + totalRiderCommissions;
 
   const totalOrdersCount = orders.length;
-  const totalCustomersCount = users.filter(u => u.role === "customer").length;
+  const totalCustomersCount = users.filter(u => hasRole(u, "customer")).length;
 
   const pendingApprovalVendors = vendors.filter(v => v.status === "pending").length;
   const pendingApprovalRiders = riders.filter(r => r.status === "pending").length;
