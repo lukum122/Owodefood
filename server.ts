@@ -701,7 +701,22 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         break;
 
-      case "VENDOR_UPSERT":
+      case "VENDOR_UPSERT": {
+        if (!isAdmin) {
+          if (payload.userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
+          const existingVendor = await db.select().from(vendors).where(eq(vendors.id, payload.id)).limit(1);
+          if (existingVendor.length > 0) {
+            if (existingVendor[0].userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
+            payload.status = existingVendor[0].status;
+            payload.rating = existingVendor[0].rating;
+            payload.commissionType = existingVendor[0].commissionType;
+            payload.commissionValue = existingVendor[0].commissionValue;
+            payload.userId = existingVendor[0].userId;
+          } else {
+            payload.status = "pending";
+            payload.rating = 5.0;
+          }
+        }
         await db.insert(vendors).values({
           id: payload.id,
           userId: payload.userId,
@@ -752,7 +767,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             freeDelivery: payload.freeDelivery,
           },
         });
-        break;
+      } break;
 
       case "PRODUCTS_BULK":
         for (const p of payload) {
@@ -787,7 +802,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         break;
 
-      case "PRODUCT_UPSERT":
+      case "PRODUCT_UPSERT": {
+        if (!isAdmin) {
+          const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
+          if (!userVendor.length || userVendor[0].id !== payload.vendorId) return res.status(403).json({ error: "Forbidden: Product does not belong to your vendor account." });
+        }
         await db.insert(products).values({
           id: payload.id,
           vendorId: payload.vendorId,
@@ -816,11 +835,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             addonGroups: payload.addonGroups || null,
           },
         });
-        break;
+      } break;
 
-      case "PRODUCT_DELETE":
+      case "PRODUCT_DELETE": {
+        if (!isAdmin) {
+          const existingProd = await db.select().from(products).where(eq(products.id, payload.id)).limit(1);
+          if (existingProd.length > 0) {
+            const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
+            if (!userVendor.length || userVendor[0].id !== existingProd[0].vendorId) return res.status(403).json({ error: "Forbidden" });
+          }
+        }
         await db.delete(products).where(eq(products.id, payload.id));
-        break;
+      } break;
 
       case "ORDERS_BULK":
         for (const o of payload) {
@@ -875,6 +901,40 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         const isNew = existingOrder.length === 0;
         const oldStatus = isNew ? null : existingOrder[0].status;
         const statusChanged = oldStatus !== payload.status;
+
+        if (!isAdmin) {
+          const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
+          const userVendorId = userVendor.length > 0 ? userVendor[0].id : null;
+          
+          if (!isNew) {
+            const order = existingOrder[0];
+            const isCustomer = order.customerId === reqUser.id;
+            const isVendor = order.vendorId === userVendorId;
+            const isRider = order.riderId === reqUser.id || payload.riderId === reqUser.id;
+            
+            if (!isCustomer && !isVendor && !isRider) return res.status(403).json({ error: "Forbidden" });
+            
+            // Field-level locks
+            payload.customerId = order.customerId;
+            payload.vendorId = order.vendorId;
+            payload.totalAmount = order.totalAmount;
+            payload.serviceFee = order.serviceFee;
+            payload.deliveryFee = order.deliveryFee;
+            payload.tax = order.tax;
+            payload.items = undefined;
+            
+            if (isCustomer && !isVendor && !isRider) {
+              if (payload.status !== "cancelled" || order.status !== "pending") {
+                payload.status = order.status;
+              }
+              payload.riderId = order.riderId;
+            } else if (isRider && !isVendor) {
+              if (order.riderId && order.riderId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
+            }
+          } else {
+            if (payload.customerId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
+          }
+        }
 
         await db.insert(orders).values({
           id: payload.id,
@@ -1077,7 +1137,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         break;
 
-      case "RIDER_UPSERT":
+      case "RIDER_UPSERT": {
+        if (!isAdmin) {
+          if (payload.userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
+          const existing = await db.select().from(riders).where(eq(riders.id, payload.id)).limit(1);
+          if (existing.length > 0) {
+            if (existing[0].userId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
+            payload.status = existing[0].status;
+            payload.userId = existing[0].userId;
+          } else {
+            payload.status = "pending";
+          }
+        }
         await db.insert(riders).values({
           id: payload.id,
           userId: payload.userId,
@@ -1097,7 +1168,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             isAvailable: payload.isAvailable,
           },
         });
-        break;
+      } break;
 
       case "PAYMENT_GATEWAYS_BULK":
         for (const pg of payload) {
