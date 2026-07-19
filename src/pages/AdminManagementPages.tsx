@@ -2462,9 +2462,13 @@ export const AdminCustomers: React.FC = () => {
                       <td className="py-3.5 px-4 font-mono text-[11px] text-gray-500">{c.email}</td>
                       <td className="py-3.5 px-4 font-medium text-gray-700 font-mono">{c.phone}</td>
                       <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${getRoleBadgeStyle(c.role)}`}>
-                          {c.role}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {Array.from(new Set([c.role, ...(c.roles || [])])).map((r) => (
+                            <span key={r} className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${getRoleBadgeStyle(r)}`}>
+                              {r}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono">
                         <div className="inline-flex items-center justify-center gap-1.5 bg-purple-50 px-2 py-1 rounded-xl border border-purple-100">
