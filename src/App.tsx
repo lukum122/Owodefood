@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { DatabaseProvider } from "./context/DatabaseContext";
+import { UpdateManagerProvider } from "./context/UpdateManagerContext";
 import { AuthGuard, PublicOnlyRoute } from "./components/Guards";
 import { ScrollToTop } from "./components/ScrollToTop";
 
@@ -10,6 +11,7 @@ import { VendorLayout } from "./components/VendorLayout";
 import { RiderLayout } from "./components/RiderLayout";
 import { AdminLayout } from "./components/AdminLayout";
 import { PortalSimulator } from "./components/PortalSimulator";
+import { PwaUpdater } from "./components/PwaUpdater";
 
 // Customer Pages
 import { CustomerHome } from "./pages/CustomerHome";
@@ -49,10 +51,12 @@ import { AdminDiscovery } from "./pages/AdminDiscovery";
 
 export default function App() {
   return (
-    <DatabaseProvider>
-      <BrowserRouter>
-        <ScrollToTop />
-        <PortalSimulator />
+    <UpdateManagerProvider>
+      <DatabaseProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <PortalSimulator />
+          <PwaUpdater />
 
         <Routes>
           
@@ -163,5 +167,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </DatabaseProvider>
+    </UpdateManagerProvider>
   );
 }

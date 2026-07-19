@@ -17,4 +17,5 @@ esbuild.build({
   outfile: 'dist/server.cjs',
 }).then(() => {
   console.log('Server bundled successfully with bcryptjs included!');
+  process.exit(0);
 }).catch(() => process.exit(1));

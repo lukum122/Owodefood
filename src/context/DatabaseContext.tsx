@@ -91,7 +91,9 @@ interface DatabaseContextType {
   removeEmployee: (id: string) => void;
   
   // Auth Actions
-  login: (email: string, pin: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
+  checkUser: (identifier: string) => Promise<{ exists: boolean; user?: User; error?: string }>;
+  login: (email: string, pin: string, role: UserRole, preventStateUpdate?: boolean) => Promise<{ success: boolean; error?: string; user?: User; token?: string }>;
+  finalizeLogin: (user: User, token: string, role: UserRole) => void;
   register: (name: string, email: string, phone: string, role: UserRole, gender?: string, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   overrideUserRole: (role: UserRole) => void; // Development booster
@@ -2536,9 +2538,37 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // AUTH ACTIONS
-  const login = async (identifier: string, pin: string, role: UserRole) => {
+  const checkUser = async (identifier: string) => {
     try {
-      const response = await fetch("/api/login", {
+      const response = await fetch("/api/auth/check-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier })
+      });
+      return await response.json();
+    } catch (err) {
+      return { exists: false, error: "Network error" };
+    }
+  };
+
+  const finalizeLogin = (user: any, token: string, role: UserRole) => {
+    const loggedInUser = { ...user, role, roles: user.roles || [user.role] };
+    setCurrentUser(loggedInUser);
+    localStorage.setItem("fd_session_user", JSON.stringify(loggedInUser));
+    localStorage.setItem("fd_jwt_token", token);
+    
+    if (role === "vendor") {
+      const v = vendors.find(vend => vend.userId === user.id);
+      setCurrentVendor(v || null);
+    } else if (role === "rider") {
+      const r = riders.find(rid => rid.userId === user.id);
+      setCurrentRider(r || null);
+    }
+  };
+
+  const login = async (identifier: string, pin: string, role: UserRole, preventStateUpdate: boolean = false) => {
+    try {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: identifier, pin })
@@ -2555,19 +2585,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         return { success: false, error: `This account does not have the ${role} role. Available roles: ${userRoles.join(", ")}.` };
       }
       
-      const loggedInUser = { ...user, role, roles: userRoles };
-      setCurrentUser(loggedInUser);
-      localStorage.setItem("fd_session_user", JSON.stringify(loggedInUser));
-      localStorage.setItem("fd_jwt_token", data.token); // Store secure JWT
-      
-      if (role === "vendor") {
-        const v = vendors.find(vend => vend.userId === user.id);
-        setCurrentVendor(v || null);
-      } else if (role === "rider") {
-        const r = riders.find(rid => rid.userId === user.id);
-        setCurrentRider(r || null);
+      if (!preventStateUpdate) {
+        finalizeLogin(user, data.token, role);
       }
-      return { success: true };
+      
+      return { success: true, user: { ...user, role, roles: userRoles }, token: data.token };
     } catch (err) {
       return { success: false, error: "Network error during secure login." };
     }
@@ -2582,9 +2604,16 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string }
   ) => {
     const cleansedEmail = email.trim().toLowerCase();
-    const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
-    if (exists) {
+    
+    // Secure backend check instead of insecure local check
+    const checkRes = await checkUser(cleansedEmail);
+    if (checkRes.exists) {
       return { success: false, error: "An account with this email already exists." };
+    }
+
+    const checkPhone = await checkUser(phone);
+    if (checkPhone.exists) {
+      return { success: false, error: "An account with this phone number already exists." };
     }
 
     const newUserId = generateId();
@@ -4252,6 +4281,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         updateEmployee,
         removeEmployee,
 
+        checkUser,
+        finalizeLogin,
         login,
         register,
         logout,

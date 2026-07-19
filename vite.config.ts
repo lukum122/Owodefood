@@ -3,14 +3,17 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import {defineConfig} from 'vite';
-
 export default defineConfig(() => {
   return {
     plugins: [
       react(), 
       tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
+        workbox: {
+          clientsClaim: true,
+          skipWaiting: true
+        },
         devOptions: { enabled: true },
         manifest: {
           name: 'OwodeFood Vendor & Rider',

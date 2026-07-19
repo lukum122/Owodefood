@@ -168,10 +168,18 @@ async function sendEmailNotification(to: string, subject: string, htmlContent: s
   }
 }
 
+const APP_VERSION = process.env.APP_VERSION || Date.now().toString();
+
 // 1. Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", database: "connected" });
 });
+
+// App Version Endpoint
+app.get("/api/version", (req, res) => {
+  res.json({ version: APP_VERSION });
+});
+
 
 // SMTP Connection Test Endpoint
 app.post("/api/email/test", async (req, res) => {
@@ -270,11 +278,53 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
   res.json(result);
 });
 
+// Secure User Existence Check
+app.post("/api/auth/check-user", async (req, res) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier) {
+      return res.status(400).json({ error: "Missing identifier" });
+    }
+
+    const cleanIdentifier = identifier.trim().toLowerCase();
+    const phoneIdentifier = cleanIdentifier.replace(/[\s\-\+\(\)]/g, "");
+
+    const userResult = await db.select().from(users).where(
+      sql`lower(${users.email}) = ${cleanIdentifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${phoneIdentifier}`
+    ).limit(1);
+
+    if (userResult.length === 0) {
+      return res.json({ exists: false });
+    }
+
+    const user = userResult[0];
+    return res.json({
+      exists: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        roles: user.roles
+      }
+    });
+  } catch (err) {
+    console.error("Check user error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Backend JWT Authentication Login
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, pin } = req.body;
-    const userResult = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const { email, pin } = req.body; // 'email' field here actually receives the 'identifier'
+    const cleanIdentifier = email.trim().toLowerCase();
+    const phoneIdentifier = cleanIdentifier.replace(/[\s\-\+\(\)]/g, "");
+
+    const userResult = await db.select().from(users).where(
+      sql`lower(${users.email}) = ${cleanIdentifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${phoneIdentifier}`
+    ).limit(1);
 
     if (userResult.length === 0) {
       return res.status(401).json({ error: "Invalid email or PIN" });
@@ -399,6 +449,8 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         acc[setting.key] = setting.value;
         return acc;
       }, {} as Record<string, string>),
+      configurationVersion: allSystemSettings.find((s) => s.key === "configurationVersion")?.value || "1",
+      generationTimestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error("Failed to load sync data from Cloud SQL:", error);
@@ -1118,16 +1170,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "EXTREME_LOCATION_TIERS_BULK":
-        for (const elt of payload) {
-          await db.insert(extremeLocationTiers).values({
-            id: elt.id,
-            name: elt.name,
-            surcharge: Math.round(elt.surcharge),
-          }).onConflictDoUpdate({
+        for (const tier of payload) {
+          await db.insert(extremeLocationTiers).values(tier).onConflictDoUpdate({
             target: extremeLocationTiers.id,
             set: {
-              name: elt.name,
-              surcharge: Math.round(elt.surcharge),
+              name: tier.name,
+              surcharge: Math.round(tier.surcharge),
             },
           });
         }
@@ -1292,7 +1340,30 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       default:
         return res.status(400).json({ error: `Unknown synchronization type: ${type}` });
     }
-    io.emit("sync_update", { type, payload });
+    const publicConfigModifiers = [
+      "SYSTEM_SETTING_UPSERT",
+      "SYSTEM_SETTINGS_BULK",
+      "VENDORS_BULK",
+      "PRODUCTS_BULK",
+      "PRODUCTS_UPSERT",
+      "EXTREME_LOCATIONS_BULK",
+      "EXTREME_LOCATION_TIERS_BULK"
+    ];
+
+    if (publicConfigModifiers.includes(type)) {
+      const newVersion = Date.now().toString();
+      await db.insert(systemSettings).values({
+        key: "configurationVersion",
+        value: newVersion,
+      }).onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value: newVersion },
+      });
+      io.emit("sync_update", { type, payload, version: newVersion });
+    } else {
+      io.emit("sync_update", { type, payload });
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error("Cloud SQL sync save failed:", error);
@@ -1564,7 +1635,7 @@ process.on("uncaughtException", (error) => {
 });
 process.on("unhandledRejection", (reason, promise) => {
   logger.error("Unhandled Rejection at:", promise, "reason:", reason);
-  process.exit(1);
+  // process.exit(1); // Removed to prevent server crashes on intermittent DB timeouts
 });
 
 // Health check endpoint
@@ -1640,8 +1711,24 @@ async function startServer() {
       app.use(vite.middlewares);
     } else {
       const distPath = path.join(process.cwd(), "dist");
-      app.use(express.static(distPath));
+      
+      // Serve static files with robust PWA update caching
+      app.use(express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          // Never cache entry points and service workers
+          if (filePath.endsWith("index.html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.webmanifest")) {
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          } 
+          // Heavily cache hashed assets (CSS/JS)
+          else if (filePath.replace(/\\/g, "/").includes("/assets/")) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        }
+      }));
+
+      // Catch-all route for SPA
       app.get("*", (req, res) => {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         res.sendFile(path.join(distPath, "index.html"));
       });
     }

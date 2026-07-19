@@ -97,7 +97,7 @@ const SegmentedPinInput: React.FC<SegmentedPinInputProps> = ({ value, onChange, 
 };
 
 export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode = false }) => {
-  const { login, register, users, resetUserPin } = useDatabase();
+  const { login, finalizeLogin, checkUser, register, users, resetUserPin } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -117,10 +117,10 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
   const [loginPinStep, setLoginPinStep] = useState(false);
   const [loginPin, setLoginPin] = useState("");
-  const [storedUserPin, setStoredUserPin] = useState("");
   const [deviceVerificationStep, setDeviceVerificationStep] = useState(false);
   const [deviceOtp, setDeviceOtp] = useState("");
   const [generatedDeviceOtp, setGeneratedDeviceOtp] = useState("");
+  const [pendingLoginData, setPendingLoginData] = useState<any>(null);
   
   // Forgot PIN state
   const [forgotPinStep, setForgotPinStep] = useState<"request" | "verify" | "new_pin" | null>(null);
@@ -200,17 +200,14 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         return;
       }
 
-      const foundUser = users.find(u => 
-        u.email.toLowerCase() === identifier || 
-        u.phone.replace(/[\s\-\+\(\)]/g, "") === identifier.replace(/[\s\-\+\(\)]/g, "")
-      );
-
-      if (!foundUser) {
+      const checkRes = await checkUser(identifier);
+      if (!checkRes.exists || !checkRes.user) {
         setError("No account found with this email or phone number.");
-
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
+      
+      const foundUser = checkRes.user;
 
       const code = Math.floor(1000 + Math.random() * 9000).toString();
       setGeneratedResetCode(code);
@@ -454,24 +451,20 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           return;
         }
 
-        const foundUser = users.find(u => 
-          u.email.toLowerCase() === identifier || 
-          u.phone.replace(/[\s\-\+\(\)]/g, "") === identifier.replace(/[\s\-\+\(\)]/g, "")
-        );
+        const checkRes = await checkUser(identifier);
 
-        if (!foundUser) {
+        if (!checkRes.exists || !checkRes.user) {
           setError("No registered account matches this email or phone number. Try selecting 'Register'.");
 
           window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
 
+        const foundUser = checkRes.user;
         const autoRole = foundUser.role || (foundUser.roles && foundUser.roles[0]) || "customer";
         setSelectedRole(autoRole);
 
         // Proceed to login PIN entry step
-        // Default PIN to "1234" for mock users without pin setup
-        setStoredUserPin(foundUser.pin || "1234");
         setLoginPinStep(true);
         setError("");
         setSuccess("");
@@ -484,26 +477,15 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           return;
         }
 
-        if (loginPin !== storedUserPin) {
-          setError("Incorrect 4-digit security PIN. Please try again.");
-
+        const res = await login(identifier, loginPin, selectedRole, true);
+        if (!res.success) {
+          setError(res.error || "Incorrect 4-digit security PIN. Please try again.");
           window.scrollTo({ top: 0, behavior: 'smooth' });
           setShowForgotPinLink(true);
           return;
         }
 
-        const foundUser = users.find(u => 
-          u.email.toLowerCase() === identifier || 
-          u.phone.replace(/[\s\-\+\(\)]/g, "") === identifier.replace(/[\s\-\+\(\)]/g, "")
-        );
-
-        if (!foundUser) {
-          setError("Session expired. Please start over.");
-
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          setLoginPinStep(false);
-          return;
-        }
+        const foundUser = res.user;
 
         // Check Device Trust & Inactivity
         const isTrusted = localStorage.getItem(`trusted_device_${foundUser.id}`) === "true";
@@ -514,6 +496,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         if (!isTrusted || hasBeenLongTime) {
           // Trigger Device Verification
+          setPendingLoginData(res);
           const otp = Math.floor(1000 + Math.random() * 9000).toString();
           setGeneratedDeviceOtp(otp);
           setDeviceVerificationStep(true);
@@ -529,7 +512,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
               name: foundUser.name,
               pin: otp,
             }),
-          }).then(res => res.json()).then(resJson => {
+          }).then(r => r.json()).then(resJson => {
             if (resJson.success) {
               setSuccess(`A verification code has been sent to ${foundUser.email} for this new device.`);
             } else {
@@ -543,15 +526,10 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           return;
         }
 
-        // Device is trusted and active, proceed to login
+        // Device is trusted and active, finalize login
         localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
-        const res = await login(identifier, loginPin, selectedRole);
-        if (res.success) {
-          setSuccess("Success! Access granted...");
-        } else {
-          setError(res.error || "Authentication process failed.");
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        finalizeLogin(res.user, res.token, selectedRole);
+        setSuccess("Success! Access granted...");
       } else {
         // Step 3: Verify Device OTP
         if (deviceOtp.length < 4) {
@@ -566,23 +544,19 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           return;
         }
 
-        const foundUser = users.find(u => 
-          u.email.toLowerCase() === email.trim().toLowerCase() || 
-          u.phone.replace(/[\s\-\+\(\)]/g, "") === email.trim().toLowerCase().replace(/[\s\-\+\(\)]/g, "")
-        );
-
-        if (foundUser) {
-          localStorage.setItem(`trusted_device_${foundUser.id}`, "true");
-          localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
+        if (!pendingLoginData) {
+          setError("Session expired. Please start over.");
+          setLoginPinStep(false);
+          setDeviceVerificationStep(false);
+          return;
         }
 
-        const res = await login(identifier, loginPin, selectedRole);
-        if (res.success) {
-          setSuccess("Device verified! Access granted...");
-        } else {
-          setError(res.error || "Authentication process failed after device verification.");
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+        const foundUser = pendingLoginData.user;
+        localStorage.setItem(`trusted_device_${foundUser.id}`, "true");
+        localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
+
+        finalizeLogin(pendingLoginData.user, pendingLoginData.token, selectedRole);
+        setSuccess("Success! Access granted...");
       }
     }
   };

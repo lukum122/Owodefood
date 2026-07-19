@@ -6,7 +6,7 @@ import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, Layou
 import * as LucideIcons from "lucide-react";
 
 export const CustomerHome: React.FC = () => {
-  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser, homepageSections = [], heroBanner, currency } = useDatabase();
+  const { vendors, categories, products, vendorCategories, orders, selectedLocation, setSelectedLocation, availableLocations = [], currentUser, homepageSections = [], heroBanner, currency, isDataLoading, dataLoadError } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -298,6 +298,33 @@ export const CustomerHome: React.FC = () => {
 
     return matchesSearch && matchesCategory;
   });
+
+  if (isDataLoading && vendors.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-gray-500 font-medium">Loading store data...</p>
+      </div>
+    );
+  }
+
+  if (dataLoadError && vendors.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 px-4 text-center">
+        <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
+          <LucideIcons.AlertTriangle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900">Oops, something went wrong</h2>
+        <p className="text-gray-500 max-w-md">{dataLoadError}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 px-6 py-2 bg-orange-600 text-white rounded-xl font-medium hover:bg-orange-700 transition"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-12">

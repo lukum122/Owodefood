@@ -19,11 +19,28 @@ try {
         fs.mkdirSync('drizzle');
     }
 
+    // Generate .env.example for cPanel
+    const envExample = `NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgres://user:password@127.0.0.1:5432/dbname
+JWT_SECRET=your_super_secret_jwt_key
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+SMTP_FROM=your_email@gmail.com
+`;
+    fs.writeFileSync('.env.example', envExample);
+
     // Using tar (built into Windows 10+ and Linux) to create the zip
-    const filesToZip = 'dist drizzle server.js package.json';
+    const filesToZip = 'dist drizzle server.js package.json .env.example';
     execSync(`tar -a -c -f deployable-cpanel.zip ${filesToZip}`, { stdio: 'inherit' });
 
     console.log('\n✅ DONE! Upload deployable-cpanel.zip to your cPanel File Manager and extract it.');
+    console.log('⚠️ IMPORTANT: Do not forget to copy .env.example to .env and configure your PostgreSQL connection string (which should be on 127.0.0.1 if hosted on the same cPanel).');
 } catch (error) {
     console.error('\n❌ Build failed:', error.message);
     process.exit(1);
