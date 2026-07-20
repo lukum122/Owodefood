@@ -1303,6 +1303,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             localStorage.setItem("fd_saved_addresses", JSON.stringify(data.savedAddresses));
           }
 
+          if (data.receiptPickupOrders) {
+            let mergedReceipts = [...data.receiptPickupOrders];
+            mergedReceipts.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            setReceiptPickupOrders(mergedReceipts);
+            localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(mergedReceipts));
+          }
+
           if (data.extremeLocationTiers) {
             setExtremeLocationTiers(data.extremeLocationTiers);
             localStorage.setItem("fd_extreme_location_tiers", JSON.stringify(data.extremeLocationTiers));
@@ -4023,6 +4030,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
     const nextOrders = [newOrder, ...receiptPickupOrders];
     setReceiptPickupOrders(nextOrders);
+    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(nextOrders));
+    syncSave("RECEIPT_PICKUP_UPSERT", newOrder);
 
     addNotification(
       "admin",
@@ -4073,6 +4082,12 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       return o;
     });
     setReceiptPickupOrders(updated);
+    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(updated));
+    
+    const updatedOrder = updated.find(o => o.id === orderId);
+    if (updatedOrder) {
+      syncSave("RECEIPT_PICKUP_UPSERT", updatedOrder);
+    }
   };
 
   const updateReceiptPickupStatus = (orderId: string, status: ReceiptPickupOrder["status"]) => {
@@ -4114,6 +4129,12 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       return o;
     });
     setReceiptPickupOrders(updated);
+    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(updated));
+    
+    const updatedOrder = updated.find(o => o.id === orderId);
+    if (updatedOrder) {
+      syncSave("RECEIPT_PICKUP_UPSERT", updatedOrder);
+    }
   };
 
   const cancelReceiptPickupOrder = (orderId: string) => {

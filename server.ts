@@ -424,6 +424,12 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       allSavedAddresses = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id));
       allWalletTransactions = await db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id));
       allAppNotifications = await db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id));
+      
+      const rpOrdersFilter = userVendor 
+        ? sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.vendorId} = ${userVendor.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`
+        : sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`;
+        
+      allReceiptPickupOrders = await db.select().from(receiptPickupOrders).where(rpOrdersFilter);
     }
 
     res.json({
@@ -1118,6 +1124,58 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           } catch(e) { console.error("Rider push failed", e); }
         }
 
+        break;
+      }
+
+      case "RECEIPT_PICKUP_UPSERT": {
+        const existingOrder = await db.select().from(receiptPickupOrders).where(eq(receiptPickupOrders.id, payload.id)).limit(1);
+        const isNew = existingOrder.length === 0;
+
+        if (!isAdmin) {
+          if (!isNew) {
+            const order = existingOrder[0];
+            const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
+            const userVendorId = userVendor.length > 0 ? userVendor[0].id : null;
+            const isCustomer = order.customerId === reqUser.id;
+            const isVendor = order.vendorId === userVendorId;
+            const isRider = order.riderId === reqUser.id || payload.riderId === reqUser.id;
+            
+            if (!isCustomer && !isVendor && !isRider) return res.status(403).json({ error: "Forbidden" });
+          } else {
+            if (payload.customerId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
+          }
+        }
+
+        await db.insert(receiptPickupOrders).values({
+          id: payload.id,
+          customerId: payload.customerId,
+          customerName: payload.customerName,
+          customerPhone: payload.customerPhone,
+          vendorId: payload.vendorId,
+          vendorName: payload.vendorName,
+          vendorAddress: payload.vendorAddress,
+          deliveryAddress: payload.deliveryAddress,
+          receiptImageOrQr: payload.receiptImageOrQr,
+          receiptNote: payload.receiptNote,
+          deliveryFee: payload.deliveryFee,
+          riderId: payload.riderId,
+          riderName: payload.riderName,
+          status: payload.status,
+          paymentMethod: payload.paymentMethod,
+          paymentStatus: payload.paymentStatus,
+          serviceFee: payload.serviceFee,
+          totalAmount: payload.totalAmount,
+          createdAt: payload.createdAt,
+        }).onConflictDoUpdate({
+          target: receiptPickupOrders.id,
+          set: {
+            status: payload.status,
+            riderId: payload.riderId,
+            riderName: payload.riderName,
+            paymentStatus: payload.paymentStatus,
+          },
+        });
+        
         break;
       }
 
