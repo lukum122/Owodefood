@@ -60,10 +60,11 @@ export const VendorSettings: React.FC = () => {
 
   const vendorFileRef = useRef<HTMLInputElement>(null);
   const coverFileRef = useRef<HTMLInputElement>(null);
+  const hasInitialized = useRef(false);
 
   // Sync state with currentVendor once it loads
   useEffect(() => {
-    if (currentVendor) {
+    if (currentVendor && !hasInitialized.current) {
       setName(currentVendor.name || "");
       setDescription(currentVendor.description || "");
       setImage(currentVendor.image || "");
@@ -103,6 +104,7 @@ export const VendorSettings: React.FC = () => {
         }
       }
       setStreetAddress(street);
+      hasInitialized.current = true;
     }
   }, [currentVendor, availableLocations]);
 
@@ -148,6 +150,15 @@ export const VendorSettings: React.FC = () => {
 
     try {
       const finalAddress = streetAddress.trim() + (selectedDistrict ? `, ${selectedDistrict}` : "");
+      
+      const activeDays = Object.entries(operatingHours)
+        .filter(([day, hours]: [string, any]) => hours.isOpen)
+        .map(([day]) => day);
+      
+      const mondayHours = operatingHours["Monday"] || { openTime: "08:00", closeTime: "22:00" };
+      const fallbackOpen = mondayHours.openTime;
+      const fallbackClose = mondayHours.closeTime;
+
       updateVendorProfile({
         name,
         description,
@@ -157,6 +168,9 @@ export const VendorSettings: React.FC = () => {
         coverImage,
         address: finalAddress,
         operatingHours,
+        openingTime: fallbackOpen,
+        closingTime: fallbackClose,
+        openingDays: activeDays,
         prepTime,
         deliveryFee,
         receiptPickupEnabled,

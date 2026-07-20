@@ -3475,15 +3475,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       id: "p-" + generateId(),
       createdAt: new Date().toISOString()
     };
-    persistProducts([...products, newProduct]);
+    const newProducts = [...products, newProduct];
+    setProducts(newProducts);
+    localStorage.setItem("fd_products", JSON.stringify(newProducts));
+    syncSave("PRODUCT_UPSERT", newProduct);
   };
 
   const updateProduct = (updatedProduct: Product) => {
-    persistProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    const newProducts = products.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+    setProducts(newProducts);
+    localStorage.setItem("fd_products", JSON.stringify(newProducts));
+    syncSave("PRODUCT_UPSERT", updatedProduct);
   };
 
   const deleteProduct = (productId: string) => {
-    persistProducts(products.filter(p => p.id !== productId));
+    const newProducts = products.filter(p => p.id !== productId);
+    setProducts(newProducts);
+    localStorage.setItem("fd_products", JSON.stringify(newProducts));
+    syncSave("PRODUCT_DELETE", { id: productId });
   };
 
   const updateVendorProfile = (profileData: Partial<Vendor>) => {

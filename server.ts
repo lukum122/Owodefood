@@ -899,6 +899,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       case "ORDER_UPSERT": {
         const existingOrder = await db.select().from(orders).where(eq(orders.id, payload.id)).limit(1);
         const isNew = existingOrder.length === 0;
+        
+        if (isNew) {
+          const vendor = await db.select().from(vendors).where(eq(vendors.id, payload.vendorId)).limit(1);
+          if (vendor.length > 0 && vendor[0].status === "suspended") {
+            return res.status(403).json({ error: "Restaurant is suspended and cannot accept orders at this time." });
+          }
+        }
+        
         const oldStatus = isNew ? null : existingOrder[0].status;
         const statusChanged = oldStatus !== payload.status;
 
