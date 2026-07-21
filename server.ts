@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { isVendorOpen } from "./src/types.ts";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { db, runMigrations, pool } from "./src/db/index.ts";
@@ -739,6 +740,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           openingTime: payload.openingTime,
           closingTime: payload.closingTime,
           openingDays: payload.openingDays,
+          operatingHours: payload.operatingHours,
+          isTemporarilyClosed: payload.isTemporarilyClosed,
           coverImage: payload.coverImage,
           category: payload.category,
           prepTime: payload.prepTime,
@@ -763,6 +766,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             openingTime: payload.openingTime,
             closingTime: payload.closingTime,
             openingDays: payload.openingDays,
+            operatingHours: payload.operatingHours,
+            isTemporarilyClosed: payload.isTemporarilyClosed,
             coverImage: payload.coverImage,
             category: payload.category,
             prepTime: payload.prepTime,
@@ -915,8 +920,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         
         if (isNew) {
           const vendor = await db.select().from(vendors).where(eq(vendors.id, payload.vendorId)).limit(1);
-          if (vendor.length > 0 && vendor[0].status === "suspended") {
-            return res.status(403).json({ error: "Restaurant is suspended and cannot accept orders at this time." });
+          if (vendor.length > 0) {
+            if (vendor[0].status === "suspended") {
+              return res.status(403).json({ error: "Restaurant is suspended and cannot accept orders at this time." });
+            }
+            if (!isVendorOpen(vendor[0])) {
+              return res.status(403).json({ error: "Restaurant is currently closed and cannot accept new orders." });
+            }
           }
         }
         

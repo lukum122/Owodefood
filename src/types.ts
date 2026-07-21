@@ -55,6 +55,7 @@ export interface Vendor {
   closingTime?: string;
   openingDays?: string[]; // e.g., ["Monday", "Tuesday", etc.]
   operatingHours?: Record<string, DailyHours>; // More detailed daily hours mapping
+  isTemporarilyClosed?: boolean;
   coverImage?: string;
   category?: VendorCategory;
   prepTime?: number; // preparation/packing time in minutes
@@ -226,20 +227,47 @@ export interface Review {
 
 export function isVendorOpen(vendor: any): boolean {
   if (!vendor) return false;
+  if (vendor.isTemporarilyClosed) return false;
 
   const now = new Date();
-  
-  // 1. Check opening days (e.g., ["Monday", "Tuesday", etc.])
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const currentDayName = daysOfWeek[now.getDay()];
 
+  // If operatingHours is present, use it as the authoritative source
+  if (vendor.operatingHours && typeof vendor.operatingHours === 'object' && Object.keys(vendor.operatingHours).length > 0) {
+    const todayHours = vendor.operatingHours[currentDayName];
+    if (!todayHours || !todayHours.isOpen) {
+      return false;
+    }
+
+    const opening = todayHours.openTime || "08:00";
+    const closing = todayHours.closeTime || "22:00";
+
+    const [opH, opM] = opening.split(":").map(Number);
+    const [clH, clM] = closing.split(":").map(Number);
+
+    const curH = now.getHours();
+    const curM = now.getMinutes();
+
+    const openMinutes = opH * 60 + opM;
+    const closeMinutes = clH * 60 + clM;
+    const currentMinutes = curH * 60 + curM;
+
+    if (closeMinutes < openMinutes) {
+      // Overnight operation
+      return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
+    }
+
+    return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
+  }
+
+  // Fallback to legacy fields if operatingHours is missing
   if (vendor.openingDays && Array.isArray(vendor.openingDays) && vendor.openingDays.length > 0) {
     if (!vendor.openingDays.includes(currentDayName)) {
       return false;
     }
   }
 
-  // 2. Check opening/closing hours
   const opening = vendor.openingTime || "08:00";
   const closing = vendor.closingTime || "22:00";
 
@@ -254,7 +282,6 @@ export function isVendorOpen(vendor: any): boolean {
   const currentMinutes = curH * 60 + curM;
 
   if (closeMinutes < openMinutes) {
-    // Overnight operation
     return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
   }
 

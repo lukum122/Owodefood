@@ -47,6 +47,7 @@ export const VendorSettings: React.FC = () => {
   const [prepTime, setPrepTime] = useState<number>(currentVendor?.prepTime || 20);
   const [deliveryFee, setDeliveryFee] = useState<number>(currentVendor?.deliveryFee || 750);
   const [receiptPickupEnabled, setReceiptPickupEnabled] = useState<boolean>(currentVendor?.receiptPickupEnabled !== false);
+  const [isTemporarilyClosed, setIsTemporarilyClosed] = useState<boolean>(currentVendor?.isTemporarilyClosed || false);
 
   const [errorStr, setErrorStr] = useState("");
   const [successStr, setSuccessStr] = useState("");
@@ -88,7 +89,8 @@ export const VendorSettings: React.FC = () => {
       setPrepTime(currentVendor.prepTime || 20);
       setDeliveryFee(currentVendor.deliveryFee || 750);
       setReceiptPickupEnabled(currentVendor.receiptPickupEnabled !== false);
-
+      setIsTemporarilyClosed(currentVendor.isTemporarilyClosed || false);
+      hasInitialized.current = true;
       const dist = availableLocations.find(loc => {
         const distName = loc.split(",")[0].trim().toLowerCase();
         return (currentVendor.address || "").toLowerCase().includes(distName);
@@ -155,9 +157,10 @@ export const VendorSettings: React.FC = () => {
         .filter(([day, hours]: [string, any]) => hours.isOpen)
         .map(([day]) => day);
       
-      const mondayHours = operatingHours["Monday"] || { openTime: "08:00", closeTime: "22:00" };
-      const fallbackOpen = mondayHours.openTime;
-      const fallbackClose = mondayHours.closeTime;
+      const activeDayName = activeDays.length > 0 ? activeDays[0] : "Monday";
+      const primaryHours = operatingHours[activeDayName] || { openTime: "08:00", closeTime: "22:00" };
+      const fallbackOpen = primaryHours.openTime;
+      const fallbackClose = primaryHours.closeTime;
 
       updateVendorProfile({
         name,
@@ -174,6 +177,7 @@ export const VendorSettings: React.FC = () => {
         prepTime,
         deliveryFee,
         receiptPickupEnabled,
+        isTemporarilyClosed,
       });
       setSuccessStr("Awesome! Your merchant profile was successfully updated!");
       setTimeout(() => {
@@ -415,6 +419,22 @@ export const VendorSettings: React.FC = () => {
                   checked={receiptPickupEnabled}
                   onChange={(e) => setReceiptPickupEnabled(e.target.checked)}
                   className="w-5 h-5 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                />
+              </label>
+            </div>
+
+            {/* Temporarily Closed Toggle */}
+            <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
+              <div>
+                <label className="text-[11px] font-bold text-red-600 block">Temporarily Closed</label>
+                <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Pause all new incoming orders. Your restaurant will remain visible but marked as closed.</span>
+              </div>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isTemporarilyClosed}
+                  onChange={(e) => setIsTemporarilyClosed(e.target.checked)}
+                  className="w-5 h-5 text-red-600 focus:ring-red-100 border-gray-300 rounded cursor-pointer"
                 />
               </label>
             </div>
