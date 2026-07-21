@@ -6,7 +6,7 @@ import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, Shi
 
 export const CustomerVendorMenu: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, receiptPickupOrders, createReceiptPickupOrder, cancelReceiptPickupOrder, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig } = useDatabase();
+  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, receiptPickupOrders, createReceiptPickupOrder, cancelReceiptPickupOrder, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [] } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -54,6 +54,10 @@ export const CustomerVendorMenu: React.FC = () => {
 
   // States for Receipt Pickup & Delivery Form
   const [pickupAddress, setPickupAddress] = useState("");
+  const [pickupPhone, setPickupPhone] = useState("");
+  const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  const [showZoneDropdown, setShowZoneDropdown] = useState(false);
+  const [zoneSearchQuery, setZoneSearchQuery] = useState("");
   const [pickupNote, setPickupNote] = useState("");
   const [receiptImage, setReceiptImage] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"wallet" | "cash">("wallet");
@@ -62,7 +66,8 @@ export const CustomerVendorMenu: React.FC = () => {
   const [pickupErrorMsg, setPickupErrorMsg] = useState<string | null>(null);
   const [presetReceipt, setPresetReceipt] = useState<string | "">("");
 
-  const dynamicDeliveryFee = calculateDeliveryFee(vendorObj?.id, 0, pickupAddress);
+  const combinedDeliveryAddress = pickupAddress.trim() + (selectedDistrict ? `, ${selectedDistrict}` : "");
+  const dynamicDeliveryFee = calculateDeliveryFee(vendorObj?.id, 0, combinedDeliveryAddress);
 
   // Addon group helper calculations
   const getGroupSelectionCount = (groupId: string) => {
@@ -717,7 +722,8 @@ export const CustomerVendorMenu: React.FC = () => {
                       vendorId: vendorObj?.id || "",
                       vendorName: vendorObj?.name || "",
                       vendorAddress: vendorObj?.address || "",
-                      deliveryAddress: pickupAddress,
+                      deliveryAddress: combinedDeliveryAddress,
+                      deliveryPhone: pickupPhone,
                       receiptImageOrQr: chosenReceipt,
                       receiptNote: pickupNote,
                       deliveryFee: dynamicDeliveryFee,
@@ -777,6 +783,86 @@ export const CustomerVendorMenu: React.FC = () => {
                       value={pickupAddress}
                       onChange={(e) => setPickupAddress(e.target.value)}
                       placeholder="Enter street name, house number, landmarks..."
+                      className="w-full text-xs p-3.5 border border-gray-150 bg-gray-50/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 focus:border-[#0ea5e9] font-medium text-[#070329]"
+                    />
+                  </div>
+
+                  {/* Delivery Zone / District Selector */}
+                  <div className="space-y-1 relative">
+                    <label className="text-[10px] uppercase font-mono tracking-wider font-black text-gray-400 block">Delivery Zone / District</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowZoneDropdown(!showZoneDropdown)}
+                        className="w-full text-left text-xs p-3.5 border border-gray-150 rounded-2xl bg-gray-50/50 hover:bg-gray-100/50 transition font-semibold text-gray-800 flex items-center justify-between"
+                      >
+                        <span className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-teal-600 shrink-0" />
+                          <span className="truncate">{selectedDistrict || "Select Local Zone"}</span>
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-normal shrink-0">▼</span>
+                      </button>
+
+                      {showZoneDropdown && (
+                        <div className="absolute left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl p-3.5 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="flex justify-between items-center mb-2 px-1">
+                            <span className="text-[10px] font-bold text-[#070329] uppercase tracking-wider">Search Delivery Zone</span>
+                            <button 
+                              type="button"
+                              onClick={() => setShowZoneDropdown(false)}
+                              className="text-gray-400 hover:text-gray-650 text-[10px] font-bold"
+                            >
+                              ✕ Close
+                            </button>
+                          </div>
+                          <div className="mb-2.5">
+                            <input
+                              type="text"
+                              placeholder="🔍 Search delivery zones..."
+                              value={zoneSearchQuery}
+                              onChange={(e) => setZoneSearchQuery(e.target.value)}
+                              className="w-full text-xs p-2.5 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50/50"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                            {availableLocations
+                              .filter((loc: string) => loc.toLowerCase().includes(zoneSearchQuery.toLowerCase()))
+                              .map((loc: string) => (
+                                <button
+                                  key={loc}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDistrict(loc);
+                                    setShowZoneDropdown(false);
+                                    setZoneSearchQuery("");
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center gap-2 transition hover:bg-gray-50 ${
+                                    selectedDistrict === loc ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700"
+                                  }`}
+                                >
+                                  <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                  <span className="truncate">{loc}</span>
+                                </button>
+                              ))}
+                            {availableLocations.filter((loc: string) => loc.toLowerCase().includes(zoneSearchQuery.toLowerCase())).length === 0 && (
+                              <div className="text-[10px] text-gray-400 text-center py-4">No matching zones found</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contact Phone Input */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-mono tracking-wider font-black text-gray-400 block">Delivery Contact Phone</label>
+                    <input
+                      type="tel"
+                      required
+                      value={pickupPhone}
+                      onChange={(e) => setPickupPhone(e.target.value)}
+                      placeholder="e.g. 08012345678"
                       className="w-full text-xs p-3.5 border border-gray-150 bg-gray-50/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 focus:border-[#0ea5e9] font-medium text-[#070329]"
                     />
                   </div>

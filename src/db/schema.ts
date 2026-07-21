@@ -198,6 +198,7 @@ export const receiptPickupOrders = pgTable("receipt_pickup_orders", {
   vendorName: text("vendor_name").notNull(),
   vendorAddress: text("vendor_address").notNull(),
   deliveryAddress: text("delivery_address").notNull(),
+  deliveryPhone: text("delivery_phone").notNull(),
   receiptImageOrQr: text("receipt_image_or_qr").notNull(),
   receiptNote: text("receipt_note"),
   deliveryFee: integer("delivery_fee").notNull(),

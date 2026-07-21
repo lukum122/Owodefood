@@ -59,6 +59,7 @@ export const RiderDeliveries: React.FC = () => {
                   <div>
                     <p className="font-extrabold text-gray-950">{job.vendorName}</p>
                     <p className="text-gray-500 mt-1">Eatery address: <b>{job.deliveryAddress}</b></p>
+                    <p className="text-gray-500 mt-1 font-mono">Contact: <b>{job.deliveryPhone || "N/A"}</b></p>
                   </div>
                 </div>
 
@@ -78,6 +79,7 @@ export const RiderDeliveries: React.FC = () => {
                       Telephone: <b>{job.customerPhone}</b>
                     </p>
                     <p className="text-gray-500 mt-1">Destination: <b>{job.deliveryAddress}</b></p>
+                    <p className="text-gray-500 mt-1 font-mono">Contact: <b>{job.deliveryPhone || "N/A"}</b></p>
                   </div>
                 </div>
 
@@ -193,6 +195,7 @@ export const RiderDeliveries: React.FC = () => {
                         Telephone: <b>{job.customerPhone}</b>
                       </p>
                       <p className="text-gray-500 mt-1">Destination: <b>{job.deliveryAddress}</b></p>
+                      <p className="text-gray-500 mt-1 font-mono">Contact: <b>{job.deliveryPhone || "N/A"}</b></p>
                     </div>
 
                     <div className="mt-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-1">

@@ -294,6 +294,7 @@ export interface ReceiptPickupOrder {
   vendorName: string;
   vendorAddress: string;
   deliveryAddress: string;
+  deliveryPhone: string;
   receiptImageOrQr: string; // Base64 data or QR content
   receiptNote?: string;
   deliveryFee: number;

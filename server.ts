@@ -338,7 +338,7 @@ app.post("/api/auth/login", async (req, res) => {
       pinValid = await bcrypt.compare(pin, user.pin);
     } else {
       // Plaintext migration
-      if (user.pin === pin) {
+      if (user.pin && user.pin === pin) {
         pinValid = true;
         // Hash and save immediately
         const hashedPin = await bcrypt.hash(pin, 10);
@@ -481,7 +481,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     const adminOnlyActions = [
       "SYSTEM_SETTING_UPSERT", "PAYMENT_GATEWAYS_BULK", "EXTREME_LOCATION_TIERS_BULK", 
       "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "SYSTEM_SETTINGS_BULK",
-      "USERS_BULK", "VENDORS_BULK", "ORDERS_BULK", "RIDERS_BULK", "PRODUCTS_BULK"
+      "USERS_BULK", "VENDORS_BULK", "ORDERS_BULK", "RIDERS_BULK", "PRODUCTS_BULK",
+      "EXTREME_LOCATION_UPSERT", "EXTREME_LOCATION_DELETE", "EMPLOYEE_UPSERT", 
+      "EMPLOYEE_DELETE", "USER_DELETE"
     ];
     
     let isTargetEmpty = false;
@@ -562,9 +564,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         const existing = await db.select().from(users).where(eq(users.id, payload.id)).limit(1);
         const isNew = existing.length === 0;
 
-        // Security check: Only admins can edit another user's profile
-        if (!isNew && reqUser && reqUser.id !== payload.id && !isAdmin) {
-          return res.status(403).json({ error: "Forbidden: Cannot update other users" });
+        // Security check: Only admins can edit another user's profile. Unauthenticated users cannot edit any profile.
+        if (!isNew && (!reqUser || (reqUser.id !== payload.id && !isAdmin))) {
+          return res.status(403).json({ error: "Forbidden: Cannot update existing users" });
         }
 
         const finalRole = isAdmin ? (payload.role || "customer") : "customer";
@@ -812,6 +814,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         if (!isAdmin) {
           const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
           if (!userVendor.length || userVendor[0].id !== payload.vendorId) return res.status(403).json({ error: "Forbidden: Product does not belong to your vendor account." });
+          
+          const existingProd = await db.select().from(products).where(eq(products.id, payload.id)).limit(1);
+          if (existingProd.length > 0 && existingProd[0].vendorId !== userVendor[0].id) {
+             return res.status(403).json({ error: "Forbidden: Cannot modify a product owned by another vendor." });
+          }
         }
         await db.insert(products).values({
           id: payload.id,
@@ -1155,6 +1162,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           vendorName: payload.vendorName,
           vendorAddress: payload.vendorAddress,
           deliveryAddress: payload.deliveryAddress,
+          deliveryPhone: payload.deliveryPhone,
           receiptImageOrQr: payload.receiptImageOrQr,
           receiptNote: payload.receiptNote,
           deliveryFee: payload.deliveryFee,
@@ -1287,7 +1295,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         break;
 
-      case "USER_SAVED_ADDRESS_UPSERT":
+      case "USER_SAVED_ADDRESS_UPSERT": {
+        if (!isAdmin && payload.userId !== reqUser.id) {
+          return res.status(403).json({ error: "Forbidden: Cannot alter another user's saved address" });
+        }
+        const existingAddress = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.id, payload.id)).limit(1);
+        if (!isAdmin && existingAddress.length > 0 && existingAddress[0].userId !== reqUser.id) {
+          return res.status(403).json({ error: "Forbidden: Cannot alter another user's saved address" });
+        }
         await db.insert(userSavedAddresses).values({
           id: payload.id,
           userId: payload.userId,
@@ -1302,10 +1317,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             landmarkNote: payload.landmarkNote,
           },
         });
-        break;
+      }
+      break;
 
-      case "USER_SAVED_ADDRESS_DELETE":
+      case "USER_SAVED_ADDRESS_DELETE": {
+        if (!isAdmin) {
+          const existingAddress = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.id, payload.id)).limit(1);
+          if (existingAddress.length > 0 && existingAddress[0].userId !== reqUser.id) {
+            return res.status(403).json({ error: "Forbidden: Cannot delete another user's saved address" });
+          }
+        }
         await db.delete(userSavedAddresses).where(eq(userSavedAddresses.id, payload.id));
+      }
         break;
 
       case "EXTREME_LOCATION_TIERS_BULK":
@@ -1454,7 +1477,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         break;
 
-      case "REVIEW_UPSERT":
+      case "REVIEW_UPSERT": {
+        if (!isAdmin) {
+          if (payload.customerId !== reqUser.id) return res.status(403).json({ error: "Forbidden: Cannot write a review on behalf of another user." });
+          const existingReview = await db.select().from(reviews).where(eq(reviews.id, payload.id)).limit(1);
+          if (existingReview.length > 0 && existingReview[0].customerId !== reqUser.id) {
+            return res.status(403).json({ error: "Forbidden: Cannot edit another user's review." });
+          }
+        }
         await db.insert(reviews).values({
           id: payload.id,
           vendorId: payload.vendorId,
@@ -1474,7 +1504,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             createdAt: payload.createdAt || new Date().toISOString(),
           },
         });
-        break;
+      }
+      break;
 
       default:
         return res.status(400).json({ error: `Unknown synchronization type: ${type}` });

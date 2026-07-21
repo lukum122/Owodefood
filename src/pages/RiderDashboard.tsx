@@ -1,6 +1,6 @@
 import React from "react";
 import { useDatabase } from "../context/DatabaseContext";
-import { MapPin, Store, DollarSign, Clock, Compass, HelpCircle, Bike, CheckCircle2, Truck } from "lucide-react";
+import { MapPin, Store, DollarSign, Clock, Compass, HelpCircle, Bike, CheckCircle2, Truck, Phone } from "lucide-react";
 
 export const RiderDashboard: React.FC = () => {
   const { 
@@ -152,6 +152,7 @@ export const RiderDashboard: React.FC = () => {
                         Destination drop-off
                       </span>
                       <p className="text-gray-700 leading-snug">{job.deliveryAddress}</p>
+                      <p className="text-gray-700 leading-snug font-mono mt-1 flex items-center gap-1.5"><Phone className="w-3 h-3"/> {job.deliveryPhone || "N/A"}</p>
                     </div>
 
                     <div className="text-[11px] text-indigo-700 font-bold block bg-indigo-50/50 p-2 rounded-xl">
@@ -226,6 +227,7 @@ export const RiderDashboard: React.FC = () => {
                         Customer Drop-off Destination
                       </span>
                       <p className="text-gray-700 leading-snug font-semibold">{job.deliveryAddress}</p>
+                      <p className="text-gray-700 leading-snug font-mono mt-1 flex items-center gap-1.5"><Phone className="w-3 h-3"/> {job.deliveryPhone || "N/A"}</p>
                     </div>
 
                     <div className="space-y-1 bg-gray-50 p-2.5 rounded-xl border border-gray-150">

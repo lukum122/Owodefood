@@ -438,6 +438,10 @@ export const AdminOrders: React.FC = () => {
                   <p className="text-xs font-sans text-gray-700 bg-white p-2.5 rounded-xl border border-gray-150/75 font-medium leading-relaxed">
                     {selectedReceiptOrder.deliveryAddress}
                   </p>
+                  <p className="text-xs font-sans text-gray-700 bg-white p-2.5 rounded-xl border border-gray-150/75 font-medium flex justify-between">
+                    <span className="text-gray-400">Delivery Contact:</span>
+                    <strong className="font-mono text-gray-900">{selectedReceiptOrder.deliveryPhone || "N/A"}</strong>
+                  </p>
                 </div>
               </div>
 
