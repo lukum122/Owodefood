@@ -504,7 +504,10 @@ export const AdminOrders: React.FC = () => {
                       }}
                       className="text-xs p-2.5 bg-white border border-gray-255 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 flex-grow font-sans font-bold text-gray-700 cursor-pointer"
                     >
-                      <option value="pending">⏳ Pending Dispatch</option>
+                      <option value="awaiting_admin_verification">⏳ Awaiting Admin Verification</option>
+                      <option value="awaiting_vendor_confirmation">⏳ Awaiting Vendor Confirmation</option>
+                      <option value="ready_for_rider">✅ Ready for Rider Dispatch</option>
+                      <option value="pending">⏳ Pending Dispatch (Legacy)</option>
                       <option value="accepted">🚴 Rider Assigned (Accepted)</option>
                       <option value="picked_up">📦 Picked Up (Verified Receipt)</option>
                       <option value="delivered">✅ Delivered & Closed</option>

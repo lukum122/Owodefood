@@ -34,7 +34,7 @@ export const RiderDashboard: React.FC = () => {
   );
 
   const unassignedReceiptJobs = (receiptPickupOrders || []).filter(
-    o => !o.riderId && o.status === "pending"
+    o => !o.riderId && o.status === "ready_for_rider"
   );
 
   const completedOrders = orders.filter(o => o.riderId === currentRider.id && o.status === "delivered");

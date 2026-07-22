@@ -4023,7 +4023,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const newOrder: ReceiptPickupOrder = {
       ...orderData,
       id: "owf-rp-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
-      status: "pending",
+      status: "awaiting_admin_verification",
       paymentStatus: orderData.paymentMethod === "wallet" ? "paid" : "unpaid",
       createdAt: new Date().toISOString()
     };

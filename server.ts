@@ -426,9 +426,14 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       allWalletTransactions = await db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id));
       allAppNotifications = await db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id));
       
+      const isRider = reqUser.roles?.includes("rider");
       const rpOrdersFilter = userVendor 
-        ? sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.vendorId} = ${userVendor.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`
-        : sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`;
+        ? (isRider 
+            ? sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.vendorId} = ${userVendor.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id} OR (${receiptPickupOrders.riderId} IS NULL AND ${receiptPickupOrders.status} = 'ready_for_rider')`
+            : sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.vendorId} = ${userVendor.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`)
+        : (isRider
+            ? sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id} OR (${receiptPickupOrders.riderId} IS NULL AND ${receiptPickupOrders.status} = 'ready_for_rider')`
+            : sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`);
         
       allReceiptPickupOrders = await db.select().from(receiptPickupOrders).where(rpOrdersFilter);
     }
