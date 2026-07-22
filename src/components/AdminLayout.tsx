@@ -89,6 +89,8 @@ export const AdminLayout: React.FC = () => {
           return perms.includes("manage_employees") || dept === "admin";
         case "Wallet Management":
           return dept === "finance" || dept === "admin";
+        case "Payout Approvals":
+          return perms.includes("view_rider_payouts") || perms.includes("view_vendor_payouts") || dept === "finance" || dept === "admin";
         case "Platform Communications":
           return perms.includes("manage_orders") || dept === "support" || dept === "admin";
         case "Homepage Engine":
@@ -112,6 +114,7 @@ export const AdminLayout: React.FC = () => {
     { name: "Manage Users", path: "/admin/customers", icon: Users },
     { name: "Manage Staff", path: "/admin/employees", icon: ShieldCheck },
     { name: "Wallet Management", path: "/admin/wallets", icon: Coins },
+    { name: "Payout Approvals", path: "/admin/payouts", icon: Receipt },
     { name: "Platform Communications", path: "/admin/notifications", icon: Bell },
     { name: "Homepage Engine", path: "/admin/discovery", icon: Layers },
     { name: "Global Settings", path: "/admin/settings", icon: Settings },

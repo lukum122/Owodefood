@@ -72,6 +72,8 @@ export const orders = pgTable("orders", {
   serviceFee: integer("service_fee"),
   deliveryFee: integer("delivery_fee"),
   tax: integer("tax"),
+  riderPayoutStatus: text("rider_payout_status").notNull().default("pending"),
+  vendorPayoutStatus: text("vendor_payout_status").notNull().default("pending"),
 });
 
 export const orderItems = pgTable("order_items", {
@@ -231,4 +233,28 @@ export const auditLogs = pgTable("audit_logs", {
   resource: text("resource").notNull(),
   details: text("details"),
   createdAt: text("created_at").notNull(),
+});
+
+export const productReviews = pgTable("product_reviews", {
+  id: text("id").primaryKey(),
+  productId: text("product_id").notNull(),
+  userId: text("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const payoutLogs = pgTable("payout_logs", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  recipientType: text("recipient_type").notNull(), // rider | vendor
+  recipientId: text("recipient_id").notNull(),
+  amount: integer("amount").notNull(),
+  releasedBy: text("released_by").notNull(),
+  releasedAt: text("released_at").notNull(),
+  paymentMethod: text("payment_method").notNull(),
+  reference: text("reference"),
+  notes: text("notes"),
+  status: text("status").notNull().default("released"), // pending | released | reversed | failed
 });

@@ -46,6 +46,7 @@ import {
 import { AdminPOS } from "./pages/AdminPOS";
 import { AdminEmployees } from "./pages/AdminEmployees";
 import { AdminWallets } from "./pages/AdminWallets";
+import { AdminPayouts } from "./pages/AdminPayouts";
 import { AdminNotifications } from "./pages/AdminNotifications";
 import { AdminDiscovery } from "./pages/AdminDiscovery";
 
@@ -153,12 +154,13 @@ export default function App() {
             <Route path="vendors" element={<AdminVendors />} />
             <Route path="riders" element={<AdminRiders />} />
             <Route path="customers" element={<AdminCustomers />} />
+            <Route path="pos" element={<AdminPOS />} />
             <Route path="employees" element={<AdminEmployees />} />
             <Route path="wallets" element={<AdminWallets />} />
-            <Route path="pos" element={<AdminPOS />} />
-            <Route path="settings" element={<AdminSettings />} />
-            <Route path="discovery" element={<AdminDiscovery />} />
+            <Route path="payouts" element={<AdminPayouts />} />
             <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="discovery" element={<AdminDiscovery />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* Catch-all Wildcard fallback redirects */}
