@@ -107,6 +107,7 @@ export interface Product {
 }
 
 export type OrderStatus =
+  | "awaiting_payment_verification"
   | "pending"
   | "accepted"
   | "preparing"
@@ -134,6 +135,15 @@ export interface Order {
   deliveryFee?: number;
   tax?: number;
   receiptImage?: string;
+  paymentReceiptUrl?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  orderType?: "standard" | "receipt_pickup";
+  receiptImageOrQr?: string;
+  receiptNote?: string;
 }
 
 export interface OrderItem {
@@ -312,28 +322,7 @@ export interface WalletTransaction {
   reference?: string;
 }
 
-export interface ReceiptPickupOrder {
-  id: string;
-  customerId: string;
-  customerName: string;
-  customerPhone: string;
-  vendorId: string;
-  vendorName: string;
-  vendorAddress: string;
-  deliveryAddress: string;
-  deliveryPhone: string;
-  receiptImageOrQr: string; // Base64 data or QR content
-  receiptNote?: string;
-  deliveryFee: number;
-  riderId?: string;
-  riderName?: string;
-  status: "pending" | "accepted" | "picked_up" | "delivered" | "cancelled";
-  paymentMethod: string;
-  paymentStatus: "paid" | "unpaid";
-  serviceFee?: number;
-  totalAmount?: number;
-  createdAt: string;
-}
+
 
 export interface SystemSurgeConfig {
   isSurgeActive: boolean;

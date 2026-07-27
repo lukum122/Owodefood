@@ -10,8 +10,7 @@ export const RiderDashboard: React.FC = () => {
     currency,
     riderCommissionType,
     riderCommissionValue,
-    receiptPickupOrders,
-    acceptReceiptPickupDelivery
+    acceptOrder
   } = useDatabase();
 
   if (!currentRider) {
@@ -33,8 +32,8 @@ export const RiderDashboard: React.FC = () => {
     o => !o.riderId && ["accepted", "preparing", "ready"].includes(o.status)
   );
 
-  const unassignedReceiptJobs = (receiptPickupOrders || []).filter(
-    o => !o.riderId && o.status === "ready_for_rider"
+  const unassignedReceiptJobs = (orders || []).filter(
+    j => j.orderType === "receipt_pickup" && j.status === "pending"
   );
 
   const completedOrders = orders.filter(o => o.riderId === currentRider.id && o.status === "delivered");
@@ -250,7 +249,11 @@ export const RiderDashboard: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => acceptReceiptPickupDelivery(job.id, currentRider.id)}
+                    onClick={() => {
+                      if (window.confirm("Accept this receipt pickup request?")) {
+                        acceptOrder(job.id);
+                      }
+                    }}
                     className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow cursor-pointer transition uppercase"
                   >
                     Accept Receipt Pickup Job

@@ -398,7 +398,8 @@ export const CustomerHome: React.FC = () => {
         </div>
 
         {/* Horizontal Navigation Categories Row matching Chowdeck Mockup */}
-        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1 scrollbar-none border-t md:border-t-0 border-gray-50 pt-3 md:pt-0">
+        {vendorCategories && vendorCategories.length > 0 && (
+          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1 scrollbar-none border-t md:border-t-0 border-gray-50 pt-3 md:pt-0">
           
           {/* Browse All Tab */}
           <button
@@ -464,6 +465,7 @@ export const CustomerHome: React.FC = () => {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Dynamic Owode Food Hero Promo Banner */}

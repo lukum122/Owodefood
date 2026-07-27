@@ -74,6 +74,15 @@ export const orders = pgTable("orders", {
   tax: integer("tax"),
   riderPayoutStatus: text("rider_payout_status").notNull().default("pending"),
   vendorPayoutStatus: text("vendor_payout_status").notNull().default("pending"),
+  verifiedBy: text("verified_by"),
+  verifiedAt: text("verified_at"),
+  rejectedBy: text("rejected_by"),
+  rejectedAt: text("rejected_at"),
+  rejectionReason: text("rejection_reason"),
+  paymentReceiptUrl: text("payment_receipt_url"),
+  orderType: text("order_type").default("standard"),
+  receiptImageOrQr: text("receipt_image_or_qr"),
+  receiptNote: text("receipt_note"),
 });
 
 export const orderItems = pgTable("order_items", {
@@ -191,29 +200,6 @@ export const appNotifications = pgTable("app_notifications", {
   read: boolean("read").notNull().default(false),
   createdAt: text("created_at").notNull(),
   relatedId: text("related_id"),
-});
-
-export const receiptPickupOrders = pgTable("receipt_pickup_orders", {
-  id: text("id").primaryKey(),
-  customerId: text("customer_id").references(() => users.id).notNull(),
-  customerName: text("customer_name").notNull(),
-  customerPhone: text("customer_phone").notNull(),
-  vendorId: text("vendor_id").references(() => vendors.id).notNull(),
-  vendorName: text("vendor_name").notNull(),
-  vendorAddress: text("vendor_address").notNull(),
-  deliveryAddress: text("delivery_address").notNull(),
-  // deliveryPhone: text("delivery_phone").notNull(),
-  receiptImageOrQr: text("receipt_image_or_qr").notNull(),
-  receiptNote: text("receipt_note"),
-  deliveryFee: integer("delivery_fee").notNull(),
-  riderId: text("rider_id"),
-  riderName: text("rider_name"),
-  status: text("status").notNull(), // pending | accepted | picked_up | delivered | cancelled
-  paymentMethod: text("payment_method").notNull(),
-  paymentStatus: text("payment_status").notNull(), // paid | unpaid
-  serviceFee: integer("service_fee"),
-  totalAmount: integer("total_amount"),
-  createdAt: text("created_at").notNull(),
 });
 
 

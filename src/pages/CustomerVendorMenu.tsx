@@ -6,7 +6,7 @@ import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, Shi
 
 export const CustomerVendorMenu: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, receiptPickupOrders, createReceiptPickupOrder, cancelReceiptPickupOrder, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [] } = useDatabase();
+  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [], placeOrder, orders, updateVendorOrder } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -67,7 +67,7 @@ export const CustomerVendorMenu: React.FC = () => {
   const [presetReceipt, setPresetReceipt] = useState<string | "">("");
 
   const combinedDeliveryAddress = pickupAddress.trim() + (selectedDistrict ? `, ${selectedDistrict}` : "");
-  const dynamicDeliveryFee = calculateDeliveryFee(vendorObj?.id, 0, combinedDeliveryAddress);
+  const dynamicDeliveryFee = calculateDeliveryFee(vendorObj?.id, 0, combinedDeliveryAddress, true);
 
   // Addon group helper calculations
   const getGroupSelectionCount = (groupId: string) => {
@@ -713,22 +713,20 @@ export const CustomerVendorMenu: React.FC = () => {
                   setPickupErrorMsg(null);
                   setPickupSuccessMsg(null);
 
-                  setTimeout(() => {
+                  const performPickupSubmit = async () => {
                     const chosenReceipt = receiptImage || presetReceipt;
-                    const res = createReceiptPickupOrder({
-                      customerId: currentUser.id,
-                      customerName: currentUser.name,
-                      customerPhone: currentUser.phone,
-                      vendorId: vendorObj?.id || "",
-                      vendorName: vendorObj?.name || "",
-                      vendorAddress: vendorObj?.address || "",
-                      deliveryAddress: combinedDeliveryAddress,
-                      deliveryPhone: pickupPhone,
-                      receiptImageOrQr: chosenReceipt,
-                      receiptNote: pickupNote,
-                      deliveryFee: dynamicDeliveryFee,
-                      paymentMethod: paymentMethod
-                    });
+                    const res = await placeOrder(
+                      combinedDeliveryAddress,
+                      paymentMethod,
+                      pickupPhone,
+                      undefined,
+                      {
+                        orderType: "receipt_pickup",
+                        vendorId: vendorObj?.id,
+                        receiptImageOrQr: chosenReceipt,
+                        receiptNote: pickupNote
+                      }
+                    );
 
                     setIsSubmittingPickup(false);
                     if (res.success) {
@@ -739,9 +737,11 @@ export const CustomerVendorMenu: React.FC = () => {
                       setReceiptImage("");
                       setPresetReceipt("");
                     } else {
-                      setPickupErrorMsg(res.error || "Failed to submit booking.");
+                      setPickupErrorMsg(res.error || "Failed to create receipt pickup request. Please try again.");
                     }
-                  }, 800);
+                  };
+                  
+                  performPickupSubmit();
                 }} className="space-y-4">
                   {pickupSuccessMsg && (
                     <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl text-xs font-semibold">
@@ -1044,8 +1044,8 @@ export const CustomerVendorMenu: React.FC = () => {
                   <p className="text-xs font-bold text-gray-500">Sign in to view history</p>
                 </div>
               ) : (() => {
-                const customerPickups = (receiptPickupOrders || []).filter(
-                  o => o.customerId === currentUser.id && o.vendorId === id
+                const customerPickups = (orders || []).filter(
+                  o => o.orderType === "receipt_pickup" && o.customerId === currentUser.id && o.vendorId === id
                 );
 
                 if (customerPickups.length === 0) {
@@ -1104,7 +1104,9 @@ export const CustomerVendorMenu: React.FC = () => {
                           </div>
                           <div className="flex justify-between">
                             <span>Payment Status:</span>
-                            <span className={`font-extrabold uppercase text-[10px] ${o.paymentStatus === "paid" ? "text-emerald-600" : "text-amber-600"}`}>{o.paymentStatus}</span>
+                            <span className={`font-extrabold uppercase text-[10px] ${o.paymentMethod === "cash" ? "text-amber-600" : "text-emerald-600"}`}>
+                              {o.paymentMethod === "cash" ? "unpaid" : "paid"}
+                            </span>
                           </div>
                         </div>
 
@@ -1113,7 +1115,7 @@ export const CustomerVendorMenu: React.FC = () => {
                           <button
                             onClick={() => {
                               if (window.confirm("Are you sure you want to cancel this pickup request?")) {
-                                cancelReceiptPickupOrder(o.id);
+                                updateVendorOrder(o.id, "cancelled");
                               }
                             }}
                             className="w-full bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-[10px] font-bold transition cursor-pointer text-center"

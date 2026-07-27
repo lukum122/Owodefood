@@ -4,7 +4,7 @@ import { OrderStatus } from "../types";
 import { Compass, Bike, Store, MapPin, Phone, CheckCircle2, User, Truck } from "lucide-react";
 
 export const RiderDeliveries: React.FC = () => {
-  const { currentRider, orders, updateDeliveryStatus, receiptPickupOrders, updateReceiptPickupStatus, currency } = useDatabase();
+  const { currentRider, orders, updateDeliveryStatus, currency } = useDatabase();
 
   if (!currentRider) {
     return <div className="text-gray-500 text-sm">Rider profile not synced.</div>;
@@ -15,8 +15,8 @@ export const RiderDeliveries: React.FC = () => {
     o => o.riderId === currentRider.id && o.status === "out_for_delivery"
   );
 
-  const activeReceiptJobs = (receiptPickupOrders || []).filter(
-    o => o.riderId === currentRider.id && ["accepted", "picked_up"].includes(o.status)
+  const activeReceiptJobs = (orders || []).filter(
+    j => j.orderType === "receipt_pickup" && j.riderId === currentRider.id && (j.status === "accepted" || j.status === "out_for_delivery")
   );
 
   const handleUpdateStatus = (orderId: string, status: OrderStatus) => {
@@ -222,7 +222,7 @@ export const RiderDeliveries: React.FC = () => {
                 <div className="flex justify-end pt-2 border-t border-gray-50 gap-3">
                   {job.status === "accepted" ? (
                     <button
-                      onClick={() => updateReceiptPickupStatus(job.id, "picked_up")}
+                      onClick={() => updateDeliveryStatus(job.id, "out_for_delivery")}
                       className="w-full sm:w-auto py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 cursor-pointer transition uppercase"
                     >
                       <CheckCircle2 className="w-4 h-4 text-white fill-transparent" />
@@ -230,7 +230,7 @@ export const RiderDeliveries: React.FC = () => {
                     </button>
                   ) : (
                     <button
-                      onClick={() => updateReceiptPickupStatus(job.id, "delivered")}
+                      onClick={() => updateDeliveryStatus(job.id, "delivered")}
                       className="w-full sm:w-auto py-3 px-6 bg-[#070329] hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 cursor-pointer transition uppercase"
                     >
                       <CheckCircle2 className="w-4 h-4 text-green-300 fill-transparent" />

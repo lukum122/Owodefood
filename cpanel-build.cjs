@@ -10,8 +10,8 @@ try {
     console.log('\n🗜️ 2/2: Packaging deployable-cpanel.zip...');
     
     // Ensure old zip is removed
-    if (fs.existsSync('deployable-cpanel.zip')) {
-        fs.unlinkSync('deployable-cpanel.zip');
+    if (fs.existsSync('owodefood-cpanel-deploy.zip')) {
+        fs.unlinkSync('owodefood-cpanel-deploy.zip');
     }
 
     // Ensure drizzle folder exists (if there are no schema changes, it might not generate anything new, but it should exist)
@@ -37,9 +37,9 @@ SMTP_FROM=your_email@gmail.com
 
     // Using tar (built into Windows 10+ and Linux) to create the zip
     const filesToZip = 'dist drizzle server.js package.json .env.example';
-    execSync(`tar -a -c -f deployable-cpanel.zip ${filesToZip}`, { stdio: 'inherit' });
+    execSync(`tar -a -c -f owodefood-cpanel-deploy.zip ${filesToZip}`, { stdio: 'inherit' });
 
-    console.log('\n✅ DONE! Upload deployable-cpanel.zip to your cPanel File Manager and extract it.');
+    console.log('\n✅ DONE! Upload owodefood-cpanel-deploy.zip to your cPanel File Manager and extract it.');
     console.log('⚠️ IMPORTANT: Do not forget to copy .env.example to .env and configure your PostgreSQL connection string (which should be on 127.0.0.1 if hosted on the same cPanel).');
 } catch (error) {
     console.error('\n❌ Build failed:', error.message);

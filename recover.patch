@@ -1,0 +1,1372 @@
+diff --git a/src/context/DatabaseContext.tsx b/src/context/DatabaseContext.tsx
+index d3fa6b5..10dfbbe 100644
+--- a/src/context/DatabaseContext.tsx
++++ b/src/context/DatabaseContext.tsx
+@@ -1,6 +1,54 @@
+ import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+ import { io, Socket } from "socket.io-client";
+-import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
++import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
++import { hasRole } from "../roleHelper";
++
++export interface CartItem {
++  id: string;
++  product: Product;
++  quantity: number;
++  selectedAddons?: Addon[];
++}
++
++interface DatabaseContextType {
++  currentUser: User | null;
++  currentVendor: Vendor | null;
++  currentRider: Rider | null;
++  users: User[];
++  vendors: Vendor[];
++  products: Product[];
++  orders: Order[];
++  riders: Rider[];
++  cart: CartItem[];
++  categories: Category[];
++  addProductCategory: (category: Omit<Category, "id">) => void;
++  updateProductCategory: (id: string, updates: Partial<Category>) => void;
++  deleteProductCategory: (id: string) => void;
++
++  // Homepage Dynamic Engine
++  homepageSections: HomepageSection[];
++  updateHomepageSections: (sections: HomepageSection[]) => void;
++  collections: Collection[];
++  updateCollections: (collections: Collection[]) => void;
++  heroBanner: HeroBannerConfig;
++  updateHeroBanner: (config: HeroBannerConfig) => void;
++
++  availableLocations: string[];
++  updateAvailableLocations: (locations: string[]) => void;
++  selectedLocation: string;
++  setSelectedLocation: (location: string) => void;
++  paymentGateways: PaymentGateway[];
++  updatePaymentGateways: (gateways: PaymentGateway[]) => void;
++  categoryServiceFees: Record<string, number>;
++  updateCategoryServiceFee: (category: string, fee: number) => void;
++  vendorCategories: VendorCategoryInfo[];
++  addVendorCategory: (category: VendorCategoryInfo) => void;
++  removeVendorCategory: (categoryId: string) => void;
++  updateVendorCategory: (categoryId: string, updatedFields: Partial<Omit<VendorCategoryInfo, "id">>) => void;
++  
++import React, { createContext, useContext, useState, useEffect, useRef } from "react";
++import { io, Socket } from "socket.io-client";
++import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
+ import { hasRole } from "../roleHelper";
+ 
+ export interface CartItem {
+@@ -53,7 +101,7 @@ interface DatabaseContextType {
+   globalFreeDelivery: boolean;
+   updateGlobalFreeDelivery: (isEnabled: boolean) => void;
+   calculateServiceFee: (vendorId: string | undefined, subtotal: number) => number;
+-  calculateDeliveryFee: (vendorId: string | undefined, subtotal: number, deliveryAddress?: string) => number;
++  calculateDeliveryFee: (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean) => number;
+   currency: string;
+   updateCurrency: (symbol: string) => void;
+   
+@@ -111,10 +159,22 @@ interface DatabaseContextType {
+   clearCart: () => void;
+   
+   // Checkout & Customer Actions
+-  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => Promise<{ success: boolean; orderId?: string }>;
++  placeOrder: (
++    deliveryAddress: string,
++    paymentMethod: string,
++    deliveryPhone?: string,
++    receiptImage?: string,
++    options?: {
++      orderType?: "standard" | "receipt_pickup";
++      receiptImageOrQr?: string;
++      receiptNote?: string;
++      vendorId?: string;
++    }
++  ) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+   
+   // Vendor Actions
+-  updateVendorOrder: (orderId: string, status: OrderStatus) => void;
++  updateVendorOrder: (orderId: string, status: OrderStatus, updates?: Partial<Order>) => void;
++  resubmitOrderReceipt: (orderId: string, newReceiptUrl: string) => void;
+   addProduct: (product: Omit<Product, "id" | "createdAt">) => void;
+   updateProduct: (product: Product) => void;
+   deleteProduct: (productId: string) => void;
+@@ -122,6 +182,7 @@ interface DatabaseContextType {
+   
+   // Rider Actions
+   acceptDelivery: (orderId: string, riderId: string) => void;
++  updateOrderPayoutStatus: (orderId: string, recipientType: "rider" | "vendor", status: "pending" | "paid") => void;
+   updateDeliveryStatus: (orderId: string, status: OrderStatus) => void;
+   updateRiderProfile: (profile: Partial<Rider>) => void;
+   
+@@ -172,12 +233,9 @@ interface DatabaseContextType {
+   approveWalletFunding: (transactionId: string) => void;
+   declineWalletFunding: (transactionId: string) => void;
+ 
+-  // Receipt Pickup & Delivery System (Strictly for pre-purchased items from listed vendors)
+-  receiptPickupOrders: ReceiptPickupOrder[];
+-  createReceiptPickupOrder: (order: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => { success: boolean; error?: string; orderId?: string };
+-  acceptReceiptPickupDelivery: (orderId: string, riderId: string) => void;
+-  updateReceiptPickupStatus: (orderId: string, status: ReceiptPickupOrder["status"]) => void;
+-  cancelReceiptPickupOrder: (orderId: string) => void;
++  // Receipt Pickup
++  receiptPickupConfig: ReceiptPickupConfig;
++  updateReceiptPickupConfig: (config: ReceiptPickupConfig) => void;
+ }
+ 
+ const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
+@@ -657,6 +715,7 @@ const getInitialEmployeesSeed = (): Employee[] => [
+ const getInitialReviewsSeed = (): Review[] => [];
+ 
+ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
++  const { withUpdateLock } = useUpdateManager();
+   const [currentUser, setCurrentUser] = useState<User | null>(() => {
+     try {
+       const saved = localStorage.getItem("fd_session_user");
+@@ -702,6 +761,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
+   const [vendors, setVendors] = useState<Vendor[]>([]);
+   const [products, setProducts] = useState<Product[]>([]);
+   const [orders, setOrders] = useState<Order[]>([]);
++  const [isDataLoading, setIsDataLoading] = useState(true);
+ 
+   // Homepage Dynamic Engine State
+   const [homepageSections, setHomepageSections] = useState<HomepageSection[]>(() => {
+@@ -790,22 +850,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
+     syncSave("SYSTEM_SETTING_UPSERT", { key: "receiptPickupConfig", value: JSON.stringify(config) });
+   };
+ 
+-  const [receiptPickupOrders, setReceiptPickupOrders] = useState<ReceiptPickupOrder[]>(() => {
+-    try {
+-      const saved = localStorage.getItem("fd_receipt_pickup_orders");
+-      return saved ? JSON.parse(saved) : [];
+-    } catch {
+-      return [];
+-    }
+-  });
+-
+-  useEffect(() => {
+-    try {
+-      localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(receiptPickupOrders));
+-    } catch (e) {
+-      console.error(e);
+-    }
+-  }, [receiptPickupOrders]);
+   const [riders, setRiders] = useState<Rider[]>([]);
+   const [cart, setCart] = useState<CartItem[]>([]);
+   const [reviews, setReviews] = useState<Review[]>([]);
+@@ -1178,124 +1222,41 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+         if (!res.ok) throw new Error("Backend load failed");
+         const data = await res.json();
+ 
+-        if (data.users && data.users.length > 0) {
+-          // Found data in Cloud SQL! Let's load it and synchronize local states.
+-          // Users merging
+-          const initialUsers = getInitialUsersSeed();
+-          const mergedUsers = [...data.users];
+-          let usersUpdated = false;
+-          for (const u of initialUsers) {
+-            if (!mergedUsers.some(mu => mu.id === u.id)) {
+-              mergedUsers.push(u);
+-              usersUpdated = true;
+-            }
+-          }
+-          const loadedUsers = ensureSuperAdminsOnly(mergedUsers);
+-          setUsers(loadedUsers);
+-          localStorage.setItem("fd_users", JSON.stringify(loadedUsers));
+-          if (usersUpdated) {
+-            await syncSave("USERS_BULK", loadedUsers);
++        if (data) {
++          // Found data in Cloud SQL! Let's load it directly without seed merging.
++          if (data.users) {
++            const loadedUsers = ensureSuperAdminsOnly(data.users);
++            setUsers(loadedUsers);
++            localStorage.setItem("fd_users", JSON.stringify(loadedUsers));
+           }
+ 
+-          // Vendors merging
+-          const initialVendors = getInitialVendorsSeed();
+-          let mergedVendors = [...(data.vendors || [])];
+-          let vendorsUpdated = false;
+-          for (const v of initialVendors) {
+-            if (!mergedVendors.some(mv => mv.id === v.id)) {
+-              mergedVendors.push(v);
+-              vendorsUpdated = true;
+-            }
+-          }
+-          if (mergedVendors.length === 0) {
+-            mergedVendors = initialVendors;
+-            vendorsUpdated = true;
+-          }
+-          setVendors(mergedVendors);
+-          localStorage.setItem("fd_vendors", JSON.stringify(mergedVendors));
+-          if (vendorsUpdated) {
+-            await syncSave("VENDORS_BULK", mergedVendors);
++          if (data.vendors) {
++            setVendors(data.vendors);
++            localStorage.setItem("fd_vendors", JSON.stringify(data.vendors));
+           }
+ 
+-          // Products merging
+-          const initialProducts = getInitialProductsSeed();
+-          let mergedProducts = [...(data.products || [])];
+-          let productsUpdated = false;
+-          for (const p of initialProducts) {
+-            if (!mergedProducts.some(mp => mp.id === p.id)) {
+-              mergedProducts.push(p);
+-              productsUpdated = true;
+-            }
+-          }
+-          if (mergedProducts.length === 0) {
+-            mergedProducts = initialProducts;
+-            productsUpdated = true;
+-          }
+-          setProducts(mergedProducts);
+-          localStorage.setItem("fd_products", JSON.stringify(mergedProducts));
+-          if (productsUpdated) {
+-            await syncSave("PRODUCTS_BULK", mergedProducts);
++          if (data.products) {
++            setProducts(data.products);
++            localStorage.setItem("fd_products", JSON.stringify(data.products));
+           }
+ 
+-          // Riders merging
+-          const initialRiders = getInitialRidersSeed();
+-          let mergedRiders = [...(data.riders || [])];
+-          let ridersUpdated = false;
+-          for (const r of initialRiders) {
+-            if (!mergedRiders.some(mr => mr.id === r.id)) {
+-              mergedRiders.push(r);
+-              ridersUpdated = true;
+-            }
+-          }
+-          if (mergedRiders.length === 0) {
+-            mergedRiders = initialRiders;
+-            ridersUpdated = true;
+-          }
+-          setRiders(mergedRiders);
+-          localStorage.setItem("fd_riders", JSON.stringify(mergedRiders));
+-          if (ridersUpdated) {
+-            await syncSave("RIDERS_BULK", mergedRiders);
++          if (data.riders) {
++            setRiders(data.riders);
++            localStorage.setItem("fd_riders", JSON.stringify(data.riders));
+           }
+ 
+           // Orders merging
+-          const initialOrders = getInitialOrdersSeed();
+-          let mergedOrders = [...(data.orders || [])];
+-          let ordersUpdated = false;
+-          for (const o of initialOrders) {
+-            if (!mergedOrders.some(mo => mo.id === o.id)) {
+-              mergedOrders.push(o);
+-              ordersUpdated = true;
+-            }
+-          }
+-          if (mergedOrders.length === 0) {
+-            mergedOrders = initialOrders;
+-            ordersUpdated = true;
+-          }
+-          mergedOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+-          setOrders(mergedOrders);
+-          localStorage.setItem("fd_orders", JSON.stringify(mergedOrders));
+-          if (ordersUpdated) {
+-            await syncSave("ORDERS_BULK", mergedOrders);
++          if (data.orders) {
++            const loadedOrders = [...data.orders];
++            loadedOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
++            setOrders(loadedOrders);
++            localStorage.setItem("fd_orders", JSON.stringify(loadedOrders));
+           }
+ 
+           // Payment Gateways merging
+-          const initialPaymentGateways = getInitialPaymentGatewaysSeed();
+-          let mergedPaymentGateways = [...(data.paymentGateways || [])];
+-          let paymentGatewaysUpdated = false;
+-          for (const pg of initialPaymentGateways) {
+-            if (!mergedPaymentGateways.some(mpg => mpg.id === pg.id)) {
+-              mergedPaymentGateways.push(pg);
+-              paymentGatewaysUpdated = true;
+-            }
+-          }
+-          if (mergedPaymentGateways.length === 0) {
+-            mergedPaymentGateways = initialPaymentGateways;
+-            paymentGatewaysUpdated = true;
+-          }
+-          setPaymentGateways(mergedPaymentGateways);
+-          localStorage.setItem("fd_payment_gateways", JSON.stringify(mergedPaymentGateways));
+-          if (paymentGatewaysUpdated) {
+-            await syncSave("PAYMENT_GATEWAYS_BULK", mergedPaymentGateways);
++          if (data.paymentGateways) {
++            setPaymentGateways(data.paymentGateways);
++            localStorage.setItem("fd_payment_gateways", JSON.stringify(data.paymentGateways));
+           }
+ 
+           if (data.savedAddresses) {
+@@ -1303,57 +1264,26 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+             localStorage.setItem("fd_saved_addresses", JSON.stringify(data.savedAddresses));
+           }
+ 
+-          if (data.receiptPickupOrders) {
+-            let mergedReceipts = [...data.receiptPickupOrders];
+-            mergedReceipts.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+-            setReceiptPickupOrders(mergedReceipts);
+-            localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(mergedReceipts));
+-          }
+-
+           if (data.extremeLocationTiers) {
+             setExtremeLocationTiers(data.extremeLocationTiers);
+             localStorage.setItem("fd_extreme_location_tiers", JSON.stringify(data.extremeLocationTiers));
+-          } else {
+-            const tiers = [
+-              { id: "tier-1", name: "Tier 1: Moderately Far", surcharge: 300, description: "Outside central but accessible." },
+-              { id: "tier-2", name: "Tier 2: Distant / Outskirts", surcharge: 600, description: "Requires extra fuel and time." },
+-              { id: "tier-3", name: "Tier 3: Remote / Borderline", surcharge: 1000, description: "Hard to reach, extreme ends of the city." }
+-            ];
+-            setExtremeLocationTiers(tiers);
+-            localStorage.setItem("fd_extreme_location_tiers", JSON.stringify(tiers));
+-            await syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
+           }
+ 
++          let loadedExtremeLocations: ExtremeLocation[] = [];
+           if (data.extremeLocations) {
++            loadedExtremeLocations = data.extremeLocations;
+             setExtremeLocations(data.extremeLocations);
+             localStorage.setItem("fd_extreme_locations", JSON.stringify(data.extremeLocations));
+-          } else {
+-            const extreme = [
+-              { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
+-              { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
+-              { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
+-              { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
+-              { id: "ex-5", name: "Ganmo", tierId: "tier-2" },
+-              { id: "ex-6", name: "Amoyo", tierId: "tier-3" },
+-              { id: "ex-7", name: "Shao", tierId: "tier-3" }
+-            ];
+-            setExtremeLocations(extreme);
+-            localStorage.setItem("fd_extreme_locations", JSON.stringify(extreme));
+-            await syncSave("EXTREME_LOCATIONS_BULK", extreme);
+           }
+ 
+-          const loadedEmployees = (data.employees && data.employees.length > 0) ? data.employees : getInitialEmployeesSeed();
+-          setEmployees(loadedEmployees);
+-          localStorage.setItem("fd_employees", JSON.stringify(loadedEmployees));
+-          if (!data.employees || data.employees.length === 0) {
+-            await syncSave("EMPLOYEES_BULK", loadedEmployees);
++          if (data.employees) {
++            setEmployees(data.employees);
++            localStorage.setItem("fd_employees", JSON.stringify(data.employees));
+           }
+ 
+-          const loadedReviews = (data.reviews && data.reviews.length > 0) ? data.reviews : getInitialReviewsSeed();
+-          setReviews(loadedReviews);
+-          localStorage.setItem("fd_reviews", JSON.stringify(loadedReviews));
+-          if (!data.reviews || data.reviews.length === 0) {
+-            await syncSave("REVIEWS_BULK", loadedReviews);
++          if (data.reviews) {
++            setReviews(data.reviews);
++            localStorage.setItem("fd_reviews", JSON.stringify(data.reviews));
+           }
+ 
+           if (data.systemSettings) {
+@@ -1406,53 +1336,45 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+             }
+           }
+ 
+-          // Compute and set available locations
+-          let initialAvailableLocations: string[] = [];
+-          if (data.systemSettings.availableLocations) {
+-            try { initialAvailableLocations = JSON.parse(data.systemSettings.availableLocations); } catch(e){}
+-          } else if (localStorage.getItem("fd_available_locations")) {
+-            initialAvailableLocations = JSON.parse(localStorage.getItem("fd_available_locations")!);
+-          } else {
+-            initialAvailableLocations = [
+-              "Tanke, Ilorin, Kwara",
+-              "GRA, Ilorin, Kwara",
+-              "Challenge, Ilorin, Kwara",
+-              "Fate, Ilorin, Kwara",
+-              "Adewole, Ilorin, Kwara",
+-              "Post Office Area, Ilorin, Kwara"
+-            ];
++          // Compute and set available locations STRICTLY from Cloud SQL
++          let dbAvailableLocations: string[] = [];
++          if (data.systemSettings && data.systemSettings.availableLocations) {
++            try { dbAvailableLocations = JSON.parse(data.systemSettings.availableLocations); } catch(e){}
+           }
+-          const extremeLocationsToUse = data.extremeLocations 
+-            ? data.extremeLocations
+-            : [
+-                { id: "ex-1", name: "University Permanent Site", tierId: "tier-1" },
+-                { id: "ex-2", name: "Airport Road", tierId: "tier-1" },
+-                { id: "ex-3", name: "Oke-Ose", tierId: "tier-1" },
+-                { id: "ex-4", name: "Eyenkorin", tierId: "tier-2" },
+-                { id: "ex-5", name: "Ganmo", tierId: "tier-2" },
+-                { id: "ex-6", name: "Amoyo", tierId: "tier-3" },
+-                { id: "ex-7", name: "Shao", tierId: "tier-3" }
+-              ];
+-          const finalLocations = [...initialAvailableLocations];
+-          localStorage.setItem("fd_available_locations", JSON.stringify(finalLocations));
++          
++          const finalLocations = [...dbAvailableLocations];
++          loadedExtremeLocations.forEach((ex: any) => {
++            if (!finalLocations.includes(ex.name)) {
++              finalLocations.push(ex.name);
++            }
++          });
++          
+           setAvailableLocations(finalLocations);
+-
+-          // Restore vendor categories
+-          let initialCategories: VendorCategoryInfo[] = [];
+-          if (data.systemSettings.vendorCategories) {
+-            try { initialCategories = JSON.parse(data.systemSettings.vendorCategories); } catch(e){}
+-          } else if (localStorage.getItem("fd_vendor_categories")) {
+-            initialCategories = JSON.parse(localStorage.getItem("fd_vendor_categories")!);
++          localStorage.setItem("fd_available_locations", JSON.stringify(finalLocations));
++          
++          if (finalLocations.length > 0) {
++            // Re-sync selected location based on the database
++            const savedLoc = localStorage.getItem("fd_selected_location");
++            let parsedSaved = "";
++            try { if (savedLoc) parsedSaved = JSON.parse(savedLoc); } catch(e){}
++            
++            if (!parsedSaved || !finalLocations.includes(parsedSaved)) {
++              setSelectedLocation(finalLocations[0]);
++              localStorage.setItem("fd_selected_location", JSON.stringify(finalLocations[0]));
++            }
+           } else {
+-            initialCategories = [
+-              { id: "restaurant", name: "Restaurants", iconName: "UtensilsCrossed", color: "orange" },
+-              { id: "shop", name: "Shops", iconName: "Store", color: "yellow" },
+-              { id: "pharmacy", name: "Pharmacies", iconName: "Pill", color: "sky" },
+-              { id: "groceries", name: "Chowstore", iconName: "Apple", color: "red" },
+-            ];
+-            localStorage.setItem("fd_vendor_categories", JSON.stringify(initialCategories));
++            setSelectedLocation("");
++            localStorage.removeItem("fd_selected_location");
++          }
++
++          // Restore vendor categories strictly from Cloud SQL
++          if (data.systemSettings && data.systemSettings.vendorCategories) {
++            try { 
++              const parsed = JSON.parse(data.systemSettings.vendorCategories);
++              setVendorCategories(parsed);
++              localStorage.setItem("fd_vendor_categories", JSON.stringify(parsed));
++            } catch(e){}
+           }
+-          setVendorCategories(initialCategories);
+ 
+           if (data.systemSettings.currency) {
+             setCurrency(data.systemSettings.currency);
+@@ -1515,6 +1437,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+           } else {
+             setCurrentUser(null);
+           }
++          setIsDataLoading(false);
+           return;
+         }
+       } catch (err) {
+@@ -2034,24 +1957,27 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+       }
+       setReviews(initialReviews);
+ 
+-      // Upload seeded / local storage data to Cloud SQL for permanent persistence!
+-      try {
+-        await syncSave("USERS_BULK", initialUsers);
+-        await syncSave("VENDORS_BULK", initialVendors);
+-        await syncSave("PRODUCTS_BULK", initialProducts);
+-        await syncSave("RIDERS_BULK", initialRiders);
+-        await syncSave("ORDERS_BULK", initialOrders);
+-        await syncSave("PAYMENT_GATEWAYS_BULK", initialPaymentGateways);
+-        await syncSave("EXTREME_LOCATION_TIERS_BULK", [
+-          { id: "tier-1", name: "Tier 1: Outer Suburbs", surcharge: 1000 },
+-          { id: "tier-2", name: "Tier 2: Extreme Outskirts", surcharge: 2000 },
+-          { id: "tier-3", name: "Tier 3: Ultra Remote / Borders", surcharge: 3500 }
+-        ]);
+-        await syncSave("EXTREME_LOCATIONS_BULK", initialExtreme);
+-        await syncSave("EMPLOYEES_BULK", initialEmployees);
+-        await syncSave("REVIEWS_BULK", initialReviews);
+-      } catch (e) {
+-        console.error("Failed to seed database with fallback variables", e);
++      // Upload seeded / local storage data to Cloud SQL for permanent persistence ONLY if authenticated!
++      const fallbackToken = localStorage.getItem("fd_jwt_token");
++      if (fallbackToken) {
++        try {
++          await syncSave("USERS_BULK", initialUsers);
++          await syncSave("VENDORS_BULK", initialVendors);
++          await syncSave("PRODUCTS_BULK", initialProducts);
++          await syncSave("RIDERS_BULK", initialRiders);
++          await syncSave("ORDERS_BULK", initialOrders);
++          await syncSave("PAYMENT_GATEWAYS_BULK", initialPaymentGateways);
++          await syncSave("EXTREME_LOCATION_TIERS_BULK", [
++            { id: "tier-1", name: "Tier 1: Outer Suburbs", surcharge: 1000 },
++            { id: "tier-2", name: "Tier 2: Extreme Outskirts", surcharge: 2000 },
++            { id: "tier-3", name: "Tier 3: Ultra Remote / Borders", surcharge: 3500 }
++          ]);
++          await syncSave("EXTREME_LOCATIONS_BULK", initialExtreme);
++          await syncSave("EMPLOYEES_BULK", initialEmployees);
++          await syncSave("REVIEWS_BULK", initialReviews);
++        } catch (e) {
++          console.error("Failed to seed database with fallback variables", e);
++        }
+       }
+     };
+ 
+@@ -2153,7 +2079,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+     const updated = extremeLocations.filter(item => item.id !== id);
+     setExtremeLocations(updated);
+     localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
+-    syncSave("EXTREME_LOCATIONS_DELETE", { id });
++    syncSave("EXTREME_LOCATION_DELETE", { id });
+   };
+ 
+   const updateExtremeLocations = (locations: ExtremeLocation[]) => {
+@@ -2365,16 +2291,16 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+ 
+   const getRegion = (address: string): string => {
+     const addr = address.toLowerCase();
+-    if (addr.includes("tanke")) return "tanke";
+-    if (addr.includes("gra")) return "gra";
+-    if (addr.includes("challenge")) return "challenge";
+-    if (addr.includes("fate")) return "fate";
+-    if (addr.includes("adewole")) return "adewole";
++    for (const loc of availableLocations) {
++      if (addr.includes(loc.toLowerCase())) {
++        return loc;
++      }
++    }
+     return "other";
+   };
+ 
+-  const calculateDeliveryFee = (vendorId: string | undefined, subtotal: number, deliveryAddress?: string): number => {
+-    if (subtotal <= 0) return 0;
++  const calculateDeliveryFee = (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean): number => {
++    if (subtotal <= 0 && !isReceiptPickup) return 0;
+     if (globalFreeDelivery) return 0;
+     
+     if (!vendorId) return 750;
+@@ -2492,6 +2418,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+ 
+   // Cloud SQL Sync helper
+   const syncSave = async (type: string, payload: any) => {
++    return withUpdateLock(async () => {
+     try {
+       const token = localStorage.getItem("fd_jwt_token");
+       const headers: any = { "Content-Type": "application/json" };
+@@ -2511,6 +2438,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+     } catch (err) {
+       console.error(`Error syncing action: ${type}`, err);
+     }
++  
++    });
+   };
+ 
+   // Update localStorage whenever values change and sync to Cloud SQL
+@@ -2575,479 +2504,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+   };
+ 
+   const login = async (identifier: string, pin: string, role: UserRole, preventStateUpdate: boolean = false) => {
+-    try {
+-      const response = await fetch("/api/auth/login", {
+-        method: "POST",
+-        headers: { "Content-Type": "application/json" },
+-        body: JSON.stringify({ email: identifier, pin })
+-      });
+-      const data = await response.json();
+-      
+-      if (!data.success) {
+-        return { success: false, error: data.error || "Login failed" };
+-      }
+-      
+-      const user = data.user;
+-      const userRoles = user.roles || [user.role];
+-      if (!userRoles.includes(role)) {
+-        return { success: false, error: `This account does not have the ${role} role. Available roles: ${userRoles.join(", ")}.` };
+-      }
+-      
+-      if (!preventStateUpdate) {
+-        finalizeLogin(user, data.token, role);
+-      }
+-      
+-      return { success: true, user: { ...user, role, roles: userRoles }, token: data.token };
+-    } catch (err) {
+-      return { success: false, error: "Network error during secure login." };
+-    }
+-  };
+-
+-  const register = async (
+-    name: string,
+-    email: string,
+-    phone: string,
+-    role: UserRole,
+-    gender?: string,
+-    extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string }
+-  ) => {
+-    const cleansedEmail = email.trim().toLowerCase();
+-    
+-    // Secure backend check instead of insecure local check
+-    const checkRes = await checkUser(cleansedEmail);
+-    if (checkRes.exists) {
+-      return { success: false, error: "An account with this email already exists." };
+-    }
+-
+-    const checkPhone = await checkUser(phone);
+-    if (checkPhone.exists) {
+-      return { success: false, error: "An account with this phone number already exists." };
+-    }
+-
+-    const newUserId = generateId();
+-    const newUser: User = {
+-      id: newUserId,
+-      email: cleansedEmail,
+-      name,
+-      phone,
+-      role,
+-      roles: role === "customer" ? ["customer"] : ["customer", role],
+-      gender: gender || undefined,
+-      createdAt: new Date().toISOString(),
+-      pin: extra?.pin || undefined
+-    };
+-
+-    const updatedUsers = [...users, newUser];
+-    persistUsers(updatedUsers);
+-
+-    // If role is vendor, register a vendor profile as well
+-    if (role === "vendor") {
+-      const newVendor: Vendor = {
+-        id: "v-" + generateId(),
+-        userId: newUserId,
+-        name: extra?.businessName || `${name}'s Eatery`,
+-        description: `Freshly prepared ${extra?.cuisine || "delicious"} food.`,
+-        cuisine: extra?.cuisine || "Continental",
+-        image: "/images/burger.png",
+-        rating: 5.0,
+-        address: "Food Street Market, District 1",
+-        status: "pending", // Admins approve vendors
+-        createdAt: new Date().toISOString()
+-      };
+-      const updatedVendors = [...vendors, newVendor];
+-      persistVendors(updatedVendors);
+-      setCurrentVendor(newVendor);
+-    } 
+-
+-    // If role is rider, register a rider profile
+-    else if (role === "rider") {
+-      const vType = (extra?.vehicleType || "motorcycle") as Rider["vehicleType"];
+-      const newRider: Rider = {
+-        id: "r-" + generateId(),
+-        userId: newUserId,
+-        name,
+-        phone,
+-        vehicleType: vType,
+-        status: "pending", // Admins approve riders
+-        isAvailable: true,
+-        createdAt: new Date().toISOString()
+-      };
+-      const updatedRiders = [...riders, newRider];
+-      persistRiders(updatedRiders);
+-      setCurrentRider(newRider);
+-    }
+-
+-    setCurrentUser(newUser);
+-    localStorage.setItem("fd_session_user", JSON.stringify(newUser));
+-
+-    // Ensure the backend has this user before attempting login to get the JWT
+-    await syncSave("USER_UPSERT", newUser);
+-
+-    if (extra?.pin) {
+-      try {
+-        const response = await fetch("/api/login", {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify({ email: newUser.email, pin: extra.pin })
+-        });
+-        const data = await response.json();
+-        if (data.success) {
+-          localStorage.setItem("fd_jwt_token", data.token);
+-        }
+-      } catch (e) {}
+-    }
+-
+-    return { success: true };
+-  };
+-
+-  const logout = () => {
+-    setCurrentUser(null);
+-    setCurrentVendor(null);
+-    setCurrentRider(null);
+-    setCart([]);
+-    localStorage.removeItem("fd_session_user");
+-    localStorage.removeItem("fd_jwt_token"); // Clear JWT on logout
+-  };
+-
+-  const switchRole = (newRole: UserRole) => {
+-    if (!currentUser) return;
+-    const userRoles = currentUser.roles || [currentUser.role];
+-    if (!userRoles.includes(newRole)) {
+-      console.warn("User does not have role:", newRole);
+-      return;
+-    }
+-    const updated = { ...currentUser, role: newRole, roles: userRoles };
+-    setCurrentUser(updated);
+-    localStorage.setItem("fd_session_user", JSON.stringify(updated));
+-
+-    if (newRole === "vendor") {
+-      const v = vendors.find(vend => vend.userId === currentUser.id);
+-      setCurrentVendor(v || null);
+-    } else if (newRole === "rider") {
+-      const r = riders.find(rid => rid.userId === currentUser.id);
+-      setCurrentRider(r || null);
+-    } else {
+-      setCurrentVendor(null);
+-      setCurrentRider(null);
+-    }
+-  };
+-
+-  const applyForVendor = (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => {
+-    if (!currentUser) return { success: false, error: "Not logged in" };
+-    
+-    const existingV = vendors.find(v => v.userId === currentUser.id);
+-    if (existingV) {
+-      if (existingV.status === "approved") {
+-        return { success: false, error: "You are already an approved vendor." };
+-      } else if (existingV.status === "pending") {
+-        return { success: false, error: "Your vendor application is already pending approval." };
+-      }
+-    }
+-
+-    const newVendor: Vendor = {
+-      id: "v-" + generateId(),
+-      userId: currentUser.id,
+-      name: businessName,
+-      description: `Freshly prepared ${cuisine} food.`,
+-      cuisine: cuisine,
+-      image: "/images/hero.png",
+-      rating: 5.0,
+-      address: "Food Street Market, District 1",
+-      status: "pending",
+-      createdAt: new Date().toISOString(),
+-      businessRegNo: extra?.businessRegNo,
+-      foodPermitNo: extra?.foodPermitNo,
+-      verificationDoc: extra?.verificationDoc,
+-    };
+-
+-    // Filter out previously rejected vendor profile to allow re-application
+-    const updatedVendors = vendors.filter(v => v.userId !== currentUser.id || v.status !== "rejected").concat(newVendor);
+-    persistVendors(updatedVendors);
+-
+-    addNotification(
+-      "admin",
+-      "New Vendor Application 🏪",
+-      `${currentUser.name} has submitted a vendor application for '${businessName}' (${cuisine}).`,
+-      "system"
+-    );
+-
+-    return { success: true };
+-  };
+-
+-  const applyForRider = (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => {
+-    if (!currentUser) return { success: false, error: "Not logged in" };
+-
+-    const existingR = riders.find(r => r.userId === currentUser.id);
+-    if (existingR) {
+-      if (existingR.status === "approved") {
+-        return { success: false, error: "You are already an approved rider." };
+-      } else if (existingR.status === "pending") {
+-        return { success: false, error: "Your rider application is already pending approval." };
+-      }
+-    }
+-
+-    const newRider: Rider = {
+-      id: "r-" + generateId(),
+-      userId: currentUser.id,
+-      name: currentUser.name,
+-      phone: currentUser.phone,
+-      vehicleType,
+-      status: "pending",
+-      isAvailable: true,
+-      createdAt: new Date().toISOString(),
+-      licenseNo: extra?.licenseNo,
+-      plateNo: extra?.plateNo,
+-      nationalIdNo: extra?.nationalIdNo,
+-      verificationDoc: extra?.verificationDoc,
+-    };
+-
+-    // Filter out previously rejected rider profile to allow re-application
+-    const updatedRiders = riders.filter(r => r.userId !== currentUser.id || r.status !== "rejected").concat(newRider);
+-    persistRiders(updatedRiders);
+-
+-    addNotification(
+-      "admin",
+-      "New Rider Application 🚴",
+-      `${currentUser.name} has applied to become a rider using a ${vehicleType}.`,
+-      "system"
+-    );
+-
+-    return { success: true };
+-  };
+-
+-  // Helper designed for review to switch roles seamlessly
+-  const overrideUserRole = (role: UserRole) => {
+-    // Finds or creates a sample user for that role
+-    let targetUser = users.find(u => hasRole(u, role));
+-    if (!targetUser) {
+-      // Auto-creates a robust preset so developer has immediate access
+-      const id = `${role}-guest`;
+-      targetUser = {
+-        id,
+-        email: `${role}@gmail.com`,
+-        name: `Sample ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+-        phone: "+234 803 123 4567",
+-        role,
+-        roles: role === "customer" ? ["customer"] : ["customer", role],
+-        createdAt: new Date().toISOString()
+-      };
+-      persistUsers([...users, targetUser]);
+-    } else {
+-      // Ensure roles is initialized with at least customer and their current role
+-      const currentRoles = targetUser.roles || [targetUser.role];
+-      if (!currentRoles.includes("customer")) {
+-        currentRoles.unshift("customer");
+-      }
+-      if (!currentRoles.includes(role)) {
+-        currentRoles.push(role);
+-      }
+-      targetUser = {
+-        ...targetUser,
+-        roles: currentRoles
+-      };
+-      persistUsers(users.map(u => u.id === targetUser?.id ? targetUser! : u));
+-    }
+-
+-    setCurrentUser(targetUser);
+-    localStorage.setItem("fd_session_user", JSON.stringify(targetUser));
+-
+-    if (role === "vendor") {
+-      let v = vendors.find(vend => vend.userId === targetUser?.id);
+-      if (!v) {
+-        // Create sample approved vendor
+-        v = {
+-          id: "v-" + generateId(),
+-          userId: targetUser.id,
+-          name: "Spicy Dynasty Express",
+-          description: "Stir-fried delicacies, sizzling dim sums, and fiery noodle bowls.",
+-          cuisine: "Asian",
+-          image: "/images/jollof.png",
+-          rating: 4.7,
+-          address: "88 Wok St, Owode District",
+-          status: "approved",
+-          createdAt: new Date().toISOString()
+-        };
+-        persistVendors([...vendors, v]);
+-      }
+-      setCurrentVendor(v);
+-    } else if (role === "rider") {
+-      let r = riders.find(rid => rid.userId === targetUser?.id);
+-      if (!r) {
+-        r = {
+-          id: "r-" + generateId(),
+-          userId: targetUser.id,
+-          name: targetUser.name,
+-          phone: targetUser.phone,
+-          vehicleType: "bicycle",
+-          status: "approved",
+-          isAvailable: true,
+-          createdAt: new Date().toISOString()
+-        };
+-        persistRiders([...riders, r]);
+-      }
+-      setCurrentRider(r);
+-    }
+-  };
+-
+-  const updateProfile = (name: string, phone: string, gender?: string, profileImage?: string) => {
+-    if (!currentUser) return;
+-    const updated = { ...currentUser, name, phone, gender, profileImage };
+-    const updatedUsers = users.map(u => u.id === currentUser.id ? updated : u);
+-    setUsers(updatedUsers);
+-    localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
+-    syncSave("USER_UPSERT", updated);
+-    setCurrentUser(updated);
+-    localStorage.setItem("fd_session_user", JSON.stringify(updated));
+-
+-    // Also sync the secondary user profiles if matching
+-    if (currentUser.role === "vendor") {
+-      // Do not overwrite Vendor Name
+-    } else if (currentUser.role === "rider") {
+-      const r = riders.find(rid => rid.userId === currentUser.id);
+-      if (r) {
+-        const updatedR = { ...r, name, phone };
+-        persistRiders(riders.map(item => item.id === r.id ? updatedR : item));
+-        setCurrentRider(updatedR);
+-      }
+-    }
+-  };
+-
+-  const resetUserPin = (userId: string, newPin: string) => {
+-    const updatedUsers = users.map(u => u.id === userId ? { ...u, pin: newPin } : u);
+-    setUsers(updatedUsers);
+-    localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
+-    const targetUser = updatedUsers.find(u => u.id === userId);
+-    if (targetUser) syncSave("USER_UPSERT", targetUser);
+-    
+-    if (currentUser && currentUser.id === userId) {
+-      const updatedUser = { ...currentUser, pin: newPin };
+-      setCurrentUser(updatedUser);
+-      localStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+-    }
+-  };
+-
+-  // CART ACTIONS
+-  const addToCart = (product: Product, selectedAddons: Addon[] = []) => {
+-    const currentTotalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
+-
+-    if (cart.length > 0 && cart[0].product.vendorId !== product.vendorId) {
+-      // Clear cart first if item belongs to a different vendor (standard food rule)
+-      const newItem: CartItem = {
+-        id: "cart-" + generateId(),
+-        product,
+-        quantity: 1,
+-        selectedAddons,
+-      };
+-      setCart([newItem]);
+-    } else {
+-      // Find if we have an item with the exact same product ID AND exact same selected addons
+-      const index = cart.findIndex(item => {
+-        if (item.product.id !== product.id) return false;
+-        const itemAddons = item.selectedAddons || [];
+-        if (itemAddons.length !== selectedAddons.length) return false;
+-        // Check that all selectedAddons are in itemAddons with exact same quantities
+-        const sSorted = [...selectedAddons].sort((a, b) => a.id.localeCompare(b.id));
+-        const iSorted = [...itemAddons].sort((a, b) => a.id.localeCompare(b.id));
+-        return sSorted.every((sa, i) => sa.id === iSorted[i].id && (sa.quantity || 1) === (iSorted[i].quantity || 1));
+-      });
+-
+-      if (index > -1) {
+-        if (currentTotalQty + 1 > maxCartItems) {
+-          alert(`Maximum Order Limit Reached: A dispatch bike can convey a maximum of ${maxCartItems} items per order to guarantee safe transportation.`);
+-          return;
+-        }
+-        const newCart = [...cart];
+-        newCart[index].quantity += 1;
+-        setCart(newCart);
+-      } else {
+-        if (currentTotalQty + 1 > maxCartItems) {
+-          alert(`Maximum Order Limit Reached: A dispatch bike can convey a maximum of ${maxCartItems} items per order to guarantee safe transportation.`);
+-          return;
+-        }
+-        const newItem: CartItem = {
+-          id: "cart-" + generateId(),
+-          product,
+-          quantity: 1,
+-          selectedAddons,
+-        };
+-        setCart([...cart, newItem]);
+-      }
+-    }
+-  };
+-
+-  const removeFromCart = (id: string) => {
+-    if (cart.some(item => item.id === id)) {
+-      setCart(cart.filter(item => item.id !== id));
+-    } else {
+-      // Fallback: match by product.id
+-      setCart(cart.filter(item => item.product.id !== id));
+-    }
+-  };
+-
+-  const updateCartQuantity = (id: string, quantity: number) => {
+-    if (quantity <= 0) {
+-      removeFromCart(id);
+-      return;
+-    }
+-
+-    const itemToUpdate = cart.find(item => item.id === id) || cart.find(item => item.product.id === id);
+-    if (itemToUpdate) {
+-      const otherItemsQty = cart
+-        .filter(item => item.id !== itemToUpdate.id)
+-        .reduce((sum, item) => sum + item.quantity, 0);
+-      const prospectiveTotalQty = otherItemsQty + quantity;
+-      
+-      if (prospectiveTotalQty > maxCartItems) {
+-        alert(`Maximum Order Limit Reached: A dispatch bike can convey a maximum of ${maxCartItems} items per order to guarantee safe transportation.`);
+-        return;
+-      }
+-    }
+-
+-    if (cart.some(item => item.id === id)) {
+-      setCart(cart.map(item => item.id === id ? { ...item, quantity } : item));
+-    } else {
+-      // Fallback: match by product.id
+-      setCart(cart.map(item => item.product.id === id ? { ...item, quantity } : item));
+-    }
+-  };
+-
+-  const clearCart = () => setCart([]);
+-
+-  // CHECKOUT & CUSTOMER ACTIONS
+-  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => {
+-    let activeUser = currentUser;
+-    if (!activeUser) {
+-      const savedSession = localStorage.getItem("fd_session_user");
+-      if (savedSession) {
+-        try {
+-          activeUser = JSON.parse(savedSession);
+-        } catch {}
+-      }
+-    }
+-    if (!activeUser || cart.length === 0) return { success: false };
+-    
+-    const firstProduct = cart[0].product;
+-    const vendorObj = vendors.find(v => v.id === firstProduct.vendorId);
+-    
+-    if (!vendorObj) {
+-      return { success: false };
+-    }
+-
+-    const total = cart.reduce((sum, item) => {
+-      const addonCost = (item.selectedAddons || []).reduce((acc, ad) => acc + ((ad.price ?? 0) * (ad.quantity ?? 1)), 0);
+-      return sum + ((item.product.price + addonCost) * item.quantity);
+-    }, 0);
+-    const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
+-    const deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress);
+-    const serviceFee = calculateServiceFee(vendorObj.id, total);
+-
+     try {
+       let token = localStorage.getItem("fd_jwt_token");
+       
+       // Auto-recover JWT for old sessions if PIN is available
+       if (!token && activeUser?.pin && activeUser?.email) {
+         try {
+-          const loginRes = await fetch("/api/login", {
++          const loginRes = await fetch("/api/auth/login", {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({ email: activeUser.email, pin: activeUser.pin })
+@@ -3062,7 +2525,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+ 
+       if (!token) {
+         alert("Your session does not have a secure token. Please log out completely and log back in to refresh your session.");
+-        return { success: false };
++        return { success: false, error: "No secure token" };
+       }
+ 
+       const headers: any = { "Content-Type": "application/json" };
+@@ -3085,7 +2548,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+           serviceFee,
+           deliveryFee,
+           tax,
+-          items: cart.map(item => ({
++          receiptImage,
++          orderType: options?.orderType || "standard",
++          receiptImageOrQr: options?.receiptImageOrQr,
++          receiptNote: options?.receiptNote,
++          items: isReceiptPickup ? [] : cart.map(item => ({
+             productId: item.product.id,
+             name: item.product.name,
+             price: item.product.price,
+@@ -3171,6 +2638,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+       console.error("Checkout error:", error);
+       return { success: false };
+     }
++  
++    });
+   };
+ 
+   const addReview = (vendorId: string, rating: number, comment: string) => {
+@@ -3295,6 +2764,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+   };
+ 
+   const requestWalletFunding = async (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => {
++    return withUpdateLock(async () => {
+     const userObj = users.find(u => u.id === userId);
+     const userName = userObj ? userObj.name : "System User";
+     
+@@ -3370,6 +2840,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+       console.error("Wallet funding failed:", error);
+       return "";
+     }
++  
++    });
+   };
+ 
+   const approveWalletFunding = (transactionId: string) => {
+@@ -3434,15 +2906,15 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+     });
+   };
+ 
+-  // VENDOR ACTIONS
+-  const updateVendorOrder = (orderId: string, status: OrderStatus) => {
++  // VENDOR / ADMIN ACTIONS
++  const updateVendorOrder = (orderId: string, status: OrderStatus, updates: Partial<Order> = {}) => {
+     let orderToUpdate = orders.find(o => o.id === orderId);
+     if (!orderToUpdate) return;
+     
+     const updatedOrders = orders.map(o => {
+       if (o.id === orderId) {
+-        // If preparing is ready and a rider is already assigned, assign to rider or let status flow
+-        return { ...o, status };
++        // Merge any additional audit fields or updates provided
++        return { ...o, status, ...updates };
+       }
+       return o;
+     });
+@@ -3466,11 +2938,45 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+       orderId
+     );
+ 
+-    // Notify Admin about status change
++    // Notify Admin about status change (unless it's an admin verification action)
++    if (status !== "awaiting_payment_verification") {
++      addNotification(
++        "admin-1",
++        `Order #${orderId} Updated`,
++        `Order #${orderId} status has been updated to ${status} by ${orderToUpdate.vendorName || 'System'}.`,
++        "order",
++        orderId
++      );
++    }
++  };
++
++  const resubmitOrderReceipt = (orderId: string, newReceiptUrl: string) => {
++    let orderToUpdate = orders.find(o => o.id === orderId);
++    if (!orderToUpdate) return;
++    
++    const updatedOrders = orders.map(o => {
++      if (o.id === orderId) {
++        return {
++          ...o,
++          paymentReceiptUrl: newReceiptUrl,
++          status: "awaiting_payment_verification" as OrderStatus,
++          rejectionReason: undefined,
++          rejectedBy: undefined,
++          rejectedAt: undefined,
++        };
++      }
++      return o;
++    });
++    setOrders(updatedOrders);
++    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
++    
++    const targetOrder = updatedOrders.find(o => o.id === orderId);
++    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
++
+     addNotification(
+       "admin-1",
+-      `Order #${orderId} Updated`,
+-      `Order #${orderId} status has been updated to ${status} by ${orderToUpdate.vendorName}.`,
++      "Receipt Resubmitted 📝",
++      `Customer resubmitted a receipt for Order #${orderId}. Verification required.`,
+       "order",
+       orderId
+     );
+@@ -3565,6 +3071,22 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+     if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
+   };
+ 
++  const updateOrderPayoutStatus = (orderId: string, recipientType: "rider" | "vendor", status: "pending" | "paid") => {
++    const updatedOrders = orders.map(o => {
++      if (o.id === orderId) {
++        if (recipientType === "rider") return { ...o, riderPayoutStatus: status };
++        if (recipientType === "vendor") return { ...o, vendorPayoutStatus: status };
++      }
++      return o;
++    });
++    setOrders(updatedOrders);
++    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
++    const targetOrder = updatedOrders.find(o => o.id === orderId);
++    if (targetOrder) {
++      syncSave("ORDER_UPSERT", targetOrder);
++    }
++  };
++
+   const updateDeliveryStatus = (orderId: string, status: OrderStatus) => {
+     let orderToUpdate = orders.find(o => o.id === orderId);
+     if (!orderToUpdate) return;
+@@ -3996,151 +3518,6 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+     return { success: true };
+   };
+ 
+-  // --- RECEIPT PICKUP & DELIVERY FUNCTIONS ---
+-  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => {
+-    if (!currentUser) return { success: false, error: "Not logged in" };
+-    
+-    // Auto-approve if standard method, else pending
+-    const status = orderData.paymentMethod === "cash" || orderData.paymentMethod === "wallet" 
+-      ? "pending" 
+-      : "pending";
+-
+-    // Deduct from wallet if wallet
+-    if (orderData.paymentMethod === "wallet") {
+-      const bal = getUserWalletBalance(currentUser.id);
+-      const totalAmount = orderData.deliveryFee + receiptPickupConfig.flatServiceFee;
+-      if (bal < totalAmount) {
+-        return { success: false, error: "Insufficient wallet balance" };
+-      }
+-      updateUserWalletBalance(
+-        currentUser.id,
+-        -totalAmount,
+-        "purchase",
+-        `Payment for receipt pickup from ${orderData.vendorName}`
+-      );
+-    }
+-
+-    const newOrder: ReceiptPickupOrder = {
+-      ...orderData,
+-      id: "owf-rp-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
+-      status: "awaiting_admin_verification",
+-      paymentStatus: orderData.paymentMethod === "wallet" ? "paid" : "unpaid",
+-      createdAt: new Date().toISOString()
+-    };
+-
+-    const nextOrders = [newOrder, ...receiptPickupOrders];
+-    setReceiptPickupOrders(nextOrders);
+-    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(nextOrders));
+-    syncSave("RECEIPT_PICKUP_UPSERT", newOrder);
+-
+-    addNotification(
+-      "admin",
+-      "New Receipt Pickup & Delivery Request",
+-      `${orderData.customerName} requested pickup from ${orderData.vendorName} for delivery to ${orderData.deliveryAddress}.`,
+-      "delivery",
+-      newOrder.id
+-    );
+-
+-    addNotification(
+-      orderData.vendorId,
+-      "Receipt Pickup Scheduled",
+-      `A customer (${orderData.customerName}) has scheduled a receipt/QR-code pickup at your store. Ref: #${newOrder.id}`,
+-      "delivery",
+-      newOrder.id
+-    );
+-
+-    return { success: true, orderId: newOrder.id };
+-  };
+-
+-  const acceptReceiptPickupDelivery = (orderId: string, riderId: string) => {
+-    const rider = riders.find(r => r.id === riderId);
+-    if (!rider) return;
+-
+-    const updated = receiptPickupOrders.map(o => {
+-      if (o.id === orderId) {
+-        addNotification(
+-          o.customerId,
+-          "Rider Assigned to Receipt Pickup",
+-          `Rider ${rider.name} is on the way to pick up your pre-purchased items from ${o.vendorName}.`,
+-          "delivery",
+-          orderId
+-        );
+-        addNotification(
+-          o.vendorId,
+-          "Rider Dispatched for Pickup",
+-          `Rider ${rider.name} has accepted the pickup for #${orderId} and is on their way to your store.`,
+-          "delivery",
+-          orderId
+-        );
+-        return {
+-          ...o,
+-          riderId: rider.id,
+-          riderName: rider.name,
+-          status: "accepted" as const
+-        };
+-      }
+-      return o;
+-    });
+-    setReceiptPickupOrders(updated);
+-    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(updated));
+-    
+-    const updatedOrder = updated.find(o => o.id === orderId);
+-    if (updatedOrder) {
+-      syncSave("RECEIPT_PICKUP_UPSERT", updatedOrder);
+-    }
+-  };
+-
+-  const updateReceiptPickupStatus = (orderId: string, status: ReceiptPickupOrder["status"]) => {
+-    const updated = receiptPickupOrders.map(o => {
+-      if (o.id === orderId) {
+-        let title = "";
+-        let msg = "";
+-        if (status === "picked_up") {
+-          title = "Receipt Order Picked Up";
+-          msg = `Rider has verified the receipt at ${o.vendorName} and picked up your items!`;
+-        } else if (status === "delivered") {
+-          title = "Receipt Order Delivered";
+-          msg = `Your pre-purchased items from ${o.vendorName} have been delivered successfully!`;
+-        } else if (status === "cancelled") {
+-          title = "Receipt Order Cancelled";
+-          msg = `Your receipt pickup and delivery order #${orderId} was cancelled.`;
+-          
+-          if (o.paymentMethod === "wallet" && o.paymentStatus === "paid") {
+-            updateUserWalletBalance(
+-              o.customerId,
+-              o.deliveryFee,
+-              "refund",
+-              `Refund of delivery fee for cancelled receipt order #${orderId}`
+-            );
+-          }
+-        }
+-
+-        if (title && msg) {
+-          addNotification(o.customerId, title, msg, "delivery", orderId);
+-          addNotification(o.vendorId, title, msg, "delivery", orderId);
+-        }
+-
+-        return {
+-          ...o,
+-          status,
+-          paymentStatus: status === "delivered" ? "paid" as const : o.paymentStatus
+-        };
+-      }
+-      return o;
+-    });
+-    setReceiptPickupOrders(updated);
+-    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(updated));
+-    
+-    const updatedOrder = updated.find(o => o.id === orderId);
+-    if (updatedOrder) {
+-      syncSave("RECEIPT_PICKUP_UPSERT", updatedOrder);
+-    }
+-  };
+-
+-  const cancelReceiptPickupOrder = (orderId: string) => {
+-    updateReceiptPickupStatus(orderId, "cancelled");
+-  };
+-
+   const socketRef = useRef<Socket | null>(null);
+ 
+   const publicVapidKey = "BPEg3-o75k9oT_P58tN3X8w3D0aC7CgT8Qd2lE_244FqL9c-859ZpA34A_R-V9t-V7h48x3Yp8M06xR61O4hXwI";
+@@ -4267,6 +3644,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+         categoryServiceFees,
+         updateCategoryServiceFee,
+         vendorCategories,
++        isDataLoading,
+         addVendorCategory,
+         removeVendorCategory,
+         updateVendorCategory,
+@@ -4329,11 +3707,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+         clearCart,
+         placeOrder,
+         updateVendorOrder,
++        resubmitOrderReceipt,
+         addProduct,
+         updateProduct,
+         deleteProduct,
+         updateVendorProfile,
+         acceptDelivery,
++        updateOrderPayoutStatus,
+         updateDeliveryStatus,
+         updateRiderProfile,
+         toggleVendorStatus,
+@@ -4383,11 +3763,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
+         // Receipt Pickup & Delivery System
+         receiptPickupConfig,
+         updateReceiptPickupConfig,
+-        receiptPickupOrders,
+-        createReceiptPickupOrder,
+-        acceptReceiptPickupDelivery,
+-        updateReceiptPickupStatus,
+-        cancelReceiptPickupOrder,
++
+       }}
+     >
+       {children}

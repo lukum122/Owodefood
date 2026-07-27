@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, UserRole } from "../types";
-import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign } from "lucide-react";
+import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign, XCircle } from "lucide-react";
 
 export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string } | null | undefined) => {
   if (user?.profileImage) return user.profileImage;
@@ -16,13 +16,14 @@ export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string 
 };
 
 export const CustomerOrders: React.FC = () => {
-  const { orders, currentUser, currency } = useDatabase();
+  const { orders, currentUser, currency, resubmitOrderReceipt } = useDatabase();
 
   // Filter orders where customer matches current logged user
   const customerOrders = orders.filter(o => o.customerId === currentUser?.id);
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
+      case "awaiting_payment_verification": return "text-orange-600 bg-orange-50 border-orange-200";
       case "pending": return "text-yellow-600 bg-yellow-50 border-yellow-200";
       case "accepted": return "text-blue-600 bg-blue-50 border-blue-200";
       case "preparing": return "text-indigo-600 bg-indigo-50 border-indigo-200";
@@ -35,6 +36,7 @@ export const CustomerOrders: React.FC = () => {
 
   const getStatusStep = (status: OrderStatus): number => {
     switch (status) {
+      case "awaiting_payment_verification": return -2;
       case "pending": return 0;
       case "accepted": return 1;
       case "preparing": return 2;
@@ -112,9 +114,54 @@ export const CustomerOrders: React.FC = () => {
                       })}
                     </div>
                   </div>
+                ) : currentStep === -2 ? (
+                  <div className={`p-5 border rounded-2xl text-xs flex flex-col gap-3 ${order.rejectionReason ? 'bg-red-50 border-red-200 text-red-900' : 'bg-orange-50 border-orange-200 text-orange-900'}`}>
+                    <div className="flex items-start gap-3">
+                      <ShieldCheck className={`w-5 h-5 shrink-0 ${order.rejectionReason ? 'text-red-600' : 'text-orange-600'}`} />
+                      <div>
+                        <p className={`font-bold text-sm ${order.rejectionReason ? 'text-red-700' : 'text-orange-700'}`}>
+                          {order.rejectionReason ? "Payment Rejected" : "Awaiting Payment Verification"}
+                        </p>
+                        <p className={`opacity-90 mt-1 ${order.rejectionReason ? 'text-red-800' : 'text-orange-800'}`}>
+                          {order.rejectionReason ? (
+                            <>Your payment receipt was rejected. Reason: <b>{order.rejectionReason}</b>. Please upload a valid replacement receipt below to continue processing this order.</>
+                          ) : (
+                            "Your payment receipt has been submitted and is currently being verified by an administrator. Once approved, your order will automatically be sent to the kitchen."
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    {order.rejectionReason && (
+                      <div className="mt-2 bg-white rounded-xl border border-red-100 p-4">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id={`receipt-upload-${order.id}`}
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              const reader = new FileReader();
+                              reader.onload = (evt) => {
+                                if (evt.target?.result) {
+                                  resubmitOrderReceipt(order.id, evt.target.result as string);
+                                }
+                              };
+                              reader.readAsDataURL(e.target.files[0]);
+                            }
+                          }}
+                        />
+                        <label 
+                          htmlFor={`receipt-upload-${order.id}`}
+                          className="flex items-center justify-center gap-2 w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg cursor-pointer transition"
+                        >
+                          <Upload className="w-4 h-4" /> Upload Replacement Receipt
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <div className="p-4 bg-red-50 text-red-600 border border-red-100 rounded-2xl text-xs font-bold">
-                    This order was cancelled.
+                  <div className="p-4 bg-red-50 text-red-600 border border-red-100 rounded-2xl text-xs font-bold flex items-center gap-2">
+                    <XCircle className="w-4 h-4" /> This order was cancelled.
                   </div>
                 )}
 
@@ -123,12 +170,26 @@ export const CustomerOrders: React.FC = () => {
                   <div className="space-y-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100 text-xs">
                     <p className="font-bold text-gray-900 uppercase tracking-wide">Basket Contents</p>
                     <div className="divide-y divide-gray-100">
-                      {order.items.map((item, id) => (
-                        <div key={id} className="py-2 flex justify-between">
-                          <span className="text-gray-600">{item.name} <b className="text-gray-900">x{item.quantity}</b></span>
-                          <span className="font-bold text-gray-800 font-mono">{currency}{((item.price ?? 0) * item.quantity).toLocaleString()}</span>
+                      {order.orderType === "receipt_pickup" ? (
+                        <div className="py-2 flex flex-col space-y-2">
+                          <span className="text-gray-900 font-bold">Receipt Pickup Request</span>
+                          {order.receiptNote && (
+                            <span className="text-gray-600 text-[10px]">Note: {order.receiptNote}</span>
+                          )}
+                          {order.receiptImageOrQr && (
+                            <a href={order.receiptImageOrQr} target="_blank" rel="noreferrer" className="text-blue-600 underline text-[10px]">
+                              View Receipt / QR
+                            </a>
+                          )}
                         </div>
-                      ))}
+                      ) : (
+                        order.items.map((item, id) => (
+                          <div key={id} className="py-2 flex justify-between">
+                            <span className="text-gray-600">{item.name} <b className="text-gray-900">x{item.quantity}</b></span>
+                            <span className="font-bold text-gray-800 font-mono">{currency}{((item.price ?? 0) * item.quantity).toLocaleString()}</span>
+                          </div>
+                        ))
+                      )}
                       {order.serviceFee !== undefined && order.serviceFee !== null && (
                         <div className="py-2 flex justify-between text-[11px] font-medium border-t border-dashed border-gray-200 mt-1 pt-2">
                           <span className="text-gray-500">Service Fee</span>

@@ -64,7 +64,9 @@ export const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ child
       employee: "/admin/dashboard",
       super_admin: "/admin/dashboard",
     };
-    return <Navigate to={defaultRedirects[currentUser.role] || "/"} replace />;
+    const target = defaultRedirects[currentUser.role] || "/";
+    window.location.href = target;
+    return null;
   }
 
   return <>{children}</>;

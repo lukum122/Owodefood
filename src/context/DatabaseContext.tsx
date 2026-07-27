@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, ReceiptPickupOrder, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
+import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
 import { hasRole } from "../roleHelper";
+import { useUpdateManager } from './UpdateManagerContext';
 
 export interface CartItem {
   id: string;
@@ -53,7 +54,7 @@ interface DatabaseContextType {
   globalFreeDelivery: boolean;
   updateGlobalFreeDelivery: (isEnabled: boolean) => void;
   calculateServiceFee: (vendorId: string | undefined, subtotal: number) => number;
-  calculateDeliveryFee: (vendorId: string | undefined, subtotal: number, deliveryAddress?: string) => number;
+  calculateDeliveryFee: (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean) => number;
   currency: string;
   updateCurrency: (symbol: string) => void;
   
@@ -111,7 +112,7 @@ interface DatabaseContextType {
   clearCart: () => void;
   
   // Checkout & Customer Actions
-  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => Promise<{ success: boolean; orderId?: string }>;
+  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string }>;
   
   // Vendor Actions
   updateVendorOrder: (orderId: string, status: OrderStatus) => void;
@@ -2373,8 +2374,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     return "other";
   };
 
-  const calculateDeliveryFee = (vendorId: string | undefined, subtotal: number, deliveryAddress?: string): number => {
-    if (subtotal <= 0) return 0;
+  const calculateDeliveryFee = (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean): number => {
+    if (subtotal <= 0 && !isReceiptPickup) return 0;
     if (globalFreeDelivery) return 0;
     
     if (!vendorId) return 750;
@@ -3014,7 +3015,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const clearCart = () => setCart([]);
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string) => {
+  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => {
     let activeUser = currentUser;
     if (!activeUser) {
       const savedSession = localStorage.getItem("fd_session_user");
@@ -3038,8 +3039,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       return sum + ((item.product.price + addonCost) * item.quantity);
     }, 0);
     const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
-    const deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress);
-    const serviceFee = calculateServiceFee(vendorObj.id, total);
+    const isReceiptPickup = options?.orderType === "receipt_pickup";
+    const deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress, isReceiptPickup);
+    const serviceFee = isReceiptPickup ? (receiptPickupConfig.flatServiceFee || 0) : calculateServiceFee(vendorObj.id, total);
 
     try {
       let token = localStorage.getItem("fd_jwt_token");

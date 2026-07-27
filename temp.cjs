@@ -1,0 +1,1 @@
+const fs = require('fs'); const txt = fs.readFileSync('server.ts', 'utf8'); const idx1 = txt.indexOf('case \"PRODUCT_UPSERT\":'); console.log('Line number of first occurrence:', txt.substring(0, idx1).split('\n').length);

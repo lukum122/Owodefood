@@ -9,7 +9,7 @@ export default defineConfig(() => {
       react(), 
       tailwindcss(),
       VitePWA({
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         workbox: {
           clientsClaim: true,
           skipWaiting: true

@@ -1,21 +1,45 @@
 import React, { useState } from "react";
 import { Search, Eye, CheckCircle, Clock } from "lucide-react";
+import { useDatabase } from "../context/DatabaseContext";
+import { Order } from "../types";
 
 export const AdminPayouts: React.FC = () => {
+  const { orders, updateOrderPayoutStatus, currency } = useDatabase();
   const [activeTab, setActiveTab] = useState<"rider" | "vendor">("rider");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Placeholder data for Rider Payouts
-  const mockRiderPayouts = [
-    { id: "ORD-1234", rider: "John Doe", customer: "Alice Smith", deliveryFee: 750, date: "2026-07-22", status: "pending" },
-    { id: "ORD-1235", rider: "Jane Rider", customer: "Bob Jones", deliveryFee: 800, date: "2026-07-22", status: "paid" },
-  ];
+  const handlePay = (orderId: string, type: "rider" | "vendor") => {
+    if (window.confirm(`Mark this ${type} payout as PAID?`)) {
+      updateOrderPayoutStatus(orderId, type, "paid");
+    }
+  };
 
-  // Placeholder data for Vendor Payouts
-  const mockVendorPayouts = [
-    { id: "ORD-1234", vendor: "Burger King", customer: "Alice Smith", foodAmount: 5000, commission: 500, receivable: 4500, status: "pending" },
-    { id: "ORD-1236", vendor: "KFC", customer: "Charlie Davis", foodAmount: 12000, commission: 1200, receivable: 10800, status: "paid" },
-  ];
+  const filteredOrders = orders.filter((o) => {
+    // Only show completed/delivered orders
+    if (o.status !== "delivered") return false;
+    
+    // Status filter
+    if (activeTab === "rider") {
+      if (statusFilter === "pending" && o.riderPayoutStatus !== "pending") return false;
+      if (statusFilter === "paid" && o.riderPayoutStatus !== "paid") return false;
+    } else {
+      if (statusFilter === "pending" && o.vendorPayoutStatus !== "pending") return false;
+      if (statusFilter === "paid" && o.vendorPayoutStatus !== "paid") return false;
+    }
+
+    // Search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!o.id.toLowerCase().includes(q) &&
+          !o.vendorName.toLowerCase().includes(q) &&
+          !(o.riderName || "").toLowerCase().includes(q) &&
+          !o.customerName.toLowerCase().includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -74,41 +98,50 @@ export const AdminPayouts: React.FC = () => {
                   <th className="p-4">Order ID</th>
                   <th className="p-4">Rider</th>
                   <th className="p-4">Customer</th>
-                  <th className="p-4">Delivery Date</th>
                   <th className="p-4">Delivery Fee</th>
+                  <th className="p-4">Delivery Date</th>
                   <th className="p-4 text-center">Status</th>
                   <th className="p-4 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
-                {mockRiderPayouts.map((payout, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-mono font-medium text-gray-600">{payout.id}</td>
-                    <td className="p-4 font-bold text-gray-900">{payout.rider}</td>
-                    <td className="p-4 text-gray-600">{payout.customer}</td>
-                    <td className="p-4 text-gray-500">{payout.date}</td>
-                    <td className="p-4 font-bold text-gray-900">₦{payout.deliveryFee.toLocaleString()}</td>
-                    <td className="p-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
-                        payout.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+              <tbody className="divide-y divide-gray-100">
+              {filteredOrders.filter(o => o.riderId).length > 0 ? (
+                filteredOrders.filter(o => o.riderId).map((payout) => (
+                  <tr key={payout.id} className="hover:bg-gray-50/50 transition group">
+                    <td className="px-5 py-4 font-mono font-bold text-gray-900 text-xs">#{payout.id}</td>
+                    <td className="px-5 py-4 font-bold text-gray-800 text-sm">{payout.riderName}</td>
+                    <td className="px-5 py-4 font-medium text-gray-600 text-xs">{payout.customerName}</td>
+                    <td className="px-5 py-4 font-mono font-black text-gray-900">{currency}{payout.deliveryFee?.toLocaleString() || 0}</td>
+                    <td className="px-5 py-4 font-medium text-gray-500 text-xs">{new Date(payout.createdAt).toLocaleDateString()}</td>
+                    <td className="px-5 py-4 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
+                        payout.riderPayoutStatus === "paid" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
                       }`}>
-                        {payout.status === 'paid' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        {payout.status}
+                        {payout.riderPayoutStatus === "paid" ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                        {payout.riderPayoutStatus.toUpperCase()}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button className="p-1.5 text-gray-400 hover:text-[#0ea5e9] hover:bg-sky-50 rounded-lg transition" title="View Details">
-                          <Eye className="w-4 h-4" />
+                    <td className="px-5 py-4 text-center">
+                      {payout.riderPayoutStatus === "pending" ? (
+                        <button onClick={() => handlePay(payout.id, "rider")} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition active:scale-95">
+                          Pay Now
                         </button>
-                        <button className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-[10px] font-bold uppercase tracking-wide rounded-lg transition" title="Mark as Paid">
-                          Pay
+                      ) : (
+                        <button className="px-4 py-2 bg-gray-100 text-gray-400 text-xs font-bold rounded-lg cursor-not-allowed">
+                          Settled
                         </button>
-                      </div>
+                      )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-gray-500 font-medium text-sm">
+                    No rider payouts found matching your criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
             </table>
           ) : (
             <table className="w-full text-left border-collapse">
@@ -124,36 +157,48 @@ export const AdminPayouts: React.FC = () => {
                   <th className="p-4 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
-                {mockVendorPayouts.map((payout, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-mono font-medium text-gray-600">{payout.id}</td>
-                    <td className="p-4 font-bold text-gray-900">{payout.vendor}</td>
-                    <td className="p-4 text-gray-600">{payout.customer}</td>
-                    <td className="p-4 font-medium text-gray-500">₦{payout.foodAmount.toLocaleString()}</td>
-                    <td className="p-4 font-medium text-rose-500">-₦{payout.commission.toLocaleString()}</td>
-                    <td className="p-4 font-black text-gray-900">₦{payout.receivable.toLocaleString()}</td>
-                    <td className="p-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
-                        payout.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+              <tbody className="divide-y divide-gray-100">
+              {filteredOrders.length > 0 ? (
+                filteredOrders.map((payout) => (
+                  <tr key={payout.id} className="hover:bg-gray-50/50 transition group">
+                    <td className="px-5 py-4 font-mono font-bold text-gray-900 text-xs">#{payout.id}</td>
+                    <td className="px-5 py-4 font-bold text-gray-800 text-sm">{payout.vendorName}</td>
+                    <td className="px-5 py-4 font-medium text-gray-600 text-xs">{payout.customerName}</td>
+                    <td className="px-5 py-4 font-mono font-bold text-gray-600">{currency}{payout.totalAmount.toLocaleString()}</td>
+                    <td className="px-5 py-4 font-mono font-bold text-red-500">
+                      -{currency}{((payout.totalAmount * 0.1) || 0).toLocaleString()} 
+                      <span className="text-[9px] text-gray-400 ml-1 bg-gray-100 px-1 py-0.5 rounded">10%</span>
+                    </td>
+                    <td className="px-5 py-4 font-mono font-black text-emerald-600">{currency}{(payout.totalAmount - (payout.totalAmount * 0.1) || 0).toLocaleString()}</td>
+                    <td className="px-5 py-4 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${
+                        payout.vendorPayoutStatus === "paid" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
                       }`}>
-                        {payout.status === 'paid' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                        {payout.status}
+                        {payout.vendorPayoutStatus === "paid" ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                        {payout.vendorPayoutStatus.toUpperCase()}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button className="p-1.5 text-gray-400 hover:text-[#0ea5e9] hover:bg-sky-50 rounded-lg transition" title="View Details">
-                          <Eye className="w-4 h-4" />
+                    <td className="px-5 py-4 text-center">
+                      {payout.vendorPayoutStatus === "pending" ? (
+                        <button onClick={() => handlePay(payout.id, "vendor")} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition active:scale-95">
+                          Pay Now
                         </button>
-                        <button className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white text-[10px] font-bold uppercase tracking-wide rounded-lg transition" title="Mark as Paid">
-                          Pay
+                      ) : (
+                        <button className="px-4 py-2 bg-gray-100 text-gray-400 text-xs font-bold rounded-lg cursor-not-allowed">
+                          Settled
                         </button>
-                      </div>
+                      )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="px-5 py-12 text-center text-gray-500 font-medium text-sm">
+                    No vendor payouts found matching your criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
             </table>
           )}
         </div>
@@ -166,6 +211,16 @@ export const AdminPayouts: React.FC = () => {
             <button className="px-3 py-1 border border-gray-200 rounded-lg bg-gray-50 font-bold">1</button>
             <button className="px-3 py-1 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">Next</button>
           </div>
+
+          <select 
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-2 focus:ring-[#0ea5e9]/20 focus:border-[#0ea5e9] outline-none"
+          >
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending Only</option>
+            <option value="paid">Paid Only</option>
+          </select>
         </div>
       </div>
     </div>

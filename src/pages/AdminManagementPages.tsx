@@ -13,14 +13,11 @@ export const AdminOrders: React.FC = () => {
     currency, 
     vatEnabled, 
     vatRate,
-    receiptPickupOrders,
-    updateReceiptPickupStatus,
-    acceptReceiptPickupDelivery,
     acceptDelivery,
     riders
   } = useDatabase();
 
-  const [orderTypeTab, setOrderTypeTab] = useState<"standard" | "receipt_pickup">("standard");
+  const [orderTypeTab, setOrderTypeTab] = useState<"standard" | "receipt_pickup" | "verification">("standard");
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -28,6 +25,23 @@ export const AdminOrders: React.FC = () => {
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any | null>(null);
   const [receiptCancelTargetId, setReceiptCancelTargetId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
+  const handleVerifyPayment = (id: string, action: "approve" | "reject") => {
+    if (action === "approve") {
+      updateVendorOrder(id, "pending", {
+        verifiedBy: "admin",
+        verifiedAt: new Date().toISOString(),
+      });
+    } else {
+      const reason = prompt("Enter rejection reason:");
+      if (!reason) return; // cancelled prompt
+      updateVendorOrder(id, "awaiting_payment_verification", {
+        rejectedBy: "admin",
+        rejectedAt: new Date().toISOString(),
+        rejectionReason: reason,
+      });
+    }
+  };
 
   const handleForceCancel = (id: string) => {
     setCancelTargetId(id);
@@ -46,7 +60,7 @@ export const AdminOrders: React.FC = () => {
 
   const handleConfirmForceCancelReceipt = () => {
     if (receiptCancelTargetId) {
-      updateReceiptPickupStatus(receiptCancelTargetId, "cancelled");
+      updateVendorOrder(receiptCancelTargetId, "cancelled");
       setReceiptCancelTargetId(null);
       if (selectedReceiptOrder && selectedReceiptOrder.id === receiptCancelTargetId) {
         setSelectedReceiptOrder({ ...selectedReceiptOrder, status: "cancelled" });
@@ -472,7 +486,7 @@ export const AdminOrders: React.FC = () => {
                     onChange={(e) => {
                       const selectedRiderId = e.target.value;
                       if (!selectedRiderId) return;
-                      acceptReceiptPickupDelivery(selectedReceiptOrder.id, selectedRiderId);
+                      acceptDelivery(selectedReceiptOrder.id, selectedRiderId);
                       const selectedRiderObj = activeRiders.find(r => r.id === selectedRiderId);
                       if (selectedRiderObj) {
                         setSelectedReceiptOrder({ 
@@ -499,7 +513,7 @@ export const AdminOrders: React.FC = () => {
                       value={selectedReceiptOrder.status}
                       onChange={(e) => {
                         const nextStatus = e.target.value as any;
-                        updateReceiptPickupStatus(selectedReceiptOrder.id, nextStatus);
+                        updateVendorOrder(selectedReceiptOrder.id, nextStatus);
                         setSelectedReceiptOrder({ ...selectedReceiptOrder, status: nextStatus });
                       }}
                       className="text-xs p-2.5 bg-white border border-gray-255 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 flex-grow font-sans font-bold text-gray-700 cursor-pointer"
@@ -604,7 +618,7 @@ export const AdminOrders: React.FC = () => {
       </div>
 
       {/* Sub-tabs for standard versus receipt pickup */}
-      <div className="flex gap-2 border-b border-gray-100 pb-3">
+      <div className="flex gap-2 border-b border-gray-100 pb-3 mt-6">
         <button
           onClick={() => setOrderTypeTab("standard")}
           className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
@@ -613,7 +627,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({orders.length})
+          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({orders.filter(o => o.orderType !== "receipt_pickup").length})
         </button>
         <button
           onClick={() => setOrderTypeTab("receipt_pickup")}
@@ -623,13 +637,22 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <Truck className="w-4 h-4" /> Receipt Pickups ({receiptPickupOrders.length})
+          <Truck className="w-4 h-4" /> Receipt Pickups ({orders.filter(o => o.orderType === "receipt_pickup").length})
+        </button>
+        <button
+          onClick={() => setOrderTypeTab("verification")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "verification"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4" /> Payment Verification
         </button>
       </div>
-
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
         {orderTypeTab === "standard" ? (
-          orders.length > 0 ? (
+          orders.filter(o => o.orderType !== "receipt_pickup").length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
                 <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
@@ -649,7 +672,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
-                    {orders.map((o) => (
+                    {orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification").map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
@@ -700,7 +723,7 @@ export const AdminOrders: React.FC = () => {
             </div>
           )
         ) : (
-          receiptPickupOrders.length > 0 ? (
+          orders.filter(o => o.orderType === "receipt_pickup").length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
                 <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
@@ -720,7 +743,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
-                    {receiptPickupOrders.map((rp: any) => (
+                    {orders.filter(o => o.orderType === "receipt_pickup").map((rp: any) => (
                       <tr key={rp.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-3.5 px-4 font-mono font-bold text-sky-950">#{rp.id}</td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{rp.vendorName}</td>
@@ -830,7 +853,7 @@ export const AdminOrders: React.FC = () => {
 
 /* 2. MERCHANT LICENSE MANAGER SCREEN */
 export const AdminVendors: React.FC = () => {
-  const { vendors, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency } = useDatabase();
+  const { vendors, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [] } = useDatabase();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   
   // Local edit states
@@ -838,6 +861,7 @@ export const AdminVendors: React.FC = () => {
   const [editCategory, setEditCategory] = useState<string>("restaurant");
   const [editCuisine, setEditCuisine] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editZone, setEditZone] = useState("");
   const [editPrepTime, setEditPrepTime] = useState(20);
   const [editDeliveryFee, setEditDeliveryFee] = useState(750);
   const [editServiceFee, setEditServiceFee] = useState<number | undefined>(undefined);
@@ -864,7 +888,22 @@ export const AdminVendors: React.FC = () => {
     setEditName(v.name);
     setEditCategory(v.category || "restaurant");
     setEditCuisine(v.cuisine);
-    setEditAddress(v.address);
+    
+    // Extract zone and address if concatenated
+    let addr = v.address;
+    let zone = "";
+    if (addr.includes(", ")) {
+      const parts = addr.split(", ");
+      zone = parts[parts.length - 1];
+      if (availableLocations.includes(zone)) {
+        addr = parts.slice(0, -1).join(", ");
+      } else {
+        zone = ""; // not a standard zone
+      }
+    }
+    setEditAddress(addr);
+    setEditZone(zone);
+    
     setEditPrepTime(v.prepTime || 20);
     setEditDeliveryFee(v.deliveryFee !== undefined ? v.deliveryFee : 750);
     setEditServiceFee(v.serviceFee);
@@ -882,12 +921,12 @@ export const AdminVendors: React.FC = () => {
 
   const handleSaveChanges = () => {
     if (!selectedVendor) return;
-    
+    const finalAddress = editAddress.trim() + (editZone ? `, ${editZone}` : "");
     adminUpdateVendor(selectedVendor.id, {
       name: editName,
-      category: editCategory,
+      category: editCategory as any,
       cuisine: editCuisine,
-      address: editAddress,
+      address: finalAddress,
       prepTime: editPrepTime,
       deliveryFee: editDeliveryFee,
       serviceFee: editServiceFee,
@@ -1279,6 +1318,24 @@ export const AdminVendors: React.FC = () => {
                       onChange={(e) => setEditAddress(e.target.value)}
                       className="w-full text-xs pl-9 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900"
                     />
+                  </div>
+                </div>
+
+                {/* Zone Location */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Vendor Location Zone (For Cross-Zone Calculation)</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-3 w-4 h-4 text-[#0ea5e9]" />
+                    <select
+                      value={editZone}
+                      onChange={(e) => setEditZone(e.target.value)}
+                      className="w-full text-xs pl-9 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900 appearance-none"
+                    >
+                      <option value="" disabled>Select a location zone</option>
+                      {availableLocations.map((loc) => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -2581,7 +2638,10 @@ export const AdminSettings: React.FC = () => {
     removeExtremeLocation,
     updateExtremeLocations,
     receiptPickupConfig,
-    updateReceiptPickupConfig
+    updateReceiptPickupConfig,
+    orders,
+    updateAdminSettings,
+    saveReceiptPickupConfig
   } = useDatabase();
   
   const [newLocTierId, setNewLocTierId] = useState(""); // "" means No Surcharge / Base Fee

@@ -8,8 +8,7 @@ export const RiderHistory: React.FC = () => {
     orders, 
     currency,
     riderCommissionType,
-    riderCommissionValue,
-    receiptPickupOrders
+    riderCommissionValue
   } = useDatabase();
 
   if (!currentRider) {
@@ -18,11 +17,11 @@ export const RiderHistory: React.FC = () => {
 
   // Historic orders delivered by current rider
   const pastOrders = orders.filter(
-    o => o.riderId === currentRider.id && o.status === "delivered"
+    o => o.riderId === currentRider.id && o.status === "delivered" && o.orderType !== "receipt_pickup"
   );
 
-  const pastReceiptOrders = (receiptPickupOrders || []).filter(
-    o => o.riderId === currentRider.id && o.status === "delivered"
+  const pastReceiptOrders = (orders || []).filter(
+    o => o.orderType === "receipt_pickup" && o.riderId === currentRider.id && o.status === "delivered"
   );
 
   // Helper to compute net rider payout after platform commission

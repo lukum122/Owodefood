@@ -1,0 +1,1 @@
+const { Pool } = require('pg'); const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/owodefood' }); pool.query('SELECT column_name FROM information_schema.columns WHERE table_name=\'products\'').then(res => { console.log(res.rows); pool.end(); }).catch(console.error);

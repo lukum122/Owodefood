@@ -22,7 +22,6 @@ import {
   reviews,
   walletTransactions,
   appNotifications,
-  receiptPickupOrders,
   pushSubscriptions,
   auditLogs,
 } from "./src/db/schema.ts";
@@ -195,7 +194,7 @@ app.post("/api/email/test", async (req, res) => {
     `
     <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
       <div style="text-align: center; margin-bottom: 24px;">
-        <span style="font-size: 32px;">🍔</span>
+        <span style="font-size: 32px;">≡ƒìö</span>
         <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food Marketplace</h2>
         <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">SMTP Secure Relay Connected</span>
       </div>
@@ -247,7 +246,7 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
     `
     <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
       <div style="text-align: center; margin-bottom: 24px;">
-        <span style="font-size: 32px;">🍔</span>
+        <span style="font-size: 32px;">≡ƒìö</span>
         <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food</h2>
         <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Secure Account Verification</span>
       </div>
@@ -388,7 +387,6 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
     let allEmployees: any[] = [];
     let allWalletTransactions: any[] = [];
     let allAppNotifications: any[] = [];
-    let allReceiptPickupOrders: any[] = [];
 
     if (isAdmin) {
       // Admins get everything
@@ -400,7 +398,6 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       allEmployees = await db.select().from(employees);
       allWalletTransactions = await db.select().from(walletTransactions);
       allAppNotifications = await db.select().from(appNotifications);
-      allReceiptPickupOrders = await db.select().from(receiptPickupOrders);
     } else if (reqUser) {
       // Regular user / Vendor / Rider - Tenant Isolation
       allUsers = await db.select().from(users).where(eq(users.id, reqUser.id));
@@ -425,17 +422,6 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       allSavedAddresses = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id));
       allWalletTransactions = await db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id));
       allAppNotifications = await db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id));
-      
-      const isRider = reqUser.roles?.includes("rider");
-      const rpOrdersFilter = userVendor 
-        ? (isRider 
-            ? sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.vendorId} = ${userVendor.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id} OR (${receiptPickupOrders.riderId} IS NULL AND ${receiptPickupOrders.status} = 'ready_for_rider')`
-            : sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.vendorId} = ${userVendor.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`)
-        : (isRider
-            ? sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id} OR (${receiptPickupOrders.riderId} IS NULL AND ${receiptPickupOrders.status} = 'ready_for_rider')`
-            : sql`${receiptPickupOrders.customerId} = ${reqUser.id} OR ${receiptPickupOrders.riderId} = ${reqUser.id}`);
-        
-      allReceiptPickupOrders = await db.select().from(receiptPickupOrders).where(rpOrdersFilter);
     }
 
     res.json({
@@ -456,7 +442,6 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       reviews: allReviews,
       walletTransactions: allWalletTransactions,
       notifications: allAppNotifications,
-      receiptPickupOrders: allReceiptPickupOrders,
       systemSettings: allSystemSettings.reduce((acc, setting) => {
         acc[setting.key] = setting.value;
         return acc;
@@ -618,11 +603,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         if (isNew && payload.email) {
           sendEmailNotification(
             payload.email,
-            `Welcome to Owode Food, ${payload.name}! 🌟`,
+            `Welcome to Owode Food, ${payload.name}! ≡ƒîƒ`,
             `
             <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
               <div style="text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 32px;">🌟</span>
+                <span style="font-size: 32px;">≡ƒîƒ</span>
                 <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Welcome to Owode Food!</h2>
                 <span style="font-size: 10px; color: #10b981; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Account Successfully Registered</span>
               </div>
@@ -799,9 +784,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             category: p.category,
             isAvailable: p.isAvailable,
             createdAt: p.createdAt,
-            addons: p.addons,
+            addons: p.addons ? JSON.stringify(p.addons) : null,
             maxAddons: p.maxAddons,
-            addonGroups: p.addonGroups || null,
+            addonGroups: p.addonGroups ? JSON.stringify(p.addonGroups) : null,
           }).onConflictDoUpdate({
             target: products.id,
             set: {
@@ -812,9 +797,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               image: p.image,
               category: p.category,
               isAvailable: p.isAvailable,
-              addons: p.addons,
+              addons: p.addons ? JSON.stringify(p.addons) : null,
               maxAddons: p.maxAddons,
-              addonGroups: p.addonGroups || null,
+              addonGroups: p.addonGroups ? JSON.stringify(p.addonGroups) : null,
             },
           });
         }
@@ -840,9 +825,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           category: payload.category,
           isAvailable: payload.isAvailable,
           createdAt: payload.createdAt || new Date().toISOString(),
-          addons: payload.addons,
+          addons: payload.addons ? JSON.stringify(payload.addons) : null,
           maxAddons: payload.maxAddons,
-          addonGroups: payload.addonGroups || null,
+          addonGroups: payload.addonGroups ? JSON.stringify(payload.addonGroups) : null,
         }).onConflictDoUpdate({
           target: products.id,
           set: {
@@ -853,9 +838,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             image: payload.image,
             category: payload.category,
             isAvailable: payload.isAvailable,
-            addons: payload.addons,
+            addons: payload.addons ? JSON.stringify(payload.addons) : null,
             maxAddons: payload.maxAddons,
-            addonGroups: payload.addonGroups || null,
+            addonGroups: payload.addonGroups ? JSON.stringify(payload.addonGroups) : null,
           },
         });
       } break;
@@ -890,12 +875,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             serviceFee: o.serviceFee,
             deliveryFee: o.deliveryFee,
             tax: o.tax,
+            orderType: o.orderType || "standard",
+            receiptImageOrQr: o.receiptImageOrQr || null,
+            receiptNote: o.receiptNote || null,
           }).onConflictDoUpdate({
             target: orders.id,
             set: {
               status: o.status,
               riderId: o.riderId,
               riderName: o.riderName,
+              orderType: o.orderType || "standard",
+              receiptImageOrQr: o.receiptImageOrQr || null,
+              receiptNote: o.receiptNote || null,
             },
           });
 
@@ -923,6 +914,10 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         const existingOrder = await db.select().from(orders).where(eq(orders.id, payload.id)).limit(1);
         const isNew = existingOrder.length === 0;
         
+        if (isNew && !isAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only admins can create orders directly via sync." });
+        }
+        
         if (isNew) {
           const vendor = await db.select().from(vendors).where(eq(vendors.id, payload.vendorId)).limit(1);
           if (vendor.length > 0) {
@@ -944,6 +939,16 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           
           if (!isNew) {
             const order = existingOrder[0];
+            
+            // SECURITY ENFORCEMENT: Block any non-admin from modifying an order awaiting verification
+            // EXCEPT for the customer updating their receipt (which triggers a state reset)
+            if (order.status === "awaiting_payment_verification") {
+              const isCustomerUploadingReceipt = payload.customerId === reqUser.id && payload.paymentReceiptUrl !== undefined;
+              if (!isCustomerUploadingReceipt) {
+                return res.status(403).json({ error: "Forbidden: Order is locked awaiting payment verification." });
+              }
+            }
+            
             const isCustomer = order.customerId === reqUser.id;
             const isVendor = order.vendorId === userVendorId;
             const isRider = order.riderId === reqUser.id || payload.riderId === reqUser.id;
@@ -989,12 +994,24 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           serviceFee: payload.serviceFee,
           deliveryFee: payload.deliveryFee,
           tax: payload.tax,
+          paymentReceiptUrl: payload.paymentReceiptUrl,
+          verifiedBy: payload.verifiedBy,
+          verifiedAt: payload.verifiedAt,
+          rejectedBy: payload.rejectedBy,
+          rejectedAt: payload.rejectedAt,
+          rejectionReason: payload.rejectionReason,
         }).onConflictDoUpdate({
           target: orders.id,
           set: {
             status: payload.status,
             riderId: payload.riderId,
             riderName: payload.riderName,
+            paymentReceiptUrl: payload.paymentReceiptUrl,
+            verifiedBy: payload.verifiedBy,
+            verifiedAt: payload.verifiedAt,
+            rejectedBy: payload.rejectedBy,
+            rejectedAt: payload.rejectedAt,
+            rejectionReason: payload.rejectionReason,
           },
         });
 
@@ -1025,11 +1042,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             if (isNew) {
               sendEmailNotification(
                 customerEmail,
-                `Order Placed Successfully! #${payload.id.substring(0, 8)} 🛍️`,
+                `Order Placed Successfully! #${payload.id.substring(0, 8)} ≡ƒ¢ì∩╕Å`,
                 `
                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                   <div style="text-align: center; margin-bottom: 24px;">
-                    <span style="font-size: 32px;">🛍️</span>
+                    <span style="font-size: 32px;">≡ƒ¢ì∩╕Å</span>
                     <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Order Placed Successfully!</h2>
                     <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Awaiting Vendor Acceptance</span>
                   </div>
@@ -1049,7 +1066,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                       </tr>
                       <tr>
                         <td style="padding: 4px 0; font-weight: bold;">Total Amount:</td>
-                        <td style="padding: 4px 0; font-weight: bold; color: #10b981;">₦${payload.totalAmount.toLocaleString()}</td>
+                        <td style="padding: 4px 0; font-weight: bold; color: #10b981;">Γéª${payload.totalAmount.toLocaleString()}</td>
                       </tr>
                       <tr>
                         <td style="padding: 4px 0; font-weight: bold;">Delivery To:</td>
@@ -1074,11 +1091,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             } else if (statusChanged) {
               sendEmailNotification(
                 customerEmail,
-                `Order #${payload.id.substring(0, 8)} Status Update: ${payload.status.toUpperCase()} ⚡`,
+                `Order #${payload.id.substring(0, 8)} Status Update: ${payload.status.toUpperCase()} ΓÜí`,
                 `
                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                   <div style="text-align: center; margin-bottom: 24px;">
-                    <span style="font-size: 32px;">⚡</span>
+                    <span style="font-size: 32px;">ΓÜí</span>
                     <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Order Status Update!</h2>
                     <span style="font-size: 10px; color: #0ea5e9; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; background-color: #f0f9ff; padding: 4px 12px; border-radius: 20px;">${payload.status}</span>
                   </div>
@@ -1133,7 +1150,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                     endpoint: sub.endpoint,
                     keys: { p256dh: sub.p256dh, auth: sub.auth }
                   }, JSON.stringify({ 
-                    title: "New Delivery Job! 🛵", 
+                    title: "New Delivery Job! ≡ƒ¢╡", 
                     message: `Order #${payload.id.substring(0,8)} from ${payload.vendorName} is available.` 
                   }));
                 } catch (e: any) {
@@ -1146,59 +1163,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           } catch(e) { console.error("Rider push failed", e); }
         }
 
-        break;
-      }
-
-      case "RECEIPT_PICKUP_UPSERT": {
-        const existingOrder = await db.select().from(receiptPickupOrders).where(eq(receiptPickupOrders.id, payload.id)).limit(1);
-        const isNew = existingOrder.length === 0;
-
-        if (!isAdmin) {
-          if (!isNew) {
-            const order = existingOrder[0];
-            const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
-            const userVendorId = userVendor.length > 0 ? userVendor[0].id : null;
-            const isCustomer = order.customerId === reqUser.id;
-            const isVendor = order.vendorId === userVendorId;
-            const isRider = order.riderId === reqUser.id || payload.riderId === reqUser.id;
-            
-            if (!isCustomer && !isVendor && !isRider) return res.status(403).json({ error: "Forbidden" });
-          } else {
-            if (payload.customerId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
-          }
-        }
-
-        await db.insert(receiptPickupOrders).values({
-          id: payload.id,
-          customerId: payload.customerId,
-          customerName: payload.customerName,
-          customerPhone: payload.customerPhone,
-          vendorId: payload.vendorId,
-          vendorName: payload.vendorName,
-          vendorAddress: payload.vendorAddress,
-          deliveryAddress: payload.deliveryAddress,
-          deliveryPhone: payload.deliveryPhone,
-          receiptImageOrQr: payload.receiptImageOrQr,
-          receiptNote: payload.receiptNote,
-          deliveryFee: payload.deliveryFee,
-          riderId: payload.riderId,
-          riderName: payload.riderName,
-          status: payload.status,
-          paymentMethod: payload.paymentMethod,
-          paymentStatus: payload.paymentStatus,
-          serviceFee: payload.serviceFee,
-          totalAmount: payload.totalAmount,
-          createdAt: payload.createdAt,
-        }).onConflictDoUpdate({
-          target: receiptPickupOrders.id,
-          set: {
-            status: payload.status,
-            riderId: payload.riderId,
-            riderName: payload.riderName,
-            paymentStatus: payload.paymentStatus,
-          },
-        });
-        
         break;
       }
 
@@ -1559,8 +1523,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 // 4. Secure Checkout API
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { customerId, customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax } = req.body;
-    if (!customerId || !vendorId || !items || !Array.isArray(items)) {
+    const { customerId, customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage, orderType, receiptImageOrQr, receiptNote } = req.body;
+    
+    const isReceiptPickup = orderType === "receipt_pickup";
+
+    if (!customerId || !vendorId || (!isReceiptPickup && (!items || !Array.isArray(items)))) {
       return res.status(400).json({ error: "Missing required checkout fields" });
     }
 
@@ -1571,28 +1538,40 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       return res.status(403).json({ error: `Unauthorized: User ID mismatch. Token ID: ${req.user.id}, Expected: ${customerId}` });
     }
 
+    const orderId = "owf-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
     // 1. Validate prices server-side
     let calculatedTotal = 0;
-    const dbProducts = await db.select().from(products).where(eq(products.vendorId, vendorId));
     
-    for (const item of items) {
-      const dbProduct = dbProducts.find((p) => p.id === item.productId);
-      if (!dbProduct) {
-        return res.status(400).json({ error: `Product ${item.productId} not found` });
-      }
-      
-      let itemPrice = dbProduct.price;
-      // Add addons price if any
-      if (item.selectedAddons && Array.isArray(item.selectedAddons)) {
-        for (const addon of item.selectedAddons) {
-          // In a real app we'd also validate addons exist on the product, but this is a minimum secure mock
-          itemPrice += (addon.price * (addon.quantity || 1));
+    if (!isReceiptPickup && items) {
+      const dbProducts = await db.select().from(products).where(eq(products.vendorId, vendorId));
+      for (const item of items) {
+        const dbProduct = dbProducts.find((p) => p.id === item.productId);
+        if (!dbProduct) {
+          return res.status(400).json({ error: `Product ${item.productId} not found` });
         }
+        
+        let itemPrice = dbProduct.price;
+        // Add addons price if any
+        if (item.selectedAddons && Array.isArray(item.selectedAddons)) {
+          for (const addon of item.selectedAddons) {
+            itemPrice += (addon.price * (addon.quantity || 1));
+          }
+        }
+        calculatedTotal += (itemPrice * item.quantity);
       }
-      calculatedTotal += (itemPrice * item.quantity);
     }
     
-    const finalTotal = calculatedTotal + (serviceFee || 0) + (deliveryFee || 0) + (tax || 0);
+    let validServiceFee = Math.max(0, serviceFee || 0);
+    let validDeliveryFee = Math.max(0, deliveryFee || 0);
+    let validTax = Math.max(0, tax || 0);
+
+    // Enforce base minimums for receipt pickup
+    if (isReceiptPickup && validServiceFee < 50) {
+      validServiceFee = 50;
+    }
+
+    const finalTotal = calculatedTotal + validServiceFee + validDeliveryFee + validTax;
 
     // 2. Wallet Deductions if paymentMethod is wallet
     if (paymentMethod === "wallet") {
@@ -1620,7 +1599,8 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     }
 
     // 3. Create Order
-    const orderId = "owf-" + Math.random().toString(36).substring(2, 9).toUpperCase();
+    const isBankTransfer = paymentMethod === "bank_transfer" || paymentMethod.toLowerCase().includes("bank transfer");
+    const initialStatus = isBankTransfer ? "awaiting_payment_verification" : "pending";
     await db.insert(orders).values({
       id: orderId,
       customerId,
@@ -1628,25 +1608,31 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       customerPhone,
       vendorId,
       vendorName,
-      status: "pending",
+      status: initialStatus,
       totalAmount: finalTotal,
       deliveryAddress,
       paymentMethod,
       serviceFee,
       deliveryFee,
       tax,
+      paymentReceiptUrl: receiptImage || null,
+      orderType: orderType || "standard",
+      receiptImageOrQr: receiptImageOrQr || null,
+      receiptNote: receiptNote || null,
       createdAt: new Date().toISOString()
     });
 
-    for (const item of items) {
-      await db.insert(orderItems).values({
-        id: Math.random().toString(36).substring(2, 11),
-        orderId,
-        productId: item.productId,
-        name: item.name,
-        price: item.price, // Storing what they paid (we verified it above)
-        quantity: item.quantity
-      });
+    if (!isReceiptPickup && items) {
+      for (const item of items) {
+        await db.insert(orderItems).values({
+          id: Math.random().toString(36).substring(2, 11),
+          orderId,
+          productId: item.productId,
+          name: item.name,
+          price: item.price, // Storing what they paid (we verified it above)
+          quantity: item.quantity
+        });
+      }
     }
 
     const newOrderPayload = {
@@ -1656,15 +1642,19 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       customerPhone,
       vendorId,
       vendorName,
-      status: "pending",
+      status: initialStatus,
       totalAmount: finalTotal,
       deliveryAddress,
       paymentMethod,
       serviceFee,
       deliveryFee,
       tax,
+      paymentReceiptUrl: receiptImage || null,
+      orderType: orderType || "standard",
+      receiptImageOrQr: receiptImageOrQr || null,
+      receiptNote: receiptNote || null,
       createdAt: new Date().toISOString(),
-      items: items.map((item: any) => ({
+      items: isReceiptPickup ? [] : items.map((item: any) => ({
         id: Math.random().toString(36).substring(2, 11),
         orderId,
         productId: item.productId,
@@ -1927,4 +1917,9 @@ async function startServer() {
   }
 }
 
-startServer();
+if (process.env.VERCEL !== "1") {
+  startServer();
+}
+
+export default app;
+
