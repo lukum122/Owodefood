@@ -279,7 +279,7 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
 });
 
 // Secure User Existence Check
-app.post("/api/auth/check-user", async (req, res) => {
+app.post("/api/check-user", async (req, res) => {
   try {
     const { identifier } = req.body;
     if (!identifier) {
@@ -316,7 +316,7 @@ app.post("/api/auth/check-user", async (req, res) => {
 });
 
 // Backend JWT Authentication Login
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
     const { email, pin } = req.body; // 'email' field here actually receives the 'identifier'
     const cleanIdentifier = email.trim().toLowerCase();
