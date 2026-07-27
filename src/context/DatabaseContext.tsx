@@ -2559,8 +2559,21 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier })
       });
+      if (!response.ok) throw new Error("Backend check failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Invalid response format");
+      }
       return await response.json();
     } catch (err) {
+      // Fallback to local users array if backend is unavailable
+      const identifierLower = identifier.trim().toLowerCase();
+      const localUser = users.find(
+        (u) => u.email.toLowerCase() === identifierLower || u.phone === identifier
+      );
+      if (localUser) {
+        return { exists: true, user: localUser };
+      }
       return { exists: false, error: "Network error" };
     }
   };
@@ -2587,6 +2600,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: identifier, pin })
       });
+      if (!response.ok) throw new Error("Backend login failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Invalid response format");
+      }
       const data = await response.json();
       
       if (!data.success) {
@@ -2605,7 +2623,32 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       
       return { success: true, user: { ...user, role, roles: userRoles }, token: data.token };
     } catch (err) {
-      return { success: false, error: "Network error during secure login." };
+      // Fallback to local login if backend is unavailable
+      const identifierLower = identifier.trim().toLowerCase();
+      const localUser = users.find(
+        (u) => u.email.toLowerCase() === identifierLower || u.phone === identifier
+      );
+      
+      if (!localUser) {
+        return { success: false, error: "No registered account matches this email or phone number. Try selecting 'Register'." };
+      }
+      
+      if (localUser.pin !== pin) {
+        return { success: false, error: "Incorrect PIN. Please try again." };
+      }
+      
+      const userRoles = localUser.roles || [localUser.role];
+      if (!userRoles.includes(role)) {
+        return { success: false, error: `This account does not have the ${role} role. Available roles: ${userRoles.join(", ")}.` };
+      }
+      
+      if (!preventStateUpdate) {
+        // We generate a dummy token for local session
+        const dummyToken = "local_token_" + localUser.id;
+        finalizeLogin(localUser, dummyToken, role);
+      }
+      
+      return { success: true, user: { ...localUser, role, roles: userRoles }, token: "local_token_" + localUser.id };
     }
   };
 

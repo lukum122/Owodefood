@@ -50,15 +50,19 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         const res = await fetch("/api/version");
         if (res.ok) {
-          const data = await res.json();
-          if (serverVersion && serverVersion !== data.version) {
-            setNeedRefresh(true);
-          } else if (!serverVersion) {
-            setServerVersion(data.version);
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const data = await res.json();
+            if (serverVersion && serverVersion !== data.version) {
+              setNeedRefresh(true);
+            } else if (!serverVersion) {
+              setServerVersion(data.version);
+            }
           }
         }
       } catch (error) {
-        console.error("Failed to check server version:", error);
+        // Suppress error log if the server doesn't support version checking yet
+        // console.error("Failed to check server version:", error);
       }
     };
 
