@@ -179,6 +179,15 @@ app.get("/api/version", (req, res) => {
   res.json({ version: APP_VERSION });
 });
 
+app.get("/api/env-check", (req, res) => {
+  res.json({ 
+    hasDbUrl: !!process.env.DATABASE_URL, 
+    hasSqlHost: !!process.env.SQL_HOST,
+    dbStart: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 15) : "none",
+    vercel: process.env.VERCEL
+  });
+});
+
 
 // SMTP Connection Test Endpoint
 app.post("/api/email/test", async (req, res) => {
