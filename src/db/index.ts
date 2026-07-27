@@ -14,7 +14,7 @@ export const createPool = () => {
       password: process.env.SQL_PASSWORD,
       database: process.env.SQL_DB_NAME,
       port: process.env.SQL_PORT ? Number(process.env.SQL_PORT) : 5432,
-      max: 10,
+      max: process.env.NODE_ENV === "production" ? 1 : 10,
       idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
       keepAlive: true,
@@ -28,7 +28,7 @@ export const createPool = () => {
                      process.env.DATABASE_URL.includes(".tech");
     return new Pool({
       connectionString: process.env.DATABASE_URL,
-      max: 10,
+      max: process.env.NODE_ENV === "production" ? 1 : 10,
       idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
       keepAlive: true,

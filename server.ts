@@ -2,7 +2,6 @@ import "dotenv/config";
 import express from "express";
 import { isVendorOpen } from "./src/types.ts";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { db, runMigrations, pool } from "./src/db/index.ts";
 import { seedDefaultData } from "./src/db/seed.ts";
 import bcrypt from "bcryptjs";
@@ -1879,6 +1878,7 @@ async function startServer() {
     }
 
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
