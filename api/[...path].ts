@@ -1,5 +1,4 @@
-const app = require('../dist/server.cjs');
-const expressApp = app.default || app;
+import app from '../server.ts';
 
 export default function handler(req: any, res: any) {
   // Vercel strips the /api prefix. Add it back so Express routes match correctly.
@@ -7,5 +6,5 @@ export default function handler(req: any, res: any) {
     req.url = '/api' + req.url;
   }
   
-  return expressApp(req, res);
+  return app(req, res);
 }
