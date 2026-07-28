@@ -139,6 +139,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const from = (location.state as any)?.from?.pathname || "/";
 
@@ -312,7 +313,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (forgotPinStep) {
-      handleForgotPinSubmit(e);
+      await handleForgotPinSubmit(e);
       return;
     }
     setError("");
@@ -593,7 +594,7 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
             : (loginPinStep ? "Enter Your PIN" : "Sign In to Owode Food")}
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={async (e) => { e.preventDefault(); if (isLoading) return; setIsLoading(true); await handleSubmit(e); setIsLoading(false); }} className="space-y-4">
           
           {/* Form Validation Indicator banner */}
           {error && (
@@ -1033,9 +1034,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           {/* Action Button */}
           <button
             type="submit"
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#070329] hover:bg-[#0d074e] text-white text-sm font-bold rounded-xl transition duration-200 shadow-lg cursor-pointer mt-4"
+            disabled={isLoading}
+            className={`w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#070329] hover:bg-[#0d074e] text-white text-sm font-bold rounded-xl transition duration-200 shadow-lg mt-4 ${isLoading ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}`}
           >
-            {forgotPinStep ? (
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : forgotPinStep ? (
               forgotPinStep === "request" ? (
                 <>
                   <Smartphone className="w-4 h-4" />

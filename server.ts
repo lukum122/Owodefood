@@ -99,7 +99,7 @@ app.use(cors({
 app.set("trust proxy", 1);
 
 // Rate limiting for auth endpoints (100 requests per 15 minutes)
-const authLimiter = rateLimit({
+const authLimiter = process.env.VERCEL ? (req: express.Request, res: express.Response, next: express.NextFunction) => next() : rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 100,
   message: { error: "Too many requests from this IP, please try again after 15 minutes." },
