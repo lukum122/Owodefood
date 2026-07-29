@@ -136,6 +136,12 @@ function getMailTransporter() {
         user,
         pass,
       },
+      // Fail fast instead of hanging past the serverless function's execution
+      // limit (which surfaces as a platform-level timeout/non-JSON response
+      // on Vercel, rather than a clean JSON error from our own try/catch).
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000,
     });
   }
   return transporter;
@@ -169,11 +175,6 @@ async function sendEmailNotification(to: string, subject: string, htmlContent: s
 
 const APP_VERSION = process.env.APP_VERSION || Date.now().toString();
 
-// 1. Health check endpoint
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", database: "connected" });
-});
-
 // App Version Endpoint
 app.get("/api/version", (req, res) => {
   res.json({ version: APP_VERSION });
@@ -184,10 +185,49 @@ app.get("/api/env-check", (req, res) => {
     hasDbUrl: !!process.env.DATABASE_URL, 
     hasSqlHost: !!process.env.SQL_HOST,
     dbStart: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 15) : "none",
-    vercel: process.env.VERCEL
+    vercel: process.env.VERCEL,
+    hasSmtpPass: !!process.env.SMTP_PASS,
+    smtpHost: process.env.SMTP_HOST || "smtp.zeptomail.com (default)",
+    smtpPort: process.env.SMTP_PORT || "587 (default)",
+    smtpUser: process.env.SMTP_USER ? "set" : "using default 'emailapikey'"
   });
 });
 
+
+// Safe SMTP connectivity check — verifies the connection without sending an email
+// and never exposes the actual password.
+app.get("/api/smtp-check", async (req, res) => {
+  const host = process.env.SMTP_HOST || "smtp.zeptomail.com";
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const info: any = {
+    host,
+    port,
+    secure: process.env.SMTP_SECURE === "true" || port === 465,
+    hasUser: !!process.env.SMTP_USER,
+    hasPass: !!process.env.SMTP_PASS,
+  };
+
+  if (!info.hasPass) {
+    return res.json({ ...info, verify: "skipped", reason: "SMTP_PASS is not set" });
+  }
+
+  try {
+    const mailer = getMailTransporter();
+    if (!mailer) {
+      return res.json({ ...info, verify: "skipped", reason: "transporter not created" });
+    }
+    const start = Date.now();
+    await mailer.verify();
+    return res.json({ ...info, verify: "success", tookMs: Date.now() - start });
+  } catch (err: any) {
+    return res.json({
+      ...info,
+      verify: "failed",
+      errorCode: err.code || null,
+      errorMessage: err.message || String(err),
+    });
+  }
+});
 
 // SMTP Connection Test Endpoint
 app.post("/api/email/test", async (req, res) => {
