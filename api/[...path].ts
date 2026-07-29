@@ -1,4 +1,8 @@
-import app from '../server.ts';
+// Import the pre-bundled server (built by esbuild.config.js during `npm run build`).
+// Vercel's function builder does not reliably trace/bundle the full server.ts
+// import tree, so we require the already-bundled, self-contained CJS file instead.
+import * as serverModule from '../dist/server.cjs';
+const app: any = (serverModule as any).default ?? serverModule;
 
 export const config = {
   api: {
