@@ -657,10 +657,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                   >
                     ← Back to request code
                   </button>
-
-                  <span className="text-[10px] text-gray-400">
-                    For testing: Code is <span className="font-bold font-mono text-gray-600">{generatedResetCode}</span>
-                  </span>
                 </div>
               </div>
             ) : (
@@ -920,12 +916,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
                   >
                     Resend PIN
                   </button>
-                </div>
-
-                <div className="text-center mt-2">
-                  <span className="text-[10px] text-gray-400">
-                    For testing: Verification PIN is <span className="font-bold font-mono text-gray-600">{generatedRegisterOtp}</span>
-                  </span>
                 </div>
               </div>
             )
