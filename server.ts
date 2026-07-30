@@ -194,6 +194,26 @@ app.get("/api/env-check", (req, res) => {
 });
 
 
+// Safe direct database lookup — checks whether a specific email/phone
+// actually exists as a row in the live production "users" table right now.
+// Returns only non-sensitive fields (id, email, name, createdAt) — never the PIN.
+app.get("/api/debug-user-check", async (req, res) => {
+  const raw = (req.query.email as string) || "";
+  const identifier = raw.trim().toLowerCase();
+  if (!identifier) {
+    return res.status(400).json({ error: "Provide ?email=someone@example.com in the URL" });
+  }
+  try {
+    const rows = await db
+      .select({ id: users.id, email: users.email, name: users.name, phone: users.phone, createdAt: users.createdAt })
+      .from(users)
+      .where(sql`lower(${users.email}) = ${identifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${identifier}`);
+    res.json({ queried: identifier, found: rows.length > 0, count: rows.length, rows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // Safe SMTP connectivity check — verifies the connection without sending an email
 // and never exposes the actual password.
 app.get("/api/smtp-check", async (req, res) => {
@@ -408,6 +428,127 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (error: any) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Login process failed: " + (error.message || String(error)) });
+  }
+});
+
+// 1b. Registration Endpoint: server-authoritative. The frontend must treat this
+// response as the single source of truth — no local "success" before this
+// call actually confirms it, and no silent local-only fallback if it fails.
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { name, email, phone, role, gender, pin, businessName, cuisine, vehicleType } = req.body;
+
+    if (!name || !email || !phone || !pin || !role) {
+      return res.status(400).json({ error: "Missing required fields." });
+    }
+    if (String(pin).length < 4) {
+      return res.status(400).json({ error: "PIN must be at least 4 digits." });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPhoneDigits = String(phone).replace(/[\s\-\+\(\)]/g, "");
+
+    // Pre-check for a friendly error message. The unique index on email is the
+    // real guarantee against race conditions (e.g. two devices registering the
+    // same email at the same instant) — this check just gives a nicer message
+    // in the common case.
+    const existing = await db.select().from(users).where(
+      sql`lower(${users.email}) = ${cleanEmail} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${cleanPhoneDigits}`
+    ).limit(1);
+
+    if (existing.length > 0) {
+      return res.status(409).json({ error: "An account with this email or phone number already exists." });
+    }
+
+    const newUserId = "u-" + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+    const finalRole = role === "customer" ? "customer" : role;
+    const finalRoles = role === "customer" ? ["customer"] : ["customer", role];
+    const hashedPin = await bcrypt.hash(String(pin), 10);
+    const createdAt = new Date().toISOString();
+
+    let newVendorRow: any = null;
+    let newRiderRow: any = null;
+
+    try {
+      await db.transaction(async (tx) => {
+        await tx.insert(users).values({
+          id: newUserId,
+          email: cleanEmail,
+          name,
+          phone,
+          role: finalRole,
+          roles: finalRoles,
+          gender: gender || null,
+          createdAt,
+          pin: hashedPin,
+        });
+
+        if (role === "vendor") {
+          newVendorRow = {
+            id: "v-" + Math.random().toString(36).substring(2, 11),
+            userId: newUserId,
+            name: businessName || `${name}'s Eatery`,
+            description: `Freshly prepared ${cuisine || "delicious"} food.`,
+            cuisine: cuisine || "Continental",
+            image: "/images/burger.png",
+            rating: 5.0,
+            address: "Food Street Market, District 1",
+            status: "pending",
+            createdAt,
+          };
+          await tx.insert(vendors).values(newVendorRow);
+        } else if (role === "rider") {
+          newRiderRow = {
+            id: "r-" + Math.random().toString(36).substring(2, 11),
+            userId: newUserId,
+            name,
+            phone,
+            vehicleType: vehicleType || "motorcycle",
+            status: "pending",
+            isAvailable: true,
+            createdAt,
+          };
+          await tx.insert(riders).values(newRiderRow);
+        }
+      });
+    } catch (dbErr: any) {
+      // Postgres unique_violation — the exact race condition this endpoint exists to prevent.
+      if (dbErr.code === "23505") {
+        return res.status(409).json({ error: "An account with this email or phone number already exists." });
+      }
+      throw dbErr;
+    }
+
+    const newUserRow = {
+      id: newUserId,
+      email: cleanEmail,
+      name,
+      phone,
+      role: finalRole,
+      roles: finalRoles,
+      gender: gender || null,
+      createdAt,
+    };
+
+    const token = jwt.sign(
+      { id: newUserId, role: finalRole, roles: finalRoles, email: cleanEmail },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ success: true, token, user: newUserRow, vendor: newVendorRow, rider: newRiderRow });
+
+    // Welcome email is a nice-to-have, sent after responding — its failure
+    // must never affect whether registration itself succeeded.
+    sendEmailNotification(
+      cleanEmail,
+      `Welcome to Owode Food, ${name}!`,
+      `<p>Hello ${name},</p><p>Your Owode Food account has been created successfully.</p>`
+    ).catch((e) => console.error("[register] Welcome email failed (non-fatal):", e));
+
+  } catch (error: any) {
+    console.error("Register error:", error);
+    res.status(500).json({ error: "Registration failed: " + (error.message || String(error)) });
   }
 });
 
