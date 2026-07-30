@@ -2496,26 +2496,33 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const syncSave = async (type: string, payload: any) => {
     try {
       const token = localStorage.getItem("fd_jwt_token");
-      if (!token) return; // Prevent unauthorized sync attempts and console spam
 
-      const headers: any = { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-        "X-Auth-Token": token
-      };
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
+      // Note: no early return when there's no token. The backend explicitly allows
+      // unauthenticated USER_UPSERT (new registrations) and empty-table bulk seeding —
+      // bailing out here silently dropped brand-new user accounts before they ever
+      // reached the database.
 
       const res = await fetch("/api/sync/save", {
         method: "POST",
         headers,
         body: JSON.stringify({ type, payload }),
       });
-      
+
       if (!res.ok) {
-        // Suppress verbose console errors during development/testing if endpoint is missing
-        // console.warn(`Sync action deferred: ${type}`);
+        const errText = await res.text().catch(() => "");
+        console.error(`[syncSave] "${type}" failed with status ${res.status}: ${errText}`);
+        return { success: false, error: `Sync failed (${res.status})` };
       }
-    } catch (err) {
-      // console.warn(`Error syncing action: ${type}`);
+
+      return { success: true };
+    } catch (err: any) {
+      console.error(`[syncSave] "${type}" threw an error:`, err?.message || err);
+      return { success: false, error: err?.message || String(err) };
     }
   };
 
@@ -2730,11 +2737,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     localStorage.setItem("fd_session_user", JSON.stringify(newUser));
 
     // Ensure the backend has this user before attempting login to get the JWT
-    await syncSave("USER_UPSERT", newUser);
+    const syncResult = await syncSave("USER_UPSERT", newUser);
 
     if (extra?.pin) {
       try {
-        const response = await fetch("/api/login", {
+        const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: newUser.email, pin: extra.pin })
@@ -2743,7 +2750,16 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         if (data.success) {
           localStorage.setItem("fd_jwt_token", data.token);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("[register] Auto-login after registration failed:", e);
+      }
+    }
+
+    if (!syncResult?.success) {
+      return {
+        success: true,
+        warning: "Your account was created on this device, but we couldn't confirm it saved to the server. If you can't log in from another device, please try registering again.",
+      };
     }
 
     return { success: true };
@@ -3097,7 +3113,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       // Auto-recover JWT for old sessions if PIN is available
       if (!token && activeUser?.pin && activeUser?.email) {
         try {
-          const loginRes = await fetch("/api/login", {
+          const loginRes = await fetch("/api/auth/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: activeUser.email, pin: activeUser.pin })
@@ -3107,7 +3123,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
             token = loginData.token;
             localStorage.setItem("fd_jwt_token", token);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("[checkout] Auto-recover token failed:", e);
+        }
       }
 
       if (!token) {
