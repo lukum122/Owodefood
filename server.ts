@@ -1712,19 +1712,21 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 // 4. Secure Checkout API
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { customerId, customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage, orderType, receiptImageOrQr, receiptNote } = req.body;
-    
-    const isReceiptPickup = orderType === "receipt_pickup";
+    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage, orderType, receiptImageOrQr, receiptNote } = req.body;
 
-    if (!customerId || !vendorId || (!isReceiptPickup && (!items || !Array.isArray(items)))) {
-      return res.status(400).json({ error: "Missing required checkout fields" });
-    }
+    const isReceiptPickup = orderType === "receipt_pickup";
 
     if (!req.user) {
       return res.status(403).json({ error: `Unauthorized: Invalid JWT token. Details: ${req.jwtError || 'Missing token'}` });
     }
-    if (req.user.id !== customerId) {
-      return res.status(403).json({ error: `Unauthorized: User ID mismatch. Token ID: ${req.user.id}, Expected: ${customerId}` });
+
+    // Always trust the verified JWT for identity — never a client-supplied ID.
+    // A client-sent customerId can drift out of sync with the real logged-in
+    // user (stale cache, re-registration, etc.), so it's no longer accepted.
+    const customerId = req.user.id;
+
+    if (!vendorId || (!isReceiptPickup && (!items || !Array.isArray(items)))) {
+      return res.status(400).json({ error: "Missing required checkout fields" });
     }
 
     const orderId = "owf-" + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -1890,12 +1892,16 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
 // 5. Secure Wallet Funding API
 app.post("/api/wallet/fund", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { userId, userName, amount, gateway, reference } = req.body;
-    
-    if (!req.user || req.user.id !== userId) {
-      return res.status(403).json({ error: "Unauthorized: Invalid JWT token or user ID mismatch during wallet funding." });
+    const { userName, amount, gateway, reference } = req.body;
+
+    if (!req.user) {
+      return res.status(403).json({ error: "Unauthorized: Invalid JWT token." });
     }
-    if (!userId || !amount || amount <= 0) {
+
+    // Always trust the verified JWT for identity — never a client-supplied ID.
+    const userId = req.user.id;
+
+    if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Invalid funding request" });
     }
 
