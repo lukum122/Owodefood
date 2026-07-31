@@ -193,59 +193,6 @@ app.get("/api/env-check", (req, res) => {
   });
 });
 
-
-// SMTP Connection Test Endpoint
-app.post("/api/email/test", async (req, res) => {
-  const { toEmail } = req.body;
-  if (!toEmail) {
-    return res.status(400).json({ error: "Missing recipient email address ('toEmail')" });
-  }
-
-  const result = await sendEmailNotification(
-    toEmail,
-    "Owode Food - Live SMTP Connection Verification",
-    `
-    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <span style="font-size: 32px;">≡ƒìö</span>
-        <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food Marketplace</h2>
-        <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">SMTP Secure Relay Connected</span>
-      </div>
-      <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello,</p>
-      <p style="font-size: 14px; color: #374151; line-height: 1.6;">This is a test notification confirming that your <strong>ZeptoMail SMTP server connection</strong> has been successfully integrated and is fully operational on your <strong>Owode Food Multi-Vendor Platform</strong>.</p>
-      
-      <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; margin: 24px 0;">
-        <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; display: block; margin-bottom: 8px;">Technical Handshake Metadata</span>
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #334155;">
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold; width: 120px;">SMTP Gateway:</td>
-            <td style="padding: 4px 0; font-family: monospace;">${process.env.SMTP_HOST || "smtp.zeptomail.com"}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold;">Handshake Port:</td>
-            <td style="padding: 4px 0; font-family: monospace;">${process.env.SMTP_PORT || "587"}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; font-weight: bold;">Verified Recipient:</td>
-            <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">${toEmail}</td>
-          </tr>
-        </table>
-      </div>
-
-      <p style="font-size: 14px; color: #374151; line-height: 1.6;">Real-time automated emails will now trigger securely for registration approvals, instant wallets funding receipting, and multi-vendor dispatch trackings.</p>
-      
-      <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
-      <div style="text-align: center;">
-        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Core Infrastructure Services</p>
-        <p style="font-size: 10px; color: #cbd5e1; margin: 4px 0 0 0;">Do not reply to this automated transaction payload.</p>
-      </div>
-    </div>
-    `
-  );
-
-  res.json(result);
-});
-
 // SMTP Secure Pin Delivery Endpoint
 app.post("/api/email/send-pin", authLimiter, async (req, res) => {
   const { toEmail, name, pin } = req.body;
