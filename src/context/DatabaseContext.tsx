@@ -99,8 +99,8 @@ interface DatabaseContextType {
   register: (name: string, email: string, phone: string, role: UserRole, gender?: string, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   overrideUserRole: (role: UserRole) => void; // Development booster
-  updateProfile: (name: string, phone: string, gender?: string, profileImage?: string) => void;
-  resetUserPin: (userId: string, newPin: string) => void;
+  updateProfile: (name: string, phone: string, gender?: string, profileImage?: string) => Promise<{ success: boolean; error?: string }>;
+  resetUserPin: (userId: string, newPin: string) => Promise<{ success: boolean; error?: string }>;
   switchRole: (role: UserRole) => void;
   applyForVendor: (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => { success: boolean; error?: string };
   applyForRider: (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => { success: boolean; error?: string };
@@ -115,16 +115,16 @@ interface DatabaseContextType {
   placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string }>;
   
   // Vendor Actions
-  updateVendorOrder: (orderId: string, status: OrderStatus) => void;
-  addProduct: (product: Omit<Product, "id" | "createdAt">) => void;
-  updateProduct: (product: Product) => void;
-  deleteProduct: (productId: string) => void;
-  updateVendorProfile: (profile: Partial<Vendor>) => void;
+  updateVendorOrder: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<{ success: boolean; error?: string }>;
+  updateProduct: (product: Product) => Promise<{ success: boolean; error?: string }>;
+  deleteProduct: (productId: string) => Promise<{ success: boolean; error?: string }>;
+  updateVendorProfile: (profile: Partial<Vendor>) => Promise<{ success: boolean; error?: string }>;
   
   // Rider Actions
-  acceptDelivery: (orderId: string, riderId: string) => void;
-  updateDeliveryStatus: (orderId: string, status: OrderStatus) => void;
-  updateRiderProfile: (profile: Partial<Rider>) => void;
+  acceptDelivery: (orderId: string, riderId: string) => Promise<{ success: boolean; error?: string }>;
+  updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
   
   // Admin Actions
   toggleVendorStatus: (vendorId: string, status: Vendor["status"]) => void;
@@ -2955,15 +2955,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const updateProfile = (name: string, phone: string, gender?: string, profileImage?: string) => {
-    if (!currentUser) return;
-    const updated = { ...currentUser, name, phone, gender, profileImage };
-    const updatedUsers = users.map(u => u.id === currentUser.id ? updated : u);
+  const updateProfile = async (name: string, phone: string, gender?: string, profileImage?: string): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) return { success: false, error: "Not logged in" };
+    const candidateUser = { ...currentUser, name, phone, gender, profileImage };
+
+    const result = await syncSave("USER_UPSERT", candidateUser);
+    if (!result?.success) {
+      console.error("[updateProfile] Failed to update profile:", result?.error);
+      return { success: false, error: result?.error || "Failed to save your changes. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    // (The server never returns the pin hash, so this merge can't clobber it.)
+    const confirmedUser = result.user ? { ...candidateUser, ...result.user } : candidateUser;
+    const updatedUsers = users.map(u => u.id === currentUser.id ? confirmedUser : u);
     setUsers(updatedUsers);
     localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
-    syncSave("USER_UPSERT", updated);
-    setCurrentUser(updated);
-    localStorage.setItem("fd_session_user", JSON.stringify(updated));
+    setCurrentUser(confirmedUser);
+    localStorage.setItem("fd_session_user", JSON.stringify(confirmedUser));
 
     // Also sync the secondary user profiles if matching
     if (currentUser.role === "vendor") {
@@ -2976,20 +2985,35 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         setCurrentRider(updatedR);
       }
     }
+
+    return { success: true };
   };
 
-  const resetUserPin = (userId: string, newPin: string) => {
-    const updatedUsers = users.map(u => u.id === userId ? { ...u, pin: newPin } : u);
+  const resetUserPin = async (userId: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return { success: false, error: "User not found" };
+    const candidateUser = { ...targetUser, pin: newPin };
+
+    const result = await syncSave("USER_UPSERT", candidateUser);
+    if (!result?.success) {
+      console.error("[resetUserPin] Failed to reset PIN:", result?.error);
+      return { success: false, error: result?.error || "Failed to reset the PIN. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    // (The server never returns the pin hash, so this merge can't clobber it —
+    // we intentionally keep our own locally-set newPin as the source of truth here.)
+    const confirmedUser = result.user ? { ...candidateUser, ...result.user, pin: newPin } : candidateUser;
+    const updatedUsers = users.map(u => u.id === userId ? confirmedUser : u);
     setUsers(updatedUsers);
     localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
-    const targetUser = updatedUsers.find(u => u.id === userId);
-    if (targetUser) syncSave("USER_UPSERT", targetUser);
-    
+
     if (currentUser && currentUser.id === userId) {
-      const updatedUser = { ...currentUser, pin: newPin };
-      setCurrentUser(updatedUser);
-      localStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
+      setCurrentUser(confirmedUser);
+      localStorage.setItem("fd_session_user", JSON.stringify(confirmedUser));
     }
+
+    return { success: true };
   };
 
   // CART ACTIONS
