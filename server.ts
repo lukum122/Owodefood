@@ -835,6 +835,16 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             `
           ).catch(err => console.error("Error sending registration welcome email:", err));
         }
+
+        // Return exactly what was confirmed/saved, so the client syncs its
+        // local state to server truth instead of trusting its own optimistic copy.
+        // The pin (bcrypt hash) is deliberately excluded — it should never be
+        // sent back to or stored on the client.
+        const savedUserRows = await db.select().from(users).where(eq(users.id, payload.id)).limit(1);
+        if (savedUserRows.length > 0) {
+          const { pin: _omitPin, ...userWithoutPin } = savedUserRows[0] as any;
+          responseExtra.user = userWithoutPin;
+        }
         break;
       }
 
