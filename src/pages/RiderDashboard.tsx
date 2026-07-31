@@ -55,8 +55,11 @@ export const RiderDashboard: React.FC = () => {
     0
   );
 
-  const handleClaimJob = (orderId: string) => {
-    acceptDelivery(orderId, currentRider.id);
+  const handleClaimJob = async (orderId: string) => {
+    const result = await acceptDelivery(orderId, currentRider.id);
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to claim this delivery. Please try again.");
+    }
   };
 
   return (

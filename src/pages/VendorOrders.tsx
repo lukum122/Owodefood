@@ -22,8 +22,11 @@ export const VendorOrders: React.FC = () => {
   const vendorReceipts = (receiptPickupOrders || []).filter(o => o.vendorId === currentVendor.id);
   const activeReceipts = vendorReceipts.filter(o => ["awaiting_vendor_confirmation", "ready_for_rider", "accepted", "picked_up"].includes(o.status));
 
-  const handleAction = (orderId: string, actionStatus: OrderStatus) => {
-    updateVendorOrder(orderId, actionStatus);
+  const handleAction = async (orderId: string, actionStatus: OrderStatus) => {
+    const result = await updateVendorOrder(orderId, actionStatus);
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update the order. Please try again.");
+    }
   };
 
   const getStatusBadge = (status: OrderStatus) => {

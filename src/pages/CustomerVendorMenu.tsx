@@ -1113,9 +1113,12 @@ export const CustomerVendorMenu: React.FC = () => {
                         {/* Interactive cancellation */}
                         {o.status === "pending" && (
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (window.confirm("Are you sure you want to cancel this pickup request?")) {
-                                updateVendorOrder(o.id, "cancelled");
+                                const result = await updateVendorOrder(o.id, "cancelled");
+                                if (!result?.success) {
+                                  window.alert(result?.error || "Failed to cancel the order. Please try again.");
+                                }
                               }
                             }}
                             className="w-full bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-xl text-[10px] font-bold transition cursor-pointer text-center"

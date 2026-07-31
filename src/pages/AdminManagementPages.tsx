@@ -26,20 +26,26 @@ export const AdminOrders: React.FC = () => {
   const [receiptCancelTargetId, setReceiptCancelTargetId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
-  const handleVerifyPayment = (id: string, action: "approve" | "reject") => {
+  const handleVerifyPayment = async (id: string, action: "approve" | "reject") => {
     if (action === "approve") {
-      updateVendorOrder(id, "pending", {
+      const result = await updateVendorOrder(id, "pending", {
         verifiedBy: "admin",
         verifiedAt: new Date().toISOString(),
-      });
+      } as any);
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to approve the payment. Please try again.");
+      }
     } else {
       const reason = prompt("Enter rejection reason:");
       if (!reason) return; // cancelled prompt
-      updateVendorOrder(id, "awaiting_payment_verification", {
+      const result = await updateVendorOrder(id, "awaiting_payment_verification", {
         rejectedBy: "admin",
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason,
-      });
+      } as any);
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to reject the payment. Please try again.");
+      }
     }
   };
 
@@ -47,9 +53,13 @@ export const AdminOrders: React.FC = () => {
     setCancelTargetId(id);
   };
 
-  const handleConfirmForceCancel = () => {
+  const handleConfirmForceCancel = async () => {
     if (cancelTargetId) {
-      updateVendorOrder(cancelTargetId, "cancelled");
+      const result = await updateVendorOrder(cancelTargetId, "cancelled");
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to cancel the order. Please try again.");
+        return;
+      }
       setCancelTargetId(null);
       // Synchronize modal state if active
       if (selectedOrder && selectedOrder.id === cancelTargetId) {
@@ -58,9 +68,13 @@ export const AdminOrders: React.FC = () => {
     }
   };
 
-  const handleConfirmForceCancelReceipt = () => {
+  const handleConfirmForceCancelReceipt = async () => {
     if (receiptCancelTargetId) {
-      updateVendorOrder(receiptCancelTargetId, "cancelled");
+      const result = await updateVendorOrder(receiptCancelTargetId, "cancelled");
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to cancel the order. Please try again.");
+        return;
+      }
       setReceiptCancelTargetId(null);
       if (selectedReceiptOrder && selectedReceiptOrder.id === receiptCancelTargetId) {
         setSelectedReceiptOrder({ ...selectedReceiptOrder, status: "cancelled" });
@@ -226,10 +240,14 @@ export const AdminOrders: React.FC = () => {
                   </h4>
                   <select
                     value={selectedOrder.riderId || ""}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const selectedRiderId = e.target.value;
                       if (!selectedRiderId) return;
-                      acceptDelivery(selectedOrder.id, selectedRiderId);
+                      const result = await acceptDelivery(selectedOrder.id, selectedRiderId);
+                      if (!result?.success) {
+                        window.alert(result?.error || "Failed to dispatch the rider. Please try again.");
+                        return;
+                      }
                       const selectedRiderObj = activeRiders.find(r => r.id === selectedRiderId);
                       if (selectedRiderObj) {
                         setSelectedOrder({ 
@@ -254,9 +272,13 @@ export const AdminOrders: React.FC = () => {
                   <div className="flex gap-2">
                     <select
                       value={selectedOrder.status}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const nextStatus = e.target.value as OrderStatus;
-                        updateVendorOrder(selectedOrder.id, nextStatus);
+                        const result = await updateVendorOrder(selectedOrder.id, nextStatus);
+                        if (!result?.success) {
+                          window.alert(result?.error || "Failed to update the order status. Please try again.");
+                          return;
+                        }
                         setSelectedOrder({ ...selectedOrder, status: nextStatus });
                       }}
                       className="text-xs p-2.5 bg-white border border-gray-250 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 flex-grow font-sans font-bold text-gray-700 cursor-pointer"
@@ -483,10 +505,14 @@ export const AdminOrders: React.FC = () => {
                   </h4>
                   <select
                     value={selectedReceiptOrder.riderId || ""}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const selectedRiderId = e.target.value;
                       if (!selectedRiderId) return;
-                      acceptDelivery(selectedReceiptOrder.id, selectedRiderId);
+                      const result = await acceptDelivery(selectedReceiptOrder.id, selectedRiderId);
+                      if (!result?.success) {
+                        window.alert(result?.error || "Failed to dispatch the rider. Please try again.");
+                        return;
+                      }
                       const selectedRiderObj = activeRiders.find(r => r.id === selectedRiderId);
                       if (selectedRiderObj) {
                         setSelectedReceiptOrder({ 
@@ -511,9 +537,13 @@ export const AdminOrders: React.FC = () => {
                   <div className="flex gap-2">
                     <select
                       value={selectedReceiptOrder.status}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const nextStatus = e.target.value as any;
-                        updateVendorOrder(selectedReceiptOrder.id, nextStatus);
+                        const result = await updateVendorOrder(selectedReceiptOrder.id, nextStatus);
+                        if (!result?.success) {
+                          window.alert(result?.error || "Failed to update the order status. Please try again.");
+                          return;
+                        }
                         setSelectedReceiptOrder({ ...selectedReceiptOrder, status: nextStatus });
                       }}
                       className="text-xs p-2.5 bg-white border border-gray-255 rounded-xl outline-none focus:ring-4 focus:ring-purple-50 flex-grow font-sans font-bold text-gray-700 cursor-pointer"

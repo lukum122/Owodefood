@@ -19,8 +19,11 @@ export const RiderDeliveries: React.FC = () => {
     j => j.orderType === "receipt_pickup" && j.riderId === currentRider.id && (j.status === "accepted" || j.status === "out_for_delivery")
   );
 
-  const handleUpdateStatus = (orderId: string, status: OrderStatus) => {
-    updateDeliveryStatus(orderId, status);
+  const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
+    const result = await updateDeliveryStatus(orderId, status);
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update the delivery status. Please try again.");
+    }
   };
 
   return (
@@ -222,7 +225,7 @@ export const RiderDeliveries: React.FC = () => {
                 <div className="flex justify-end pt-2 border-t border-gray-50 gap-3">
                   {job.status === "accepted" ? (
                     <button
-                      onClick={() => updateDeliveryStatus(job.id, "out_for_delivery")}
+                      onClick={() => handleUpdateStatus(job.id, "out_for_delivery")}
                       className="w-full sm:w-auto py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 cursor-pointer transition uppercase"
                     >
                       <CheckCircle2 className="w-4 h-4 text-white fill-transparent" />
@@ -230,7 +233,7 @@ export const RiderDeliveries: React.FC = () => {
                     </button>
                   ) : (
                     <button
-                      onClick={() => updateDeliveryStatus(job.id, "delivered")}
+                      onClick={() => handleUpdateStatus(job.id, "delivered")}
                       className="w-full sm:w-auto py-3 px-6 bg-[#070329] hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 cursor-pointer transition uppercase"
                     >
                       <CheckCircle2 className="w-4 h-4 text-green-300 fill-transparent" />
