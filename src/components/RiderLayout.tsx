@@ -30,9 +30,12 @@ export const RiderLayout: React.FC = () => {
 
   const myApprovedRoles = currentUser?.roles || (currentUser ? [currentUser.role] : []);
 
-  const toggleAvailability = () => {
+  const toggleAvailability = async () => {
     if (!currentRider) return;
-    updateRiderProfile({ isAvailable: !currentRider.isAvailable });
+    const result = await updateRiderProfile({ isAvailable: !currentRider.isAvailable });
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update your availability. Please check your connection and try again.");
+    }
   };
 
   const menuItems = [
