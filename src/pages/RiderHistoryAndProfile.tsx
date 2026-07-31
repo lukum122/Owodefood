@@ -146,21 +146,21 @@ export const RiderProfile: React.FC = () => {
     }
   }, [currentRider]);
 
-  const performRiderProfileUpdate = () => {
-    try {
-      updateRiderProfile({
-        name,
-        phone,
-        vehicleType: vehicle as any
-      });
-      setSuccessText("Successful! Your courier dispatch details were registered.");
-      setIsEditing(false);
-      setTimeout(() => {
-        setSuccessText("");
-      }, 3000);
-    } catch (err) {
-      setErrorText("Failed to save changes.");
+  const performRiderProfileUpdate = async () => {
+    const result = await updateRiderProfile({
+      name,
+      phone,
+      vehicleType: vehicle as any
+    });
+    if (!result?.success) {
+      setErrorText(result?.error || "Failed to save changes. Please check your connection and try again.");
+      return;
     }
+    setSuccessText("Successful! Your courier dispatch details were registered.");
+    setIsEditing(false);
+    setTimeout(() => {
+      setSuccessText("");
+    }, 3000);
   };
 
   const handleUpdate = (e: React.FormEvent) => {
