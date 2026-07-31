@@ -151,7 +151,7 @@ interface DatabaseContextType {
 
   // Reviews System
   reviews: Review[];
-  addReview: (vendorId: string, rating: number, comment: string) => void;
+  addReview: (vendorId: string, rating: number, comment: string) => Promise<{ success: boolean; error?: string }>;
 
   // Notifications System
   notifications: AppNotification[];
@@ -3266,8 +3266,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const addReview = (vendorId: string, rating: number, comment: string) => {
-    if (!currentUser) return;
+  const addReview = async (vendorId: string, rating: number, comment: string): Promise<{ success: boolean; error?: string }> => {
+    if (!currentUser) return { success: false, error: "Not logged in" };
 
     const newReview: Review = {
       id: "rev-" + generateId(),
@@ -3279,29 +3279,31 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       createdAt: new Date().toISOString(),
     };
 
-    // 1. Persist the reviews state
+    const result = await syncSave("REVIEW_UPSERT", newReview);
+    if (!result?.success) {
+      console.error("[addReview] Failed to save review:", result?.error);
+      return { success: false, error: result?.error || "Failed to submit your review. Please check your connection and try again." };
+    }
+
+    // 1. Persist the review locally now that the server has confirmed it.
     const updatedReviews = [newReview, ...reviews];
     setReviews(updatedReviews);
     localStorage.setItem("fd_reviews", JSON.stringify(updatedReviews));
-    syncSave("REVIEW_UPSERT", newReview);
 
-    // 2. Recalculate vendor's average rating
-    const vendorReviews = updatedReviews.filter(r => r.vendorId === vendorId);
-    const avgRating = vendorReviews.length > 0
-      ? Number((vendorReviews.reduce((sum, r) => sum + r.rating, 0) / vendorReviews.length).toFixed(1))
-      : rating;
+    // 2. Use the vendor's average rating exactly as the server computed and
+    // persisted it — the server recalculates this itself as part of saving
+    // the review (a customer isn't authorized to directly upsert a vendor
+    // record, so a separate client-side VENDOR_UPSERT call here would only
+    // ever be rejected).
+    if (typeof result.vendorRating === "number") {
+      const updatedVendors = vendors.map(v =>
+        v.id === vendorId ? { ...v, rating: result.vendorRating } : v
+      );
+      setVendors(updatedVendors);
+      localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
+    }
 
-    const updatedVendors = vendors.map(v => {
-      if (v.id === vendorId) {
-        const updatedVendor = { ...v, rating: avgRating };
-        syncSave("VENDOR_UPSERT", updatedVendor);
-        return updatedVendor;
-      }
-      return v;
-    });
-
-    setVendors(updatedVendors);
-    localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
+    return { success: true };
   };
 
   // NOTIFICATION ACTIONS
