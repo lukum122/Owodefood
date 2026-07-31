@@ -3549,30 +3549,56 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     return { success: true };
   };
 
-  const addProduct = (product: Omit<Product, "id" | "createdAt">) => {
+  const addProduct = async (product: Omit<Product, "id" | "createdAt">): Promise<{ success: boolean; error?: string }> => {
     const newProduct: Product = {
       ...product,
       id: "p-" + generateId(),
       createdAt: new Date().toISOString()
     };
-    const newProducts = [...products, newProduct];
+
+    const result = await syncSave("PRODUCT_UPSERT", newProduct);
+    if (!result?.success) {
+      console.error("[addProduct] Failed to add product:", result?.error);
+      return { success: false, error: result?.error || "Failed to add the product. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedProduct = result.product ? { ...newProduct, ...result.product } : newProduct;
+    const newProducts = [...products, confirmedProduct];
     setProducts(newProducts);
     localStorage.setItem("fd_products", JSON.stringify(newProducts));
-    syncSave("PRODUCT_UPSERT", newProduct);
+
+    return { success: true };
   };
 
-  const updateProduct = (updatedProduct: Product) => {
-    const newProducts = products.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+  const updateProduct = async (updatedProduct: Product): Promise<{ success: boolean; error?: string }> => {
+    const result = await syncSave("PRODUCT_UPSERT", updatedProduct);
+    if (!result?.success) {
+      console.error("[updateProduct] Failed to update product:", result?.error);
+      return { success: false, error: result?.error || "Failed to save the product. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedProduct = result.product ? { ...updatedProduct, ...result.product } : updatedProduct;
+    const newProducts = products.map(p => p.id === confirmedProduct.id ? confirmedProduct : p);
     setProducts(newProducts);
     localStorage.setItem("fd_products", JSON.stringify(newProducts));
-    syncSave("PRODUCT_UPSERT", updatedProduct);
+
+    return { success: true };
   };
 
-  const deleteProduct = (productId: string) => {
+  const deleteProduct = async (productId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await syncSave("PRODUCT_DELETE", { id: productId });
+    if (!result?.success) {
+      console.error("[deleteProduct] Failed to delete product:", result?.error);
+      return { success: false, error: result?.error || "Failed to delete the product. Please check your connection and try again." };
+    }
+
     const newProducts = products.filter(p => p.id !== productId);
     setProducts(newProducts);
     localStorage.setItem("fd_products", JSON.stringify(newProducts));
-    syncSave("PRODUCT_DELETE", { id: productId });
+
+    return { success: true };
   };
 
   const updateVendorProfile = async (profileData: Partial<Vendor>): Promise<{ success: boolean; error?: string }> => {
