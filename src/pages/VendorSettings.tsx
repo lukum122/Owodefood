@@ -140,7 +140,7 @@ export const VendorSettings: React.FC = () => {
     }
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorStr("");
     setSuccessStr("");
@@ -162,7 +162,7 @@ export const VendorSettings: React.FC = () => {
       const fallbackOpen = primaryHours.openTime;
       const fallbackClose = primaryHours.closeTime;
 
-      updateVendorProfile({
+      const result = await updateVendorProfile({
         name,
         description,
         category,
@@ -179,6 +179,12 @@ export const VendorSettings: React.FC = () => {
         receiptPickupEnabled,
         isTemporarilyClosed,
       });
+
+      if (!result?.success) {
+        setErrorStr(result?.error || "Failed to save changes. Please check your connection and try again.");
+        return;
+      }
+
       setSuccessStr("Awesome! Your merchant profile was successfully updated!");
       setTimeout(() => {
         setSuccessStr("");
