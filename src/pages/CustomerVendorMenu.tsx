@@ -180,7 +180,7 @@ export const CustomerVendorMenu: React.FC = () => {
   // Filter reviews for this vendor
   const vendorReviews = reviews.filter(r => r.vendorId === vendorObj.id);
 
-  const handleSubmitReview = (e: React.FormEvent) => {
+  const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     setFormSuccess(false);
@@ -199,7 +199,13 @@ export const CustomerVendorMenu: React.FC = () => {
       return;
     }
 
-    addReview(vendorObj.id, newRating, newComment.trim());
+    const result = await addReview(vendorObj.id, newRating, newComment.trim());
+    if (!result?.success) {
+      setFormError(result?.error || "Failed to submit your review. Please check your connection and try again.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setFormSuccess(true);
     setNewComment("");
     setNewRating(5);
