@@ -1437,6 +1437,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             isAvailable: payload.isAvailable,
           },
         });
+
+        // Return exactly what was confirmed/saved, so the client syncs its
+        // local state to server truth instead of trusting its own optimistic copy.
+        const savedRiderRows = await db.select().from(riders).where(eq(riders.id, payload.id)).limit(1);
+        if (savedRiderRows.length > 0) {
+          responseExtra.rider = savedRiderRows[0];
+        }
       } break;
 
       case "PAYMENT_GATEWAYS_BULK":
