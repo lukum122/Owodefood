@@ -1716,6 +1716,20 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             createdAt: payload.createdAt || new Date().toISOString(),
           },
         });
+
+        // Recalculate and persist the vendor's average rating here, server-side.
+        // (Previously the client tried to do this itself via a separate
+        // VENDOR_UPSERT call, but that call requires the vendor's own userId
+        // and was silently rejected with 403 for every real customer review —
+        // the rating never actually made it into the database.)
+        const allVendorReviews = await db.select().from(reviews).where(eq(reviews.vendorId, payload.vendorId));
+        if (allVendorReviews.length > 0) {
+          const avgRating = Number(
+            (allVendorReviews.reduce((sum, r) => sum + Number(r.rating), 0) / allVendorReviews.length).toFixed(1)
+          );
+          await db.update(vendors).set({ rating: avgRating }).where(eq(vendors.id, payload.vendorId));
+          responseExtra.vendorRating = avgRating;
+        }
       }
       break;
 
