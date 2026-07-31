@@ -3741,14 +3741,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     return { success: true };
   };
 
-  const updateRiderProfile = (profileData: Partial<Rider>) => {
-    if (!currentRider) return;
-    const updated = { ...currentRider, ...profileData };
-    const updatedRiders = riders.map(r => r.id === currentRider.id ? updated : r);
+  const updateRiderProfile = async (profileData: Partial<Rider>): Promise<{ success: boolean; error?: string }> => {
+    if (!currentRider) return { success: false, error: "No rider profile found" };
+    const candidateRider = { ...currentRider, ...profileData };
+
+    const result = await syncSave("RIDER_UPSERT", candidateRider);
+    if (!result?.success) {
+      console.error("[updateRiderProfile] Failed to update rider profile:", result?.error);
+      return { success: false, error: result?.error || "Failed to save your changes. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedRider = result.rider ? { ...currentRider, ...result.rider } : candidateRider;
+    const updatedRiders = riders.map(r => r.id === currentRider.id ? confirmedRider : r);
     setRiders(updatedRiders);
     localStorage.setItem("fd_riders", JSON.stringify(updatedRiders));
-    syncSave("RIDER_UPSERT", updated);
-    setCurrentRider(updated);
+    setCurrentRider(confirmedRider);
+
+    return { success: true };
   };
 
   // ADMIN ACTIONS
