@@ -3575,14 +3575,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     syncSave("PRODUCT_DELETE", { id: productId });
   };
 
-  const updateVendorProfile = (profileData: Partial<Vendor>) => {
-    if (!currentVendor) return;
-    const updated = { ...currentVendor, ...profileData };
-    const updatedVendors = vendors.map(v => v.id === currentVendor.id ? updated : v);
+  const updateVendorProfile = async (profileData: Partial<Vendor>): Promise<{ success: boolean; error?: string }> => {
+    if (!currentVendor) return { success: false, error: "No vendor profile found" };
+    const candidateVendor = { ...currentVendor, ...profileData };
+
+    const result = await syncSave("VENDOR_UPSERT", candidateVendor);
+    if (!result?.success) {
+      console.error("[updateVendorProfile] Failed to update vendor profile:", result?.error);
+      return { success: false, error: result?.error || "Failed to save your changes. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedVendor = result.vendor ? { ...currentVendor, ...result.vendor } : candidateVendor;
+    const updatedVendors = vendors.map(v => v.id === currentVendor.id ? confirmedVendor : v);
     setVendors(updatedVendors);
     localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
-    syncSave("VENDOR_UPSERT", updated);
-    setCurrentVendor(updated);
+    setCurrentVendor(confirmedVendor);
+
+    return { success: true };
   };
 
   // RIDER ACTIONS
