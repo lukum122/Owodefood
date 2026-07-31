@@ -2519,7 +2519,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         return { success: false, error: `Sync failed (${res.status})` };
       }
 
-      return { success: true };
+      const data = await res.json().catch(() => ({}));
+      return { success: true, ...data };
     } catch (err: any) {
       console.error(`[syncSave] "${type}" threw an error:`, err?.message || err);
       return { success: false, error: err?.message || String(err) };
@@ -3503,21 +3504,23 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // VENDOR ACTIONS
-  const updateVendorOrder = (orderId: string, status: OrderStatus) => {
-    let orderToUpdate = orders.find(o => o.id === orderId);
-    if (!orderToUpdate) return;
-    
-    const updatedOrders = orders.map(o => {
-      if (o.id === orderId) {
-        // If preparing is ready and a rider is already assigned, assign to rider or let status flow
-        return { ...o, status };
-      }
-      return o;
-    });
+  const updateVendorOrder = async (orderId: string, status: OrderStatus): Promise<{ success: boolean; error?: string }> => {
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return { success: false, error: "Order not found" };
+
+    const candidateOrder = { ...orderToUpdate, status };
+
+    const result = await syncSave("ORDER_UPSERT", candidateOrder);
+    if (!result?.success) {
+      console.error(`[updateVendorOrder] Failed to update order ${orderId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to update the order. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
+    const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
     localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
-    const targetOrder = updatedOrders.find(o => o.id === orderId);
-    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
 
     // Notify Customer about status change
     let statusText = status as string;
@@ -3542,6 +3545,8 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       "order",
       orderId
     );
+
+    return { success: true };
   };
 
   const addProduct = (product: Omit<Product, "id" | "createdAt">) => {
@@ -3581,111 +3586,123 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // RIDER ACTIONS
-  const acceptDelivery = (orderId: string, riderId: string) => {
+  const acceptDelivery = async (orderId: string, riderId: string): Promise<{ success: boolean; error?: string }> => {
     const rider = riders.find(r => r.id === riderId);
-    if (!rider) return;
+    if (!rider) return { success: false, error: "Rider not found" };
 
-    const updatedOrders = orders.map(o => {
-      if (o.id === orderId) {
-        // Trigger customer notification
-        addNotification(
-          o.customerId,
-          "Rider Assigned! 🚴",
-          `Rider ${rider.name} has accepted your order #${orderId} and is out for delivery!`,
-          "delivery",
-          orderId
-        );
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return { success: false, error: "Order not found" };
 
-        // Notify vendor as well
-        const vendorObj = vendors.find(v => v.id === o.vendorId);
-        if (vendorObj && vendorObj.userId) {
-          addNotification(
-            vendorObj.userId,
-            "Rider Assigned to Delivery 🚴",
-            `Rider ${rider.name} has accepted order #${orderId} for delivery.`,
-            "delivery",
-            orderId
-          );
-        }
+    const candidateOrder = {
+      ...orderToUpdate,
+      riderId,
+      riderName: rider.name,
+      status: "out_for_delivery" as OrderStatus,
+    };
 
-        // Notify Admin
-        addNotification(
-          "admin-1",
-          "Rider Assigned to Order",
-          `Rider ${rider.name} has accepted delivery for order #${orderId}.`,
-          "delivery",
-          orderId
-        );
+    const result = await syncSave("ORDER_UPSERT", candidateOrder);
+    if (!result?.success) {
+      console.error(`[acceptDelivery] Failed to assign rider to order ${orderId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to accept the delivery. Please check your connection and try again." };
+    }
 
-        return {
-          ...o,
-          riderId,
-          riderName: rider.name,
-          status: "out_for_delivery" as OrderStatus
-        };
-      }
-      return o;
-    });
-    
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
+    const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
     localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
-    const targetOrder = updatedOrders.find(o => o.id === orderId);
-    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
+
+    // Trigger customer notification
+    addNotification(
+      orderToUpdate.customerId,
+      "Rider Assigned! 🚴",
+      `Rider ${rider.name} has accepted your order #${orderId} and is out for delivery!`,
+      "delivery",
+      orderId
+    );
+
+    // Notify vendor as well
+    const vendorObj = vendors.find(v => v.id === orderToUpdate.vendorId);
+    if (vendorObj && vendorObj.userId) {
+      addNotification(
+        vendorObj.userId,
+        "Rider Assigned to Delivery 🚴",
+        `Rider ${rider.name} has accepted order #${orderId} for delivery.`,
+        "delivery",
+        orderId
+      );
+    }
+
+    // Notify Admin
+    addNotification(
+      "admin-1",
+      "Rider Assigned to Order",
+      `Rider ${rider.name} has accepted delivery for order #${orderId}.`,
+      "delivery",
+      orderId
+    );
+
+    return { success: true };
   };
 
-  const updateDeliveryStatus = (orderId: string, status: OrderStatus) => {
-    let orderToUpdate = orders.find(o => o.id === orderId);
-    if (!orderToUpdate) return;
+  const updateDeliveryStatus = async (orderId: string, status: OrderStatus): Promise<{ success: boolean; error?: string }> => {
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return { success: false, error: "Order not found" };
 
-    const updatedOrders = orders.map(o => {
-      if (o.id === orderId) {
-        if (status === "delivered") {
-          // Notify customer
-          addNotification(
-            o.customerId,
-            "Order Delivered! 🍲🎉",
-            `Your order #${orderId} from ${o.vendorName} has been delivered. Enjoy your meal!`,
-            "delivery",
-            orderId
-          );
-          // Notify vendor
-          const vObj = vendors.find(v => v.id === o.vendorId);
-          if (vObj && vObj.userId) {
-            addNotification(
-              vObj.userId,
-              "Delivery Confirmed! 💸",
-              `Order #${orderId} has been successfully delivered by ${o.riderName || 'Rider'}. Payout processed.`,
-              "delivery",
-              orderId
-            );
-          }
-          // Notify Admin
-          addNotification(
-            "admin-1",
-            "Order Completed",
-            `Order #${orderId} from ${o.vendorName} has been successfully delivered by ${o.riderName || 'Rider'}.`,
-            "delivery",
-            orderId
-          );
-        } else {
-          // General status update
-          addNotification(
-            o.customerId,
-            "Delivery Status Update",
-            `Your delivery for order #${orderId} is now: ${status.replace(/_/g, " ")}.`,
-            "delivery",
-            orderId
-          );
-        }
-        return { ...o, status };
-      }
-      return o;
-    });
+    const candidateOrder = { ...orderToUpdate, status };
 
+    const result = await syncSave("ORDER_UPSERT", candidateOrder);
+    if (!result?.success) {
+      console.error(`[updateDeliveryStatus] Failed to update order ${orderId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to update the delivery status. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
+    const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
     localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
-    const targetOrder = updatedOrders.find(o => o.id === orderId);
-    if (targetOrder) syncSave("ORDER_UPSERT", targetOrder);
+
+    if (status === "delivered") {
+      // Notify customer
+      addNotification(
+        orderToUpdate.customerId,
+        "Order Delivered! 🍲🎉",
+        `Your order #${orderId} from ${orderToUpdate.vendorName} has been delivered. Enjoy your meal!`,
+        "delivery",
+        orderId
+      );
+      // Notify vendor
+      const vObj = vendors.find(v => v.id === orderToUpdate.vendorId);
+      if (vObj && vObj.userId) {
+        addNotification(
+          vObj.userId,
+          "Delivery Confirmed! 💸",
+          `Order #${orderId} has been successfully delivered by ${orderToUpdate.riderName || 'Rider'}. Payout processed.`,
+          "delivery",
+          orderId
+        );
+      }
+      // Notify Admin
+      addNotification(
+        "admin-1",
+        "Order Completed",
+        `Order #${orderId} from ${orderToUpdate.vendorName} has been successfully delivered by ${orderToUpdate.riderName || 'Rider'}.`,
+        "delivery",
+        orderId
+      );
+    } else {
+      // General status update
+      addNotification(
+        orderToUpdate.customerId,
+        "Delivery Status Update",
+        `Your delivery for order #${orderId} is now: ${status.replace(/_/g, " ")}.`,
+        "delivery",
+        orderId
+      );
+    }
+
+    return { success: true };
   };
 
   const updateRiderProfile = (profileData: Partial<Rider>) => {
