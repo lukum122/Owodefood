@@ -1043,6 +1043,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             addonGroups: payload.addonGroups ? JSON.stringify(payload.addonGroups) : null,
           },
         });
+
+        // Return exactly what was confirmed/saved, so the client syncs its
+        // local state to server truth instead of trusting its own optimistic copy.
+        const savedProductRows = await db.select().from(products).where(eq(products.id, payload.id)).limit(1);
+        if (savedProductRows.length > 0) {
+          responseExtra.product = savedProductRows[0];
+        }
       } break;
 
       case "PRODUCT_DELETE": {
@@ -1054,6 +1061,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           }
         }
         await db.delete(products).where(eq(products.id, payload.id));
+        responseExtra.deletedId = payload.id;
       } break;
 
       case "ORDERS_BULK":
