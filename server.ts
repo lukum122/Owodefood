@@ -649,6 +649,10 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
   try {
     const { type, payload } = req.body;
     const reqUser = (req as any).user;
+    // Populated by specific cases (e.g. ORDER_UPSERT) so the client can sync
+    // its local state to exactly what the server actually confirmed/saved,
+    // rather than trusting its own optimistic copy of the payload.
+    let responseExtra: any = {};
 
     // Secure authentication check:
     // Unauthenticated users are ONLY allowed to perform USER_UPSERT to register themselves,
@@ -1352,6 +1356,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           } catch(e) { console.error("Rider push failed", e); }
         }
 
+        // Return exactly what was confirmed/saved, so the client syncs its
+        // local state to server truth instead of trusting its own optimistic copy.
+        const savedOrderRows = await db.select().from(orders).where(eq(orders.id, payload.id)).limit(1);
+        const savedOrderItems = await db.select().from(orderItems).where(eq(orderItems.orderId, payload.id));
+        if (savedOrderRows.length > 0) {
+          responseExtra.order = { ...savedOrderRows[0], items: savedOrderItems };
+        }
+
         break;
       }
 
@@ -1702,7 +1714,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       io.emit("sync_update", { type, payload });
     }
 
-    res.json({ success: true });
+    res.json({ success: true, ...responseExtra });
   } catch (error) {
     console.error("Cloud SQL sync save failed:", error);
     res.status(500).json({ error: "Failed to sync updates to Cloud SQL database." });
