@@ -194,61 +194,6 @@ app.get("/api/env-check", (req, res) => {
 });
 
 
-// Safe direct database lookup — checks whether a specific email/phone
-// actually exists as a row in the live production "users" table right now.
-// Returns only non-sensitive fields (id, email, name, createdAt) — never the PIN.
-app.get("/api/debug-user-check", async (req, res) => {
-  const raw = (req.query.email as string) || "";
-  const identifier = raw.trim().toLowerCase();
-  if (!identifier) {
-    return res.status(400).json({ error: "Provide ?email=someone@example.com in the URL" });
-  }
-  try {
-    const rows = await db
-      .select({ id: users.id, email: users.email, name: users.name, phone: users.phone, createdAt: users.createdAt })
-      .from(users)
-      .where(sql`lower(${users.email}) = ${identifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${identifier}`);
-    res.json({ queried: identifier, found: rows.length > 0, count: rows.length, rows });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || String(err) });
-  }
-});
-
-// Safe SMTP connectivity check — verifies the connection without sending an email
-// and never exposes the actual password.
-app.get("/api/smtp-check", async (req, res) => {
-  const host = process.env.SMTP_HOST || "smtp.zeptomail.com";
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const info: any = {
-    host,
-    port,
-    secure: process.env.SMTP_SECURE === "true" || port === 465,
-    hasUser: !!process.env.SMTP_USER,
-    hasPass: !!process.env.SMTP_PASS,
-  };
-
-  if (!info.hasPass) {
-    return res.json({ ...info, verify: "skipped", reason: "SMTP_PASS is not set" });
-  }
-
-  try {
-    const mailer = getMailTransporter();
-    if (!mailer) {
-      return res.json({ ...info, verify: "skipped", reason: "transporter not created" });
-    }
-    const start = Date.now();
-    await mailer.verify();
-    return res.json({ ...info, verify: "success", tookMs: Date.now() - start });
-  } catch (err: any) {
-    return res.json({
-      ...info,
-      verify: "failed",
-      errorCode: err.code || null,
-      errorMessage: err.message || String(err),
-    });
-  }
-});
-
 // SMTP Connection Test Endpoint
 app.post("/api/email/test", async (req, res) => {
   const { toEmail } = req.body;
