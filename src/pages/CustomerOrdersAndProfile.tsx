@@ -549,17 +549,17 @@ export const CustomerProfile: React.FC = () => {
     }
   };
 
-  const performProfileUpdate = () => {
-    try {
-      updateProfile(name.trim(), phone.trim(), gender, profileImage);
-      setSuccessText("Your member profile details were synced successfully!");
-      setIsEditing(false);
-      setTimeout(() => {
-        setSuccessText("");
-      }, 3000);
-    } catch (err: any) {
-      setErrorText("Could not update profile details.");
+  const performProfileUpdate = async () => {
+    const result = await updateProfile(name.trim(), phone.trim(), gender, profileImage);
+    if (!result?.success) {
+      setErrorText(result?.error || "Could not update profile details.");
+      return;
     }
+    setSuccessText("Your member profile details were synced successfully!");
+    setIsEditing(false);
+    setTimeout(() => {
+      setSuccessText("");
+    }, 3000);
   };
 
   const handleUpdate = (e: React.FormEvent) => {
@@ -611,7 +611,7 @@ export const CustomerProfile: React.FC = () => {
     setOtpNotification(`SIMULATED SMS: Your new verification code is ${code}`);
   };
 
-  const handlePinChange = (e: React.FormEvent) => {
+  const handlePinChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError("");
     setPinSuccess("");
@@ -653,7 +653,12 @@ export const CustomerProfile: React.FC = () => {
 
     try {
       if (currentUser) {
-        resetUserPin(currentUser.id, newPin);
+        const result = await resetUserPin(currentUser.id, newPin);
+        if (!result?.success) {
+          setPinError(result?.error || "Failed to update security PIN.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
         setPinSuccess("Your login security PIN has been updated successfully!");
         setCurrentPin("");
         setNewPin("");

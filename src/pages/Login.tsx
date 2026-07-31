@@ -284,7 +284,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         return;
       }
 
-      resetUserPin(foundUserForReset.id, newPin);
+      const result = await resetUserPin(foundUserForReset.id, newPin);
+      if (!result?.success) {
+        setError(result?.error || "Failed to reset your PIN. Please check your connection and try again.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
 
       setSuccess("Your security PIN has been successfully reset! Redirecting to login...");
       

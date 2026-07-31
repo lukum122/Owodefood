@@ -211,7 +211,7 @@ export const RiderProfile: React.FC = () => {
     setOtpNotification(`SIMULATED SMS: Your new verification code is ${code}`);
   };
 
-  const handlePinChange = (e: React.FormEvent) => {
+  const handlePinChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError("");
     setPinSuccess("");
@@ -253,7 +253,12 @@ export const RiderProfile: React.FC = () => {
 
     try {
       if (currentUser) {
-        resetUserPin(currentUser.id, newPin);
+        const result = await resetUserPin(currentUser.id, newPin);
+        if (!result?.success) {
+          setPinError(result?.error || "Failed to update security PIN.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
         setPinSuccess("Your login security PIN has been updated successfully!");
         setCurrentPin("");
         setNewPin("");
