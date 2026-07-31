@@ -963,6 +963,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             freeDelivery: payload.freeDelivery,
           },
         });
+
+        // Return exactly what was confirmed/saved, so the client syncs its
+        // local state to server truth instead of trusting its own optimistic copy.
+        const savedVendorRows = await db.select().from(vendors).where(eq(vendors.id, payload.id)).limit(1);
+        if (savedVendorRows.length > 0) {
+          responseExtra.vendor = savedVendorRows[0];
+        }
       } break;
 
       case "PRODUCTS_BULK":
