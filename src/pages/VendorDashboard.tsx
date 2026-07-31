@@ -44,11 +44,14 @@ export const VendorDashboard: React.FC = () => {
   const totalCompletedCount = vendorOrders.filter(o => o.status === "delivered").length;
 
   // Toggle dynamic inventory in stock / out of stock status
-  const handleToggleInventory = (p: any) => {
-    updateProduct({
+  const handleToggleInventory = async (p: any) => {
+    const result = await updateProduct({
       ...p,
       isAvailable: !p.isAvailable
     });
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update availability. Please check your connection and try again.");
+    }
   };
 
   const recentOrders = vendorOrders.slice(0, 4);

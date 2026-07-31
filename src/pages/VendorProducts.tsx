@@ -274,7 +274,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorStr("");
     setSuccessStr("");
@@ -301,7 +301,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     }
 
     if (mode === "new") {
-      addProduct({
+      const result = await addProduct({
         vendorId: currentVendor.id,
         name,
         description,
@@ -313,10 +313,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         maxAddons: parsedMaxAddons,
         addonGroups
       });
+      if (!result?.success) {
+        setErrorStr(result?.error || "Failed to add the product. Please check your connection and try again.");
+        return;
+      }
       setSuccessStr("Fabulous! Your new culinary item was successfully minted in the system.");
       setTimeout(() => navigate("/vendor/products"), 1200);
     } else if (mode === "edit" && editingProduct) {
-      updateProduct({
+      const result = await updateProduct({
         ...editingProduct,
         name,
         description,
@@ -328,6 +332,10 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         maxAddons: parsedMaxAddons,
         addonGroups
       });
+      if (!result?.success) {
+        setErrorStr(result?.error || "Failed to save the product. Please check your connection and try again.");
+        return;
+      }
       setSuccessStr("Success! Product details were hot-swapped and saved.");
       setTimeout(() => navigate("/vendor/products"), 1200);
     }
@@ -337,18 +345,25 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     setDeleteTargetId(pId);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deleteTargetId) {
-      deleteProduct(deleteTargetId);
+      const result = await deleteProduct(deleteTargetId);
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to delete the product. Please check your connection and try again.");
+        return;
+      }
       setDeleteTargetId(null);
     }
   };
 
-  const toggleAvailability = (p: Product) => {
-    updateProduct({
+  const toggleAvailability = async (p: Product) => {
+    const result = await updateProduct({
       ...p,
       isAvailable: !p.isAvailable
     });
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update availability. Please check your connection and try again.");
+    }
   };
 
   /* Render create/edit form */
