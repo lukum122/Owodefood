@@ -102,8 +102,8 @@ interface DatabaseContextType {
   updateProfile: (name: string, phone: string, gender?: string, profileImage?: string) => Promise<{ success: boolean; error?: string }>;
   resetUserPin: (userId: string, newPin: string) => Promise<{ success: boolean; error?: string }>;
   switchRole: (role: UserRole) => void;
-  applyForVendor: (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => { success: boolean; error?: string };
-  applyForRider: (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => { success: boolean; error?: string };
+  applyForVendor: (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => Promise<{ success: boolean; error?: string }>;
+  applyForRider: (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => Promise<{ success: boolean; error?: string }>;
   
   // Cart Actions
   addToCart: (product: Product, selectedAddons?: Addon[]) => void;
@@ -2814,9 +2814,9 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const applyForVendor = (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }) => {
+  const applyForVendor = async (businessName: string, cuisine: string, extra?: { businessRegNo?: string; foodPermitNo?: string; verificationDoc?: string }): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser) return { success: false, error: "Not logged in" };
-    
+
     const existingV = vendors.find(v => v.userId === currentUser.id);
     if (existingV) {
       if (existingV.status === "approved") {
@@ -2842,9 +2842,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       verificationDoc: extra?.verificationDoc,
     };
 
+    // Individual VENDOR_UPSERT — not VENDORS_BULK, which requires admin auth
+    // and silently rejected every real applicant's own submission.
+    const result = await syncSave("VENDOR_UPSERT", newVendor);
+    if (!result?.success) {
+      console.error("[applyForVendor] Failed to submit vendor application:", result?.error);
+      return { success: false, error: result?.error || "Failed to submit your application. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedVendor = result.vendor ? { ...newVendor, ...result.vendor } : newVendor;
     // Filter out previously rejected vendor profile to allow re-application
-    const updatedVendors = vendors.filter(v => v.userId !== currentUser.id || v.status !== "rejected").concat(newVendor);
-    persistVendors(updatedVendors);
+    const updatedVendors = vendors.filter(v => v.userId !== currentUser.id || v.status !== "rejected").concat(confirmedVendor);
+    setVendors(updatedVendors);
+    localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
 
     addNotification(
       "admin",
@@ -2856,7 +2867,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     return { success: true };
   };
 
-  const applyForRider = (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }) => {
+  const applyForRider = async (vehicleType: "bicycle" | "motorcycle" | "car", extra?: { licenseNo?: string; plateNo?: string; nationalIdNo?: string; verificationDoc?: string }): Promise<{ success: boolean; error?: string }> => {
     if (!currentUser) return { success: false, error: "Not logged in" };
 
     const existingR = riders.find(r => r.userId === currentUser.id);
@@ -2883,9 +2894,20 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       verificationDoc: extra?.verificationDoc,
     };
 
+    // Individual RIDER_UPSERT — not RIDERS_BULK, which requires admin auth
+    // and silently rejected every real applicant's own submission.
+    const result = await syncSave("RIDER_UPSERT", newRider);
+    if (!result?.success) {
+      console.error("[applyForRider] Failed to submit rider application:", result?.error);
+      return { success: false, error: result?.error || "Failed to submit your application. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedRider = result.rider ? { ...newRider, ...result.rider } : newRider;
     // Filter out previously rejected rider profile to allow re-application
-    const updatedRiders = riders.filter(r => r.userId !== currentUser.id || r.status !== "rejected").concat(newRider);
-    persistRiders(updatedRiders);
+    const updatedRiders = riders.filter(r => r.userId !== currentUser.id || r.status !== "rejected").concat(confirmedRider);
+    setRiders(updatedRiders);
+    localStorage.setItem("fd_riders", JSON.stringify(updatedRiders));
 
     addNotification(
       "admin",
