@@ -69,7 +69,7 @@ export const VendorOnboarding: React.FC = () => {
     }
   };
 
-  const handleApply = (e: React.FormEvent) => {
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg("");
     setErrorMsg("");
@@ -89,7 +89,7 @@ export const VendorOnboarding: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = applyForVendor(businessName.trim(), cuisine.trim(), {
+      const res = await applyForVendor(businessName.trim(), cuisine.trim(), {
         businessRegNo: businessRegNo.trim(),
         foodPermitNo: foodPermitNo.trim(),
         verificationDoc: verificationDoc

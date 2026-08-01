@@ -671,7 +671,7 @@ export const CustomerProfile: React.FC = () => {
     }
   };
 
-  const handleApplyVendor = (e: React.FormEvent) => {
+  const handleApplyVendor = async (e: React.FormEvent) => {
     e.preventDefault();
     setVSuccess("");
     setVError("");
@@ -683,7 +683,7 @@ export const CustomerProfile: React.FC = () => {
       setVError("Please provide both your Business Registration Number and Food Safety Permit Number.");
       return;
     }
-    const res = applyForVendor(vBusinessName.trim(), vCuisine.trim(), {
+    const res = await applyForVendor(vBusinessName.trim(), vCuisine.trim(), {
       businessRegNo: vBusinessRegNo.trim(),
       foodPermitNo: vFoodPermitNo.trim(),
       verificationDoc: vVerificationDoc
@@ -699,7 +699,7 @@ export const CustomerProfile: React.FC = () => {
     }
   };
 
-  const handleApplyRider = (e: React.FormEvent) => {
+  const handleApplyRider = async (e: React.FormEvent) => {
     e.preventDefault();
     setRSuccess("");
     setRError("");
@@ -709,7 +709,7 @@ export const CustomerProfile: React.FC = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    const res = applyForRider(rVehicleType, {
+    const res = await applyForRider(rVehicleType, {
       licenseNo: rLicenseNo.trim(),
       plateNo: rPlateNo.trim(),
       nationalIdNo: rNationalIdNo.trim(),

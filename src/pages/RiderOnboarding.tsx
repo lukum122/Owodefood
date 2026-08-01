@@ -68,7 +68,7 @@ export const RiderOnboarding: React.FC = () => {
     }
   };
 
-  const handleApply = (e: React.FormEvent) => {
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg("");
     setErrorMsg("");
@@ -82,7 +82,7 @@ export const RiderOnboarding: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = applyForRider(vehicleType, {
+      const res = await applyForRider(vehicleType, {
         licenseNo: licenseNo.trim(),
         plateNo: plateNo.trim(),
         nationalIdNo: nationalIdNo.trim(),
