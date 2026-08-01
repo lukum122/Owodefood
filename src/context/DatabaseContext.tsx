@@ -2498,13 +2498,18 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       const token = localStorage.getItem("fd_jwt_token");
 
       // Bulk writes (USERS_BULK, VENDORS_BULK, etc.) require admin auth on the
-      // server. Attempting one with no token at all is guaranteed to fail —
-      // this was firing on every periodic poll for every anonymous visitor on
-      // the login page, spamming the console with doomed 401s for no benefit.
-      // Skip the network call entirely in that specific case; anything else
-      // (including USER_UPSERT, which legitimately runs unauthenticated for
-      // new registrations) still goes through as before.
-      if (!token && type.endsWith("_BULK")) {
+      // server. Attempting one with no token, or as a logged-in non-admin user
+      // (customer/vendor/rider), is guaranteed to fail — this was firing on
+      // every periodic poll for every such visitor, spamming the console with
+      // doomed 401s for no benefit. Skip the network call entirely in that
+      // case; anything else (including USER_UPSERT, which legitimately runs
+      // unauthenticated for new registrations) still goes through as before.
+      const isCurrentUserAdmin = !!currentUser && (
+        currentUser.role === "admin" ||
+        currentUser.roles?.includes("admin") ||
+        ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"].includes(currentUser.email?.toLowerCase())
+      );
+      if (type.endsWith("_BULK") && (!token || !isCurrentUserAdmin)) {
         return { success: false, error: "Skipped: bulk sync requires an authenticated admin session." };
       }
 
