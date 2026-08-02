@@ -1165,6 +1165,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
   };
 
+  // Tracks the last known "has anything changed?" version so the 15-second
+  // poll can skip re-downloading the full dataset when nothing changed.
+  const lastKnownDataVersionRef = useRef<string | null>(null);
+
   // Load initial data from Cloud SQL or fallback to Local Storage / Seeds
   useEffect(() => {
     const loadFromCloudSQL = async () => {
@@ -1178,6 +1182,13 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         const res = await fetch("/api/sync/load", { headers });
         if (!res.ok) throw new Error("Backend load failed");
         const data = await res.json();
+
+        // Keep the lightweight version-poll in sync with whatever we just
+        // fully loaded, so the next 15s check doesn't immediately think
+        // something changed and redundantly re-fetch everything again.
+        if (data.systemSettings?.dataVersion) {
+          lastKnownDataVersionRef.current = data.systemSettings.dataVersion;
+        }
 
         if (data.users && data.users.length > 0) {
           // Found data in Cloud SQL! Let's load it and synchronize local states.
@@ -2062,10 +2073,30 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     const handleSyncEvent = () => loadFromCloudSQL();
     window.addEventListener("sync_update_event", handleSyncEvent);
 
-    // Smart Polling every 15 seconds to sync data in real-time across devices
-    const interval = setInterval(() => {
-      loadFromCloudSQL();
-    }, 15000);
+    // Lightweight polling every 15 seconds: check a tiny "has anything
+    // changed?" version string instead of re-downloading the entire dataset
+    // every tick. Only fetch the full dataset when the version actually
+    // differs from what we last saw. This was previously calling
+    // loadFromCloudSQL() (the full dataset) unconditionally every 15 seconds
+    // on every open tab, which was the confirmed cause of excessive
+    // Supabase egress usage.
+    const checkForUpdates = async () => {
+      try {
+        const res = await fetch("/api/sync/version");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.version && data.version !== lastKnownDataVersionRef.current) {
+          lastKnownDataVersionRef.current = data.version;
+          loadFromCloudSQL();
+        }
+      } catch (e) {
+        // Silent — a failed version check just means we skip this tick;
+        // the next successful one will catch up. Not worth logging noise
+        // for every transient network blip.
+      }
+    };
+
+    const interval = setInterval(checkForUpdates, 15000);
 
     return () => {
       clearInterval(interval);
