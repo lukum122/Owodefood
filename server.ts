@@ -444,6 +444,20 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
+// 2a. Lightweight version check: tells the client whether anything has
+// actually changed since it last loaded, so it doesn't need to re-download
+// the entire dataset on every 15-second poll. This is a tiny response
+// (a single timestamp string) versus the full /api/sync/load payload.
+app.get("/api/sync/version", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const versionRow = await db.select().from(systemSettings).where(eq(systemSettings.key, "dataVersion")).limit(1);
+    res.json({ version: versionRow.length > 0 ? versionRow[0].value : "0" });
+  } catch (error: any) {
+    console.error("Version check failed:", error);
+    res.status(500).json({ error: "Failed to check data version." });
+  }
+});
+
 // 2. Database Synchronization Endpoint: LOAD
 app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
   try {
@@ -1652,6 +1666,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       io.emit("sync_update", { type, payload });
     }
 
+    // Bump a general-purpose "has anything changed" version on every write,
+    // regardless of type. The client polls this single lightweight value
+    // instead of re-downloading the entire dataset every 15 seconds.
+    const bumpedDataVersion = Date.now().toString();
+    await db.insert(systemSettings).values({
+      key: "dataVersion",
+      value: bumpedDataVersion,
+    }).onConflictDoUpdate({
+      target: systemSettings.key,
+      set: { value: bumpedDataVersion },
+    });
+
     res.json({ success: true, ...responseExtra });
   } catch (error) {
     console.error("Cloud SQL sync save failed:", error);
@@ -1831,6 +1857,21 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     };
     sendPush(vendorId, "New Order Received!", `Order #${orderId} for ?${finalTotal.toLocaleString()}`);
     sendPush("admin", "New Platform Order!", `Order #${orderId} placed at ${vendorName}`);
+
+    // Bump the general-purpose data version so other open tabs/devices know
+    // to refresh (this endpoint is outside the sync/save switch above).
+    try {
+      const bumpedDataVersion = Date.now().toString();
+      await db.insert(systemSettings).values({
+        key: "dataVersion",
+        value: bumpedDataVersion,
+      }).onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value: bumpedDataVersion },
+      });
+    } catch (e) {
+      console.error("Failed to bump dataVersion after checkout:", e);
+    }
 
     res.json({ success: true, orderId, finalTotal });
   } catch (error) {
