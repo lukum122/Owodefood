@@ -124,6 +124,7 @@ interface DatabaseContextType {
   // Rider Actions
   acceptDelivery: (orderId: string, riderId: string) => Promise<{ success: boolean; error?: string }>;
   updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  updateOrderPayoutStatus: (orderId: string, type: "rider" | "vendor", status: "pending" | "paid") => Promise<{ success: boolean; error?: string }>;
   updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
   
   // Admin Actions
@@ -3836,6 +3837,29 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     return { success: true };
   };
 
+  const updateOrderPayoutStatus = async (orderId: string, type: "rider" | "vendor", status: "pending" | "paid"): Promise<{ success: boolean; error?: string }> => {
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return { success: false, error: "Order not found" };
+
+    const candidateOrder = type === "rider"
+      ? { ...orderToUpdate, riderPayoutStatus: status }
+      : { ...orderToUpdate, vendorPayoutStatus: status };
+
+    const result = await syncSave("ORDER_UPSERT", candidateOrder);
+    if (!result?.success) {
+      console.error(`[updateOrderPayoutStatus] Failed to update ${type} payout for order ${orderId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to update the payout status. Please check your connection and try again." };
+    }
+
+    // Trust what the server actually confirmed/saved over our own optimistic copy.
+    const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
+    const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
+    setOrders(updatedOrders);
+    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
+
+    return { success: true };
+  };
+
   const updateRiderProfile = async (profileData: Partial<Rider>): Promise<{ success: boolean; error?: string }> => {
     if (!currentRider) return { success: false, error: "No rider profile found" };
     const candidateRider = { ...currentRider, ...profileData };
@@ -4561,6 +4585,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         updateVendorProfile,
         acceptDelivery,
         updateDeliveryStatus,
+        updateOrderPayoutStatus,
         updateRiderProfile,
         toggleVendorStatus,
         toggleRiderStatus,
