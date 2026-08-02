@@ -23,6 +23,7 @@ import {
   appNotifications,
   pushSubscriptions,
   auditLogs,
+  payoutLogs,
 } from "./src/db/schema.ts";
 import { eq, sql, inArray } from "drizzle-orm";
 import nodemailer from "nodemailer";
@@ -1087,6 +1088,10 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             payload.deliveryFee = order.deliveryFee;
             payload.tax = order.tax;
             payload.items = undefined;
+            // Only admins can mark a payout as released — preserve the
+            // existing value for anyone else regardless of what they sent.
+            payload.riderPayoutStatus = order.riderPayoutStatus;
+            payload.vendorPayoutStatus = order.vendorPayoutStatus;
             
             if (isCustomer && !isVendor && !isRider) {
               if (payload.status !== "cancelled" || order.status !== "pending") {
@@ -1124,6 +1129,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           rejectedBy: payload.rejectedBy,
           rejectedAt: payload.rejectedAt,
           rejectionReason: payload.rejectionReason,
+          riderPayoutStatus: payload.riderPayoutStatus || "pending",
+          vendorPayoutStatus: payload.vendorPayoutStatus || "pending",
         }).onConflictDoUpdate({
           target: orders.id,
           set: {
@@ -1136,6 +1143,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             rejectedBy: payload.rejectedBy,
             rejectedAt: payload.rejectedAt,
             rejectionReason: payload.rejectionReason,
+            riderPayoutStatus: payload.riderPayoutStatus,
+            vendorPayoutStatus: payload.vendorPayoutStatus,
           },
         });
 
@@ -1285,6 +1294,42 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               }
             }
           } catch(e) { console.error("Rider push failed", e); }
+        }
+
+        // Log a payout release whenever an admin actually transitions a
+        // payout from pending to paid, so there's a real audit trail to
+        // filter/report against later (who released it, when, how much).
+        if (isAdmin && !isNew) {
+          const prevOrder = existingOrder[0];
+          if (payload.riderPayoutStatus === "paid" && prevOrder.riderPayoutStatus !== "paid" && payload.riderId) {
+            await db.insert(payoutLogs).values({
+              id: "pl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+              orderId: payload.id,
+              recipientType: "rider",
+              recipientId: payload.riderId,
+              amount: Math.round(prevOrder.deliveryFee || 0),
+              releasedBy: reqUser.id,
+              releasedAt: new Date().toISOString(),
+              paymentMethod: "manual_admin_release",
+              status: "released",
+            });
+          }
+          if (payload.vendorPayoutStatus === "paid" && prevOrder.vendorPayoutStatus !== "paid" && payload.vendorId) {
+            const vendorAmount = Math.round(
+              (prevOrder.totalAmount || 0) - (prevOrder.serviceFee || 0) - (prevOrder.deliveryFee || 0) - (prevOrder.tax || 0)
+            );
+            await db.insert(payoutLogs).values({
+              id: "pl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+              orderId: payload.id,
+              recipientType: "vendor",
+              recipientId: payload.vendorId,
+              amount: vendorAmount,
+              releasedBy: reqUser.id,
+              releasedAt: new Date().toISOString(),
+              paymentMethod: "manual_admin_release",
+              status: "released",
+            });
+          }
         }
 
         // Return exactly what was confirmed/saved, so the client syncs its
