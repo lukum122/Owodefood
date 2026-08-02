@@ -1315,22 +1315,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             });
           }
           if (payload.vendorPayoutStatus === "paid" && prevOrder.vendorPayoutStatus !== "paid" && payload.vendorId) {
-            // Items subtotal is what belongs to the vendor before commission
-            // (excludes platform service fee, delivery fee owed to the rider,
-            // and tax, none of which are the vendor's revenue).
-            const itemsSubtotal = (prevOrder.totalAmount || 0) - (prevOrder.serviceFee || 0) - (prevOrder.deliveryFee || 0) - (prevOrder.tax || 0);
-
-            // Apply the vendor's own configured commission rate — the same
-            // flat/percentage pattern already used for rider payouts.
-            const vendorForPayout = await db.select().from(vendors).where(eq(vendors.id, payload.vendorId)).limit(1);
-            const commissionType = vendorForPayout[0]?.commissionType || "percentage";
-            const commissionValue = vendorForPayout[0]?.commissionValue ?? 15;
             const vendorAmount = Math.round(
-              commissionType === "flat"
-                ? Math.max(0, itemsSubtotal - commissionValue)
-                : Math.max(0, itemsSubtotal - (itemsSubtotal * commissionValue) / 100)
+              (prevOrder.totalAmount || 0) - (prevOrder.serviceFee || 0) - (prevOrder.deliveryFee || 0) - (prevOrder.tax || 0)
             );
-
             await db.insert(payoutLogs).values({
               id: "pl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
               orderId: payload.id,
@@ -1652,6 +1639,29 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           });
         }
         break;
+
+      case "NOTIFICATION_CREATE": {
+        // Any authenticated user can create a notification for another user
+        // (e.g. a customer notifying a vendor of a new order, an applicant
+        // notifying admins of a new application) — this mirrors how
+        // notifications are already used throughout the app. Requiring at
+        // least authentication (not fully anonymous) keeps this from being
+        // a wide-open spam vector while not over-restricting a genuinely
+        // low-stakes, non-financial write.
+        if (!reqUser) {
+          return res.status(401).json({ error: "Unauthorized: Please log in." });
+        }
+        await db.insert(appNotifications).values({
+          id: payload.id,
+          userId: payload.userId,
+          title: payload.title,
+          message: payload.message,
+          type: payload.type,
+          read: false,
+          createdAt: payload.createdAt || new Date().toISOString(),
+          relatedId: payload.relatedId,
+        });
+      } break;
 
       case "REVIEW_UPSERT": {
         if (!isAdmin) {
