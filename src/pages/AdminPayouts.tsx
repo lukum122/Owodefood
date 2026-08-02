@@ -9,9 +9,12 @@ export const AdminPayouts: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const handlePay = (orderId: string, type: "rider" | "vendor") => {
+  const handlePay = async (orderId: string, type: "rider" | "vendor") => {
     if (window.confirm(`Mark this ${type} payout as PAID?`)) {
-      updateOrderPayoutStatus(orderId, type, "paid");
+      const result = await updateOrderPayoutStatus(orderId, type, "paid");
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to mark this payout as paid. Please try again.");
+      }
     }
   };
 
