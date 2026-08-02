@@ -3389,6 +3389,19 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       relatedId
     };
     setNotifications(prev => [newNotif, ...prev]);
+
+    // Persist to the server so the intended recipient actually sees this on
+    // their own device/session — previously this only ever updated the
+    // current browser's local state, so nobody but the person who triggered
+    // it ever saw it. This is deliberately fire-and-forget (not awaited by
+    // callers) since a missed notification isn't as critical as a missed
+    // order or payment, and addNotification is called from dozens of
+    // places throughout the app that shouldn't all need to become async.
+    syncSave("NOTIFICATION_CREATE", newNotif).then(result => {
+      if (!result?.success) {
+        console.error("[addNotification] Failed to persist notification to server:", result?.error);
+      }
+    });
   };
 
   const markNotificationAsRead = (notificationId: string) => {
