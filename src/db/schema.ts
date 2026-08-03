@@ -38,6 +38,10 @@ export const vendors = pgTable("vendors", {
   commissionType: text("commission_type"), // flat | percentage
   commissionValue: integer("commission_value"),
   freeDelivery: boolean("free_delivery").default(false),
+  businessRegNo: text("business_reg_no"),
+  foodPermitNo: text("food_permit_no"),
+  verificationDoc: text("verification_doc"),
+  receiptPickupEnabled: boolean("receipt_pickup_enabled").default(true),
 });
 
 export const products = pgTable("products", {
@@ -100,9 +104,13 @@ export const riders = pgTable("riders", {
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   vehicleType: text("vehicle_type").notNull(), // bicycle | motorcycle | car
-  status: text("status").notNull(), // pending | approved | suspended
+  status: text("status").notNull(), // pending | approved | suspended | rejected
   isAvailable: boolean("is_available").notNull().default(true),
   createdAt: text("created_at").notNull(),
+  licenseNo: text("license_no"),
+  plateNo: text("plate_no"),
+  nationalIdNo: text("national_id_no"),
+  verificationDoc: text("verification_doc"),
 });
 
 export const addresses = pgTable("addresses", {
