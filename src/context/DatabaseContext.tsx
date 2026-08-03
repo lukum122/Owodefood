@@ -115,7 +115,7 @@ interface DatabaseContextType {
   placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string }>;
   
   // Vendor Actions
-  updateVendorOrder: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  updateVendorOrder: (orderId: string, status: OrderStatus, extra?: { verifiedBy?: string; verifiedAt?: string; rejectedBy?: string; rejectedAt?: string; rejectionReason?: string }) => Promise<{ success: boolean; error?: string }>;
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<{ success: boolean; error?: string }>;
   updateProduct: (product: Product) => Promise<{ success: boolean; error?: string }>;
   deleteProduct: (productId: string) => Promise<{ success: boolean; error?: string }>;
@@ -3613,11 +3613,15 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // VENDOR ACTIONS
-  const updateVendorOrder = async (orderId: string, status: OrderStatus): Promise<{ success: boolean; error?: string }> => {
+  const updateVendorOrder = async (
+    orderId: string,
+    status: OrderStatus,
+    extra?: { verifiedBy?: string; verifiedAt?: string; rejectedBy?: string; rejectedAt?: string; rejectionReason?: string }
+  ): Promise<{ success: boolean; error?: string }> => {
     const orderToUpdate = orders.find(o => o.id === orderId);
     if (!orderToUpdate) return { success: false, error: "Order not found" };
 
-    const candidateOrder = { ...orderToUpdate, status };
+    const candidateOrder = { ...orderToUpdate, status, ...extra };
 
     const result = await syncSave("ORDER_UPSERT", candidateOrder);
     if (!result?.success) {
