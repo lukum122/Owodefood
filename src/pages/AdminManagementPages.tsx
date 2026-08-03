@@ -14,7 +14,8 @@ export const AdminOrders: React.FC = () => {
     vatEnabled, 
     vatRate,
     acceptDelivery,
-    riders
+    riders,
+    currentUser
   } = useDatabase();
 
   const [orderTypeTab, setOrderTypeTab] = useState<"standard" | "receipt_pickup" | "verification">("standard");
@@ -29,9 +30,9 @@ export const AdminOrders: React.FC = () => {
   const handleVerifyPayment = async (id: string, action: "approve" | "reject") => {
     if (action === "approve") {
       const result = await updateVendorOrder(id, "pending", {
-        verifiedBy: "admin",
+        verifiedBy: currentUser?.id || "admin",
         verifiedAt: new Date().toISOString(),
-      } as any);
+      });
       if (!result?.success) {
         window.alert(result?.error || "Failed to approve the payment. Please try again.");
       }
@@ -39,10 +40,10 @@ export const AdminOrders: React.FC = () => {
       const reason = prompt("Enter rejection reason:");
       if (!reason) return; // cancelled prompt
       const result = await updateVendorOrder(id, "awaiting_payment_verification", {
-        rejectedBy: "admin",
+        rejectedBy: currentUser?.id || "admin",
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason,
-      } as any);
+      });
       if (!result?.success) {
         window.alert(result?.error || "Failed to reject the payment. Please try again.");
       }
@@ -677,7 +678,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <ShieldAlert className="w-4 h-4" /> Payment Verification
+          <ShieldAlert className="w-4 h-4" /> Payment Verification ({orders.filter(o => o.status === "awaiting_payment_verification").length})
         </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
@@ -752,7 +753,7 @@ export const AdminOrders: React.FC = () => {
               No standard food orders registered in database.
             </div>
           )
-        ) : (
+        ) : orderTypeTab === "receipt_pickup" ? (
           orders.filter(o => o.orderType === "receipt_pickup").length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
@@ -827,6 +828,72 @@ export const AdminOrders: React.FC = () => {
           ) : (
             <div className="text-center py-12 text-gray-400 font-semibold text-xs">
               No Receipt Pickups & Delivery requests logged on the platform yet.
+            </div>
+          )
+        ) : (
+          orders.filter(o => o.status === "awaiting_payment_verification").length > 0 ? (
+            <div>
+              <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[950px]">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Merchant Node</th>
+                      <th className="py-3 px-4">Customer Name</th>
+                      <th className="py-3 px-4 font-mono text-right">Sum</th>
+                      <th className="py-3 px-4">Payment Receipt</th>
+                      <th className="py-3 px-4 text-center">Verification</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                    {orders.filter(o => o.status === "awaiting_payment_verification").map((o) => (
+                      <tr key={o.id} className="hover:bg-gray-50/50">
+                        <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id.slice(0, 8)}</td>
+                        <td className="py-3.5 px-4 font-bold text-gray-800">{o.vendorName}</td>
+                        <td className="py-3.5 px-4 text-gray-600">{o.customerName}</td>
+                        <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
+                        <td className="py-3.5 px-4">
+                          {o.paymentReceiptUrl ? (
+                            <a
+                              href={o.paymentReceiptUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sky-600 hover:underline font-bold"
+                            >
+                              View Receipt
+                            </a>
+                          ) : (
+                            <span className="text-gray-400 italic">No receipt uploaded</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex gap-1.5 justify-center">
+                            <button
+                              onClick={() => handleVerifyPayment(o.id, "approve")}
+                              className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleVerifyPayment(o.id, "reject")}
+                              className="py-1 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-100 rounded-lg cursor-pointer text-[10px] transition"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+              No payments currently awaiting verification.
             </div>
           )
         )}
