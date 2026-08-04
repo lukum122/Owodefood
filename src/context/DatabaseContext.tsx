@@ -1191,7 +1191,15 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           lastKnownDataVersionRef.current = data.systemSettings.dataVersion;
         }
 
-        if (data.users && data.users.length > 0) {
+        // IMPORTANT: `users` is deliberately empty/short for anonymous visitors
+        // and ordinary logged-in customers (privacy — they only ever receive
+        // their own record, if any). It says nothing about whether vendors,
+        // products, orders, or settings came back correctly. `vendors` is the
+        // one field the backend always returns in full for everyone, logged
+        // in or not — so it's the right signal for "did this request actually
+        // succeed," instead of previously requiring `users.length > 0`, which
+        // silently discarded perfectly good data for every guest visitor.
+        if (data && Array.isArray(data.vendors)) {
           // Found data in Cloud SQL! Let's load it and synchronize local states.
           // Users merging
           const initialUsers = getInitialUsersSeed();

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 
 interface UpdateManagerContextType {
@@ -21,11 +21,23 @@ export const useUpdateManager = () => {
   return context;
 };
 
+const DISMISSED_VERSION_KEY = "fd_dismissed_update_version";
+
 export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [criticalOperationsCount, setCriticalOperationsCount] = useState(0);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
   const [lastActivityTime, setLastActivityTime] = useState<number>(Date.now());
   const [serverVersion, setServerVersion] = useState<string | null>(null);
+
+  // The specific new version currently being offered, and whichever version
+  // was last dismissed (persisted, so it survives reloads/tab switches).
+  // If they match, we already know the person said "not right now" to this
+  // exact update, so we don't nag them again until a genuinely newer version
+  // shows up — instead of forgetting that choice on every reload.
+  const pendingVersionRef = useRef<string | null>(null);
+  const dismissedVersionRef = useRef<string | null>(
+    typeof window !== "undefined" ? localStorage.getItem(DISMISSED_VERSION_KEY) : null
+  );
 
   // Initialize SW updater
   const {
@@ -54,6 +66,13 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
           if (contentType && contentType.includes("application/json")) {
             const data = await res.json();
             if (serverVersion && serverVersion !== data.version) {
+              pendingVersionRef.current = data.version;
+              // If this exact version was already dismissed before (e.g. on
+              // a prior page load), keep the banner suppressed for it.
+              // A version we haven't seen dismissed yet will show normally.
+              if (dismissedVersionRef.current !== data.version) {
+                setIsBannerDismissed(false);
+              }
               setNeedRefresh(true);
             } else if (!serverVersion) {
               setServerVersion(data.version);
@@ -75,7 +94,7 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const handleActivity = () => setLastActivityTime(Date.now());
     const events = ["mousemove", "keydown", "touchstart", "click", "scroll"];
-    
+
     events.forEach(event => window.addEventListener(event, handleActivity));
     return () => {
       events.forEach(event => window.removeEventListener(event, handleActivity));
@@ -102,7 +121,7 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Automatic Idle Reload
   useEffect(() => {
-    if (isUpdateAvailable && criticalOperationsCount === 0) {
+    if (isUpdateAvailable && !isBannerDismissed && criticalOperationsCount === 0) {
       const interval = setInterval(() => {
         const timeSinceLastActivity = Date.now() - lastActivityTime;
         // 30 seconds idle timeout as requested
@@ -112,7 +131,7 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
       }, 5000);
       return () => clearInterval(interval);
     }
-  }, [isUpdateAvailable, criticalOperationsCount, lastActivityTime, triggerUpdate]);
+  }, [isUpdateAvailable, isBannerDismissed, criticalOperationsCount, lastActivityTime, triggerUpdate]);
 
   const startCriticalOperation = useCallback(() => {
     setCriticalOperationsCount(prev => prev + 1);
@@ -133,6 +152,14 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const dismissUpdateBanner = useCallback(() => {
     setIsBannerDismissed(true);
+    if (pendingVersionRef.current) {
+      dismissedVersionRef.current = pendingVersionRef.current;
+      try {
+        localStorage.setItem(DISMISSED_VERSION_KEY, pendingVersionRef.current);
+      } catch {
+        // localStorage unavailable — dismissal just won't persist across reloads, not fatal
+      }
+    }
   }, []);
 
   const value: UpdateManagerContextType = {
