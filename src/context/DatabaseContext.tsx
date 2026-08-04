@@ -112,7 +112,7 @@ interface DatabaseContextType {
   clearCart: () => void;
   
   // Checkout & Customer Actions
-  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string }>;
+  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
   
   // Vendor Actions
   updateVendorOrder: (orderId: string, status: OrderStatus, extra?: { verifiedBy?: string; verifiedAt?: string; rejectedBy?: string; rejectedAt?: string; rejectionReason?: string }) => Promise<{ success: boolean; error?: string }>;
@@ -3174,7 +3174,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const clearCart = () => setCart([]);
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => {
+  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
     let activeUser = currentUser;
     if (!activeUser) {
       const savedSession = localStorage.getItem("fd_session_user");
@@ -3184,13 +3184,25 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         } catch {}
       }
     }
-    if (!activeUser || cart.length === 0) return { success: false };
-    
-    const firstProduct = cart[0].product;
-    const vendorObj = vendors.find(v => v.id === firstProduct.vendorId);
-    
+    if (!activeUser) return { success: false, error: "Not logged in" };
+
+    const isReceiptPickup = options?.orderType === "receipt_pickup";
+
+    // A receipt-pickup order is proof of a purchase made *outside* the app
+    // (an external receipt/QR code), so it legitimately has no cart items.
+    // A normal order still requires a non-empty cart.
+    if (!isReceiptPickup && cart.length === 0) return { success: false, error: "Your cart is empty" };
+
+    let vendorObj: Vendor | undefined;
+    if (isReceiptPickup) {
+      vendorObj = vendors.find(v => v.id === options?.vendorId);
+    } else {
+      const firstProduct = cart[0].product;
+      vendorObj = vendors.find(v => v.id === firstProduct.vendorId);
+    }
+
     if (!vendorObj) {
-      return { success: false };
+      return { success: false, error: "Vendor not found" };
     }
 
     const total = cart.reduce((sum, item) => {
@@ -3198,7 +3210,6 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       return sum + ((item.product.price + addonCost) * item.quantity);
     }, 0);
     const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
-    const isReceiptPickup = options?.orderType === "receipt_pickup";
     const deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress, isReceiptPickup);
     const serviceFee = isReceiptPickup ? (receiptPickupConfig.flatServiceFee || 0) : calculateServiceFee(vendorObj.id, total);
 
@@ -3225,7 +3236,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
 
       if (!token) {
         alert("Your session does not have a secure token. Please log out completely and log back in to refresh your session.");
-        return { success: false };
+        return { success: false, error: "No auth token" };
       }
 
       const headers: any = { "Content-Type": "application/json" };
@@ -3248,7 +3259,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           serviceFee,
           deliveryFee,
           tax,
-          items: cart.map(item => ({
+          orderType: options?.orderType,
+          receiptImage,
+          receiptImageOrQr: options?.receiptImageOrQr,
+          receiptNote: options?.receiptNote,
+          items: isReceiptPickup ? [] : cart.map(item => ({
             productId: item.product.id,
             name: item.product.name,
             price: item.product.price,
@@ -3266,7 +3281,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         } else {
           alert(data.error || "Checkout failed");
         }
-        return { success: false };
+        return { success: false, error: data.error || "Checkout failed" };
       }
 
       clearCart();
@@ -3307,7 +3322,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         customerPhone: deliveryPhone || activeUser.phone || "N/A",
         vendorId: vendorObj.id,
         vendorName: vendorObj.name,
-        status: "pending",
+        status: isReceiptPickup && (paymentMethod === "bank_transfer" || paymentMethod?.toLowerCase().includes("bank transfer")) ? "awaiting_payment_verification" : "pending",
         totalAmount: data.finalTotal || total,
         deliveryAddress,
         paymentMethod,
@@ -3315,7 +3330,11 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         serviceFee,
         deliveryFee,
         tax,
-        items: cart.map(item => ({
+        orderType: options?.orderType,
+        paymentReceiptUrl: receiptImage,
+        receiptImageOrQr: options?.receiptImageOrQr,
+        receiptNote: options?.receiptNote,
+        items: isReceiptPickup ? [] : cart.map(item => ({
           id: "oi-" + generateId(),
           orderId: data.orderId,
           productId: item.product.id,
@@ -3332,7 +3351,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       return { success: true, orderId: data.orderId };
     } catch (error) {
       console.error("Checkout error:", error);
-      return { success: false };
+      return { success: false, error: "Checkout failed" };
     }
   };
 
