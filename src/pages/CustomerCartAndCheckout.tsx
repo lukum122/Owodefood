@@ -501,7 +501,7 @@ export const CustomerCheckout: React.FC = () => {
       }
     }
 
-    const { success } = await placeOrder(
+    const { success, error } = await placeOrder(
       deliveryAddress.trim(),
       paymentMethod,
       deliveryPhone.trim(),
@@ -514,7 +514,7 @@ export const CustomerCheckout: React.FC = () => {
         navigate("/orders");
       }, 2000);
     } else {
-      setErrorWord("Could not complete checkout. Please check your network and try again.");
+      setErrorWord(error || "Could not complete checkout. Please check your network and try again.");
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
