@@ -1723,6 +1723,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       default:
         return res.status(400).json({ error: `Unknown synchronization type: ${type}` });
     }
+    // Changes that affect what EVERYONE browsing the storefront sees —
+    // these still need a genuine global broadcast, guests included.
     const publicConfigModifiers = [
       "SYSTEM_SETTING_UPSERT",
       "SYSTEM_SETTINGS_BULK",
@@ -1730,7 +1732,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       "PRODUCTS_BULK",
       "PRODUCTS_UPSERT",
       "EXTREME_LOCATIONS_BULK",
-      "EXTREME_LOCATION_TIERS_BULK"
+      "EXTREME_LOCATION_TIERS_BULK",
+      // Single-item vendor/product edits are also public-facing: a store's
+      // open/closed status or a product's availability needs to reach
+      // anyone currently browsing, not just the vendor who made the change.
+      "VENDOR_UPSERT",
+      "PRODUCT_UPSERT",
+      "PRODUCT_DELETE",
     ];
 
     if (publicConfigModifiers.includes(type)) {
@@ -1744,7 +1752,24 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       });
       io.emit("sync_update", { type, payload, version: newVersion });
     } else {
-      io.emit("sync_update", { type, payload });
+      // Everything else here is personal/operational data — a single
+      // user's own profile edit, one order, one rider's status — and has
+      // no reason to be pushed to every unrelated connected browser.
+      // Route it only to the specific people it actually concerns, plus
+      // admins (who monitor everything). Anyone not directly targeted
+      // still sees the change within ~15s via the regular lightweight
+      // version-check poll, so nothing is silently missed — it's just
+      // not instantly pushed to strangers it has nothing to do with.
+      const notifyRooms = new Set<string>(["admin"]);
+      if (payload?.id) notifyRooms.add(payload.id);
+      if (payload?.customerId) notifyRooms.add(payload.customerId);
+      if (payload?.vendorId) notifyRooms.add(payload.vendorId);
+      if (payload?.riderId) notifyRooms.add(payload.riderId);
+      if (payload?.userId) notifyRooms.add(payload.userId);
+
+      for (const room of notifyRooms) {
+        io.to(room).emit("sync_update", { type, payload });
+      }
     }
 
     // Bump a general-purpose "has anything changed" version on every write,
