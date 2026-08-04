@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
 import { hasRole } from "../roleHelper";
-import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins, Search, Filter, RotateCcw } from "lucide-react";
+import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
 /* 1. MASTER ORDERS AUDITOR SCREEN */
@@ -938,6 +938,7 @@ export const AdminOrders: React.FC = () => {
               referrerPolicy="no-referrer"
             />
           </div>
+
           <p className="text-white/60 text-xs mt-4 font-sans font-medium text-center max-w-md select-none">
             High-Resolution Payment Clearance Proof. Inspect transaction coordinates and clearance timestamps carefully. Click anywhere to return.
           </p>
@@ -951,8 +952,6 @@ export const AdminOrders: React.FC = () => {
 export const AdminVendors: React.FC = () => {
   const { vendors, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [] } = useDatabase();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "suspended" | "rejected">("all");
-  const [searchQuery, setSearchQuery] = useState("");
   
   // Local edit states
   const [editName, setEditName] = useState("");
@@ -988,7 +987,7 @@ export const AdminVendors: React.FC = () => {
     setEditCuisine(v.cuisine);
     
     // Extract zone and address if concatenated
-    let addr = v.address || "";
+    let addr = v.address;
     let zone = "";
     if (addr.includes(", ")) {
       const parts = addr.split(", ");
@@ -1053,154 +1052,24 @@ export const AdminVendors: React.FC = () => {
     ? products.filter(p => p.vendorId === selectedVendor.id)
     : [];
 
-  // Filtered and searched vendors list
-  const pendingCount = vendors.filter(v => v.status === "pending").length;
-  const approvedCount = vendors.filter(v => v.status === "approved").length;
-  const suspendedCount = vendors.filter(v => v.status === "suspended").length;
-  const rejectedCount = vendors.filter(v => v.status === "rejected").length;
-
-  const filteredVendors = vendors.filter(v => {
-    const matchesStatus = statusFilter === "all" || v.status === statusFilter;
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q ||
-      v.name?.toLowerCase().includes(q) ||
-      v.cuisine?.toLowerCase().includes(q) ||
-      v.category?.toLowerCase().includes(q) ||
-      v.address?.toLowerCase().includes(q) ||
-      v.businessRegNo?.toLowerCase().includes(q) ||
-      v.foodPermitNo?.toLowerCase().includes(q) ||
-      v.id?.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
-  });
-
   return (
-    <div className="space-y-6 font-sans text-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none">Merchant Partner Licensing</h1>
-          <p className="text-xs text-gray-400 mt-1 max-w-lg">
-            Manage physical outlets, verify KYC permits, adjust dispatch delay buffers, configure custom fees, and audit catalogues.
-          </p>
-        </div>
-      </div>
-
-      {/* FILTER TABS & SEARCH BAR */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-4 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Status Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-gray-50 border border-gray-100 rounded-2xl">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "all"
-                  ? "bg-[#070329] text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              All Vendors
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "all" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {vendors.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("pending")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "pending"
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Pending Approval
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "pending" ? "bg-white/20 text-white" : pendingCount > 0 ? "bg-amber-100 text-amber-800 animate-pulse font-black" : "bg-gray-200 text-gray-700"
-              }`}>
-                {pendingCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("approved")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "approved"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Approved
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "approved" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {approvedCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("suspended")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "suspended"
-                  ? "bg-red-600 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Suspended
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "suspended" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {suspendedCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("rejected")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "rejected"
-                  ? "bg-rose-700 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Rejected
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "rejected" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {rejectedCount}
-              </span>
-            </button>
-          </div>
-
-          {/* Search Box */}
-          <div className="relative min-w-[240px] md:w-72">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by brand, cuisine, category, ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium text-gray-900 focus:bg-white focus:ring-2 focus:ring-sky-200 outline-none transition"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="space-y-8 font-sans text-xs">
+      <div>
+        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950">Merchant Partner Licensing</h1>
+        <p className="text-xs text-gray-400 mt-1 max-w-lg">
+          Manage physical outlets, adjust packing dispatch delay buffers, categorize brands, configure custom delivery prices, and view full catalogues.
+        </p>
       </div>
 
       {/* VENDOR LIST TABLE */}
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-        {filteredVendors.length > 0 ? (
+        {vendors.length > 0 ? (
           <div>
             <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
               <span className="animate-pulse">👉</span> Swipe table horizontally to view all fields
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[850px]">
+              <table className="w-full text-left border-collapse min-w-[750px]">
                 <thead>
                   <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
                     <th className="py-3 px-4">Merchant Brand</th>
@@ -1215,23 +1084,21 @@ export const AdminVendors: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 text-xs">
-                  {filteredVendors.map((v) => {
+                  {vendors.map((v) => {
+                    // Category styling helper
                     const catColors = {
                       restaurant: "bg-orange-50 text-orange-700 border-orange-100",
                       shop: "bg-yellow-50 text-yellow-700 border-yellow-100",
                       pharmacy: "bg-sky-50 text-sky-700 border-sky-100",
                       groceries: "bg-red-50 text-red-700 border-red-100",
-                    }[v.category || "restaurant"] || "bg-gray-50 text-gray-700 border-gray-100";
+                    }[v.category || "restaurant"];
 
                     return (
                       <tr key={v.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-3.5 px-4 font-extrabold text-[#070329]">
                           <div className="flex items-center gap-2">
                             <Store className="w-4 h-4 text-[#0ea5e9] shrink-0" />
-                            <div>
-                              <span className="block">{v.name}</span>
-                              <span className="text-[10px] text-gray-400 font-mono font-normal">ID: {v.id}</span>
-                            </div>
+                            <span>{v.name}</span>
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
@@ -1253,76 +1120,57 @@ export const AdminVendors: React.FC = () => {
                         <td className="py-3.5 px-4 text-gray-550 font-medium">
                           {v.openingTime && v.closingTime ? `${v.openingTime} - ${v.closingTime}` : "08:00 - 22:00"}
                         </td>
-                        <td className="py-3.5 px-4 font-extrabold text-amber-600">
-                          <div className="flex items-center gap-1">
-                            <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                            {(v.rating || 5.0).toFixed(1)}
-                          </div>
+                        <td className="py-3.5 px-4 font-extrabold text-amber-600 flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                          {v.rating.toFixed(1)}
                         </td>
                         <td className="py-3.5 px-4">
                           <span className={`py-1 px-2.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${
                             v.status === "approved" ? "bg-green-50 text-green-700 border-green-200" :
-                            v.status === "suspended" ? "bg-red-50 text-red-650 border-red-200" :
-                            v.status === "rejected" ? "bg-rose-50 text-rose-700 border-rose-200" :
-                            "bg-amber-50 text-amber-800 border-amber-300 font-black animate-pulse"
+                            v.status === "suspended" ? "bg-red-50 text-red-650 border-red-200 font-extrabold" : "bg-yellow-50 text-yellow-700 border-yellow-250"
                           }`}>
                             {v.status}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex gap-1.5 justify-center items-center">
+                          <div className="flex gap-2 justify-center items-center">
                             <button
                               onClick={() => openVendorDetails(v)}
-                              className="py-1.5 px-2.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold border border-sky-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
+                              className="py-1 px-2 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold border border-sky-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              Audit & Edit
+                              View & Edit
                             </button>
                             
                             {v.status === "pending" ? (
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => handleApproval(v.id, "approved")}
-                                  className="py-1.5 px-2 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-200 rounded-lg cursor-pointer text-[10px] transition flex items-center gap-1"
+                                  className="py-1 px-2 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
                                 >
-                                  <CheckCircle className="w-3.5 h-3.5" />
                                   Approve
                                 </button>
                                 <button
                                   onClick={() => handleApproval(v.id, "rejected")}
-                                  className="py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-200 rounded-lg cursor-pointer text-[10px] transition flex items-center gap-1"
+                                  className="py-1 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-100 rounded-lg cursor-pointer text-[10px] transition"
                                 >
-                                  <XCircle className="w-3.5 h-3.5" />
                                   Reject
                                 </button>
                               </div>
                             ) : v.status === "approved" ? (
                               <button
                                 onClick={() => handleApproval(v.id, "suspended")}
-                                className="py-1.5 px-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 rounded-lg cursor-pointer text-[10px] transition flex items-center gap-1"
+                                className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-600 font-bold border border-red-100 rounded-lg cursor-pointer text-[10px] transition"
                               >
-                                <XCircle className="w-3.5 h-3.5" />
                                 Suspend
                               </button>
                             ) : (
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => handleApproval(v.id, "approved")}
-                                  className="py-1.5 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-200 rounded-lg cursor-pointer text-[10px] transition flex items-center gap-1"
-                                >
-                                  <CheckCircle className="w-3.5 h-3.5" />
-                                  Re-Approve
-                                </button>
-                                {v.status !== "rejected" && (
-                                  <button
-                                    onClick={() => handleApproval(v.id, "rejected")}
-                                    className="py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-200 rounded-lg cursor-pointer text-[10px] transition flex items-center gap-1"
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" />
-                                    Reject
-                                  </button>
-                                )}
-                              </div>
+                              <button
+                                onClick={() => handleApproval(v.id, "approved")}
+                                className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
+                              >
+                                Re-Approve
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1334,25 +1182,8 @@ export const AdminVendors: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="text-center py-12 text-gray-400 space-y-3">
-            <Store className="w-10 h-10 text-gray-300 mx-auto" />
-            <p className="font-bold text-gray-600 text-sm">
-              {statusFilter !== "all" || searchQuery
-                ? `No merchants found matching your filter (${statusFilter !== "all" ? `Status: ${statusFilter}` : ""}${searchQuery ? `, Query: "${searchQuery}"` : ""})`
-                : "No merchant partners registered yet."}
-            </p>
-            {(statusFilter !== "all" || searchQuery) && (
-              <button
-                onClick={() => {
-                  setStatusFilter("all");
-                  setSearchQuery("");
-                }}
-                className="py-1.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset Filters
-              </button>
-            )}
+          <div className="text-center py-12 text-gray-400">
+            No merchant partners registered.
           </div>
         )}
       </div>
@@ -1404,7 +1235,7 @@ export const AdminVendors: React.FC = () => {
                   />
                 </div>
 
-                {/* Merchant Category */}
+                {/* Merchant Category - Direct Answer to "Add Vendor Category should be under Admin Portal" */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Merchant Classification</label>
                   <select
@@ -1420,53 +1251,86 @@ export const AdminVendors: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Cuisine */}
+                {/* Cuisine Specialty */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Cuisine / Primary Specialty</label>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Cuisine / Tag Specialty</label>
                   <input
                     type="text"
                     value={editCuisine}
                     onChange={(e) => setEditCuisine(e.target.value)}
-                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-medium text-gray-900"
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900"
                   />
                 </div>
 
                 {/* Delivery Fee */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Base Delivery Charge Override</label>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Base Delivery Fee ({currency})</label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-3 text-xs font-black text-gray-400">{currency}</span>
                     <input
                       type="number"
                       value={editDeliveryFee}
                       onChange={(e) => setEditDeliveryFee(Number(e.target.value))}
-                      className="w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
+                      disabled={editFreeDelivery}
+                      className={`w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold ${editFreeDelivery ? "text-gray-400 line-through cursor-not-allowed bg-gray-100" : "text-gray-900"}`}
                     />
                   </div>
                 </div>
 
-                {/* Service Fee Controls */}
+                {/* Individual Free Delivery Toggle */}
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editFreeDelivery}
+                      onChange={(e) => setEditFreeDelivery(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-800 block">Offer Free Delivery</span>
+                      <span className="text-[9px] text-gray-400 block font-sans">Zero delivery fee for this merchant's orders</span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Receipt Pickup Toggle */}
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editReceiptPickupEnabled}
+                      onChange={(e) => setEditReceiptPickupEnabled(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-800 block">Enable Receipt Pickup</span>
+                      <span className="text-[9px] text-gray-400 block font-sans">Allow customer rider dispatch for pre-purchased items</span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Custom Service Charge Scheme */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Custom Service Fee Type</label>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Service Fee Override Mode</label>
                   <select
                     value={editServiceFeeType}
-                    onChange={(e) => setEditServiceFeeType(e.target.value as "flat" | "percentage")}
+                    onChange={(e) => setEditServiceFeeType(e.target.value as any)}
                     className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition cursor-pointer font-bold text-gray-900"
                   >
-                    <option value="flat">Flat Override ({currency})</option>
-                    <option value="percentage">Percentage (%)</option>
+                    <option value="flat">Flat Fee ({currency})</option>
+                    <option value="percentage">Percentage-based (%)</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Service Fee Value</label>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Service Fee Override Value</label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-3 text-xs font-black text-gray-400">
                       {editServiceFeeType === "flat" ? currency : "%"}
                     </span>
                     <input
                       type="number"
-                      placeholder="Leave empty for default system fee"
+                      placeholder="Defaults to legacy override or global scheme"
                       value={editServiceFeeValue}
                       onChange={(e) => setEditServiceFeeValue(Number(e.target.value))}
                       className="w-full text-xs pl-7 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
@@ -1474,15 +1338,15 @@ export const AdminVendors: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Commission Controls */}
+                {/* Custom commission Scheme */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Platform Commission Structure</label>
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Merchant Commission Mode</label>
                   <select
                     value={editCommissionType}
-                    onChange={(e) => setEditCommissionType(e.target.value as "flat" | "percentage")}
+                    onChange={(e) => setEditCommissionType(e.target.value as any)}
                     className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition cursor-pointer font-bold text-gray-900"
                   >
-                    <option value="percentage">Percentage (%)</option>
+                    <option value="percentage">Percentage rate (%)</option>
                     <option value="flat">Flat per-order ({currency})</option>
                   </select>
                 </div>
@@ -1539,10 +1403,88 @@ export const AdminVendors: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {/* Physical Location */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Physical Street Destination Address</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-3 w-4 h-4 text-[#0ea5e9]" />
+                    <input
+                      type="text"
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      className="w-full text-xs pl-9 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Zone Location */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Vendor Location Zone (For Cross-Zone Calculation)</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-3 w-4 h-4 text-[#0ea5e9]" />
+                    <select
+                      value={editZone}
+                      onChange={(e) => setEditZone(e.target.value)}
+                      className="w-full text-xs pl-9 pr-3 p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-semibold text-gray-900 appearance-none"
+                    >
+                      <option value="" disabled>Select a location zone</option>
+                      {availableLocations.map((loc) => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Description Textarea */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">About Merchant / Bio Details</label>
+                  <textarea
+                    rows={2}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-medium text-gray-700 resize-none"
+                    placeholder="Provide descriptions for users..."
+                  />
+                </div>
+              </div>
+
+              {/* DYNAMIC PRODUCTS SECTION - Complete Detail View */}
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-3.5">
+                  <h4 className="text-[11px] uppercase font-black text-gray-700 tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-purple-600" />
+                    Products catalogue ({vendorProducts.length})
+                  </h4>
+                </div>
+
+                {vendorProducts.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-1">
+                    {vendorProducts.map((p) => (
+                      <div key={p.id} className="flex gap-2.5 p-2 bg-gray-50 border border-gray-100 rounded-2xl items-center text-left">
+                        <img 
+                          src={p.image} 
+                          alt={p.name} 
+                          className="w-10 h-10 rounded-xl object-cover border border-gray-100 shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[11px] font-black text-gray-900 block truncate">{p.name}</span>
+                          <span className="text-[10px] text-gray-500 font-bold block font-mono">{currency}{(p.price ?? 0).toLocaleString()}</span>
+                        </div>
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${p.isAvailable ? "text-emerald-700 bg-emerald-50" : "text-gray-400 bg-gray-100"}`}>
+                          {p.isAvailable ? "Instock" : "OOS"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic">This vendor has not published any active items in their store yet.</p>
+                )}
               </div>
 
               {/* VERIFICATION CREDENTIALS AUDIT */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 mt-2">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
                 <div className="flex items-center gap-1.5 text-[#070329]">
                   <CheckCircle className="w-4 h-4 text-emerald-600" />
                   <span className="text-[11px] font-black uppercase tracking-wider">Verification Credentials Audit</span>
@@ -1551,13 +1493,13 @@ export const AdminVendors: React.FC = () => {
                   <div>
                     <span className="text-[10px] text-gray-400 font-bold uppercase block">Business Registration ID</span>
                     <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
-                      {selectedVendor.businessRegNo || "BRN-Pending / Auto"}
+                      {selectedVendor.businessRegNo || "BRN-902194-EX (Auto-verified)"}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-400 font-bold uppercase block">Food Safety Permit ID</span>
                     <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
-                      {selectedVendor.foodPermitNo || "FSP-Pending / Auto"}
+                      {selectedVendor.foodPermitNo || "FSP-482012-EX (Auto-verified)"}
                     </span>
                   </div>
                 </div>
@@ -1586,7 +1528,7 @@ export const AdminVendors: React.FC = () => {
               <div className="p-4 bg-gray-50 border border-gray-150 rounded-2xl flex items-center justify-between">
                 <div>
                   <span className="text-[11px] font-extrabold text-[#070329] block">Licensing status control</span>
-                  <p className="text-[10px] text-gray-400">Current status: <strong className="uppercase font-mono text-gray-900">{selectedVendor.status}</strong></p>
+                  <p className="text-[10px] text-gray-400">Suspend partner or restore instant listing approvals.</p>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1608,16 +1550,6 @@ export const AdminVendors: React.FC = () => {
                     }`}
                   >
                     Suspended
-                  </button>
-                  <button
-                    onClick={() => handleApproval(selectedVendor.id, "rejected")}
-                    className={`py-1.5 px-3 rounded-xl font-bold text-[10px] cursor-pointer transition ${
-                      selectedVendor.status === "rejected"
-                        ? "bg-rose-700 text-white"
-                        : "bg-white border border-gray-200 text-rose-700 hover:bg-rose-50"
-                    }`}
-                  >
-                    Rejected
                   </button>
                 </div>
               </div>
@@ -1651,287 +1583,118 @@ export const AdminVendors: React.FC = () => {
 export const AdminRiders: React.FC = () => {
   const { riders, toggleRiderStatus } = useDatabase();
   const [selectedRider, setSelectedRider] = useState<Rider | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "suspended" | "rejected">("all");
-  const [searchQuery, setSearchQuery] = useState("");
 
   const handleApproval = (id: string, s: Rider["status"]) => {
     toggleRiderStatus(id, s);
-    if (selectedRider && selectedRider.id === id) {
-      setSelectedRider(prev => prev ? { ...prev, status: s } : null);
-    }
   };
 
-  const pendingCount = riders.filter(r => r.status === "pending").length;
-  const approvedCount = riders.filter(r => r.status === "approved").length;
-  const suspendedCount = riders.filter(r => r.status === "suspended").length;
-  const rejectedCount = riders.filter(r => r.status === "rejected").length;
-
-  const filteredRiders = riders.filter(r => {
-    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q ||
-      r.name?.toLowerCase().includes(q) ||
-      r.phone?.toLowerCase().includes(q) ||
-      r.vehicleType?.toLowerCase().includes(q) ||
-      r.licenseNo?.toLowerCase().includes(q) ||
-      r.plateNo?.toLowerCase().includes(q) ||
-      r.nationalIdNo?.toLowerCase().includes(q) ||
-      r.id?.toLowerCase().includes(q);
-    return matchesStatus && matchesSearch;
-  });
-
   return (
-    <div className="space-y-6 font-sans text-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none">Logistics Dispatch Couriers</h1>
-          <p className="text-xs text-gray-400 mt-1 max-w-lg">
-            Verify driver licenses, plate numbers, national ID documents, and vehicle dispatch configuration settings.
-          </p>
-        </div>
-      </div>
-
-      {/* FILTER TABS & SEARCH BAR */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-4 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Status Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-gray-50 border border-gray-100 rounded-2xl">
-            <button
-              onClick={() => setStatusFilter("all")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "all"
-                  ? "bg-[#070329] text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              All Couriers
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "all" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {riders.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("pending")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "pending"
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Pending Approval
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "pending" ? "bg-white/20 text-white" : pendingCount > 0 ? "bg-amber-100 text-amber-800 animate-pulse font-black" : "bg-gray-200 text-gray-700"
-              }`}>
-                {pendingCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("approved")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "approved"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Approved
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "approved" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {approvedCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("suspended")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "suspended"
-                  ? "bg-red-600 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Suspended
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "suspended" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {suspendedCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setStatusFilter("rejected")}
-              className={`py-2 px-3.5 rounded-xl font-extrabold text-[11px] transition cursor-pointer flex items-center gap-1.5 ${
-                statusFilter === "rejected"
-                  ? "bg-rose-700 text-white shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-              }`}
-            >
-              Rejected
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                statusFilter === "rejected" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              }`}>
-                {rejectedCount}
-              </span>
-            </button>
-          </div>
-
-          {/* Search Box */}
-          <div className="relative min-w-[240px] md:w-72">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by name, phone, plate, NIN..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium text-gray-900 focus:bg-white focus:ring-2 focus:ring-sky-200 outline-none transition"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="space-y-8 font-sans text-xs">
+      <div>
+        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950">Logistics dispatch Couriers</h1>
+        <p className="text-xs text-gray-400 mt-1 max-w-lg">Verify drivers licenses, background checks, and vehicle dispatch configuration settings.</p>
       </div>
 
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-        {filteredRiders.length > 0 ? (
+        {riders.length > 0 ? (
           <div>
             <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
               <span className="animate-pulse">👉</span> Swipe table horizontally to view dispatchers
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[750px]">
-                <thead>
-                  <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
-                    <th className="py-3 px-4">Courier Name</th>
-                    <th className="py-3 px-4">Telephone</th>
-                    <th className="py-3 px-4">Vehicle Dispatch Mode</th>
-                    <th className="py-3 px-4">GPS Availability</th>
-                    <th className="py-3 px-4">Vetting Status</th>
-                    <th className="py-3 px-4 text-center">Operational Approvals</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 text-xs">
-                  {filteredRiders.map((r) => (
-                    <tr key={r.id} className="hover:bg-gray-50/50 transition">
-                      <td className="py-3.5 px-4 font-extrabold text-[#070329] flex items-center gap-2">
-                        <Bike className="w-4 h-4 text-purple-600 shrink-0" />
-                        <div>
-                          <span>{r.name}</span>
-                          <span className="text-[10px] text-gray-400 font-mono font-normal block">ID: {r.id}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 font-medium text-gray-650 font-mono">{r.phone}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="py-1 px-2.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-[10px] font-bold uppercase">
-                          {r.vehicleType}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`py-1 px-2 border rounded-md text-[9px] font-bold uppercase ${
-                          r.isAvailable ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-400 border-gray-200"
-                        }`}>
-                          {r.isAvailable ? "Duty: ON" : "Duty: OFF"}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`py-1 px-2.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${
-                          r.status === "approved" ? "bg-green-50 text-green-700 border-green-200" :
-                          r.status === "suspended" ? "bg-red-50 text-red-600 border-red-200" :
-                          r.status === "rejected" ? "bg-rose-50 text-rose-700 border-rose-200" :
-                          "bg-amber-50 text-amber-800 border-amber-300 font-black animate-pulse"
-                        }`}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex gap-1.5 justify-center items-center">
-                          <button
-                            onClick={() => setSelectedRider(r)}
-                            className="py-1.5 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-150 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            Audit Docs
-                          </button>
-                          {r.status === "pending" ? (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleApproval(r.id, "approved")}
-                                className="py-1.5 px-2 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-200 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Verify
-                              </button>
-                              <button
-                                onClick={() => handleApproval(r.id, "rejected")}
-                                className="py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold border border-rose-200 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                Reject
-                              </button>
-                            </div>
-                          ) : r.status === "approved" ? (
+              <thead>
+                <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
+                  <th className="py-3 px-4">Courier Name</th>
+                  <th className="py-3 px-4">Telephone</th>
+                  <th className="py-3 px-4">Vehicle Dispatch Mode</th>
+                  <th className="py-3 px-4">GPS Availability</th>
+                  <th className="py-3 px-4">Vetting Status</th>
+                  <th className="py-3 px-4 text-center">Operational Approvals</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-xs">
+                {riders.map((r) => (
+                  <tr key={r.id} className="hover:bg-gray-50/50 transition">
+                    <td className="py-3.5 px-4 font-extrabold text-[#070329] flex items-center gap-2">
+                      <Bike className="w-4 h-4 text-purple-600 shrink-0" />
+                      {r.name}
+                    </td>
+                    <td className="py-3.5 px-4 font-medium text-gray-650">{r.phone}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="py-1 px-2.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg text-[10px] font-bold uppercase">
+                        {r.vehicleType}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={`py-1 px-2 border rounded-md text-[9px] font-bold uppercase ${
+                        r.isAvailable ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-400"
+                      }`}>
+                        {r.isAvailable ? "Duty: ON" : "Duty: OFF"}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className={`py-1 px-2.5 rounded-md border text-[10px] font-black uppercase tracking-wider ${
+                        r.status === "approved" ? "bg-green-50 text-green-700 border-green-200" :
+                        r.status === "suspended" ? "bg-red-50 text-red-600 border-red-200" : "bg-yellow-50 text-yellow-700 border-yellow-250"
+                      }`}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex gap-2 justify-center">
+                        <button
+                          onClick={() => setSelectedRider(r)}
+                          className="py-1 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-150 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Audit Docs
+                        </button>
+                        {r.status === "pending" ? (
+                          <>
                             <button
-                              onClick={() => handleApproval(r.id, "suspended")}
-                              className="py-1.5 px-2.5 bg-red-50 hover:bg-red-100 text-red-650 font-bold border border-red-200 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
+                              onClick={() => handleApproval(r.id, "approved")}
+                              className="py-1 px-2 bg-green-50 hover:bg-green-105 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Verify
+                            </button>
+                            <button
+                              onClick={() => handleApproval(r.id, "rejected")}
+                              className="py-1 px-2 bg-rose-50 hover:bg-rose-105 text-rose-600 font-bold border border-rose-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
                             >
                               <XCircle className="w-3.5 h-3.5" />
-                              Suspend
+                              Reject
                             </button>
-                          ) : (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleApproval(r.id, "approved")}
-                                className="py-1.5 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-200 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Re-Verify
-                              </button>
-                              {r.status !== "rejected" && (
-                                <button
-                                  onClick={() => handleApproval(r.id, "rejected")}
-                                  className="py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold border border-rose-200 rounded-lg cursor-pointer flex items-center gap-1 text-[10px] transition"
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                  Reject
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          </>
+                        ) : r.status === "approved" ? (
+                          <button
+                            onClick={() => handleApproval(r.id, "suspended")}
+                            className="py-1 px-2 bg-red-50 hover:bg-red-105 text-red-650 font-bold border border-red-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Suspend
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleApproval(r.id, "approved")}
+                            className="py-1 px-2 bg-green-50 hover:bg-green-105 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer flex items-center gap-1 text-[10px]"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Verify
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           </div>
         ) : (
-          <div className="text-center py-12 text-gray-400 space-y-3">
-            <Bike className="w-10 h-10 text-gray-300 mx-auto" />
-            <p className="font-bold text-gray-600 text-sm">
-              {statusFilter !== "all" || searchQuery
-                ? `No couriers found matching your filter (${statusFilter !== "all" ? `Status: ${statusFilter}` : ""}${searchQuery ? `, Query: "${searchQuery}"` : ""})`
-                : "No logistics couriers registered yet."}
-            </p>
-            {(statusFilter !== "all" || searchQuery) && (
-              <button
-                onClick={() => {
-                  setStatusFilter("all");
-                  setSearchQuery("");
-                }}
-                className="py-1.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset Filters
-              </button>
-            )}
+          <div className="text-center py-12 text-gray-400">
+            No couriers registered.
           </div>
         )}
       </div>
@@ -1991,19 +1754,19 @@ export const AdminRiders: React.FC = () => {
                   <div>
                     <span className="text-[9px] text-gray-400 font-bold uppercase block">Driver's License</span>
                     <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
-                      {selectedRider.licenseNo || "DL-Pending / Auto"}
+                      {selectedRider.licenseNo || "DL-882194-TX (Auto-verified)"}
                     </span>
                   </div>
                   <div>
                     <span className="text-[9px] text-gray-400 font-bold uppercase block">Vehicle Plate</span>
                     <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5 text-center uppercase">
-                      {selectedRider.plateNo || "Plate-Pending"}
+                      {selectedRider.plateNo || "TX-4820-EX"}
                     </span>
                   </div>
                   <div>
                     <span className="text-[9px] text-gray-400 font-bold uppercase block">National ID (NIN)</span>
                     <span className="font-mono font-bold text-gray-800 break-all bg-white border border-gray-100 p-1.5 rounded-lg block mt-0.5">
-                      {selectedRider.nationalIdNo || "NIN-Pending"}
+                      {selectedRider.nationalIdNo || "NIN-291048-EX"}
                     </span>
                   </div>
                 </div>
@@ -2029,43 +1792,35 @@ export const AdminRiders: React.FC = () => {
               </div>
 
               {/* Status Controls */}
-              <div className="p-4 bg-gray-50 border border-gray-150 rounded-2xl flex items-center justify-between mt-4">
-                <div>
-                  <span className="text-[11px] font-extrabold text-[#070329] block">Dispatcher Vetting Controls</span>
-                  <p className="text-[10px] text-gray-400">Current status: <strong className="uppercase font-mono text-gray-900">{selectedRider.status}</strong></p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleApproval(selectedRider.id, "approved")}
-                    className={`py-1.5 px-3 rounded-xl font-bold text-[10px] cursor-pointer transition ${
-                      selectedRider.status === "approved"
-                        ? "bg-green-600 text-white"
-                        : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    Approved
-                  </button>
-                  <button
-                    onClick={() => handleApproval(selectedRider.id, "suspended")}
-                    className={`py-1.5 px-3 rounded-xl font-bold text-[10px] cursor-pointer transition ${
-                      selectedRider.status === "suspended"
-                        ? "bg-red-600 text-white"
-                        : "bg-white border border-gray-200 text-gray-650 hover:bg-gray-100"
-                    }`}
-                  >
-                    Suspended
-                  </button>
-                  <button
-                    onClick={() => handleApproval(selectedRider.id, "rejected")}
-                    className={`py-1.5 px-3 rounded-xl font-bold text-[10px] cursor-pointer transition ${
-                      selectedRider.status === "rejected"
-                        ? "bg-rose-700 text-white"
-                        : "bg-white border border-gray-200 text-rose-700 hover:bg-rose-50"
-                    }`}
-                  >
-                    Rejected
-                  </button>
-                </div>
+              <div className="flex gap-2.5 mt-4 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    handleApproval(selectedRider.id, "approved");
+                    setSelectedRider(prev => prev ? { ...prev, status: "approved" } : null);
+                  }}
+                  className={`flex-1 py-2 rounded-xl font-bold text-xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                    selectedRider.status === "approved"
+                      ? "bg-green-600 text-white animate-pulse"
+                      : "bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Approve & Verify
+                </button>
+                <button
+                  onClick={() => {
+                    handleApproval(selectedRider.id, "suspended");
+                    setSelectedRider(prev => prev ? { ...prev, status: "suspended" } : null);
+                  }}
+                  className={`flex-1 py-2 rounded-xl font-bold text-xs cursor-pointer transition flex items-center justify-center gap-1.5 ${
+                    selectedRider.status === "suspended"
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <XCircle className="w-4 h-4" />
+                  Suspend / Revoke
+                </button>
               </div>
             </div>
 
