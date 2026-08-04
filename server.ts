@@ -466,20 +466,6 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
     
-    // Check granular employee permissions if applicable
-    let empRecord: any = null;
-    if (reqUser && (reqUser.role === "employee" || reqUser.roles?.includes("employee"))) {
-      const empRows = await db.select().from(employees).where(sql`LOWER(${employees.email}) = LOWER(${reqUser.email})`).limit(1);
-      if (empRows.length > 0) empRecord = empRows[0];
-    }
-    const empPerms: string[] = empRecord?.permissions || [];
-    const empDept = empRecord?.department;
-    const canManageVendors = isAdmin || empPerms.includes("manage_vendors") || empDept === "manager" || empDept === "admin";
-    const canManageRiders = isAdmin || empPerms.includes("manage_riders") || empDept === "manager" || empDept === "admin" || empDept === "dispatcher";
-    const canManageOrders = isAdmin || empPerms.includes("manage_orders") || empDept === "manager" || empDept === "admin" || empDept === "dispatcher" || empDept === "support";
-    const canManageUsers = isAdmin || empDept === "manager" || empDept === "admin";
-    const canManageEmployees = isAdmin || empPerms.includes("manage_employees") || empDept === "admin";
-
     // Always load public baseline data
     const allVendors = await db.select().from(vendors);
     const allProducts = await db.select().from(products);
@@ -499,7 +485,7 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
     let allAppNotifications: any[] = [];
 
     if (isAdmin) {
-      // Full Super Admin scope
+      // Admins get everything
       allUsers = await db.select().from(users);
       allOrders = await db.select().from(orders);
       allOrderItems = await db.select().from(orderItems);
@@ -509,39 +495,24 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       allWalletTransactions = await db.select().from(walletTransactions);
       allAppNotifications = await db.select().from(appNotifications);
     } else if (reqUser) {
-      // Permission-aware scoping for Employees and standard Tenant Isolation for Customers/Vendors/Riders
-      if (canManageUsers || canManageVendors || canManageRiders || canManageEmployees) {
-        allUsers = await db.select().from(users);
-      } else {
-        allUsers = await db.select().from(users).where(eq(users.id, reqUser.id));
-      }
-
-      if (canManageRiders) {
-        allRiders = await db.select().from(riders);
-      } else if (reqUser.roles?.includes("rider")) {
-        allRiders = await db.select().from(riders).where(eq(riders.userId, reqUser.id));
-      }
-
-      if (canManageEmployees) {
-        allEmployees = await db.select().from(employees);
-      }
-
+      // Regular user / Vendor / Rider - Tenant Isolation
+      allUsers = await db.select().from(users).where(eq(users.id, reqUser.id));
+      
       const userVendor = allVendors.find(v => v.userId === reqUser.id);
       
-      if (canManageOrders) {
-        allOrders = await db.select().from(orders);
-        allOrderItems = await db.select().from(orderItems);
-      } else {
-        const ordersFilter = userVendor 
-          ? sql`${orders.customerId} = ${reqUser.id} OR ${orders.vendorId} = ${userVendor.id}`
-          : eq(orders.customerId, reqUser.id);
-          
-        allOrders = await db.select().from(orders).where(ordersFilter);
+      const ordersFilter = userVendor 
+        ? sql`${orders.customerId} = ${reqUser.id} OR ${orders.vendorId} = ${userVendor.id}`
+        : eq(orders.customerId, reqUser.id);
         
-        if (allOrders.length > 0) {
-          const orderIds = allOrders.map(o => o.id);
-          allOrderItems = await db.select().from(orderItems).where(sql`${orderItems.orderId} IN (${sql.join(orderIds, sql`, `)})`);
-        }
+      allOrders = await db.select().from(orders).where(ordersFilter);
+      
+      if (allOrders.length > 0) {
+        const orderIds = allOrders.map(o => o.id);
+        allOrderItems = await db.select().from(orderItems).where(sql`${orderItems.orderId} IN (${sql.join(orderIds, sql`, `)})`);
+      }
+      
+      if (reqUser.roles?.includes("rider")) {
+        allRiders = await db.select().from(riders).where(eq(riders.userId, reqUser.id));
       }
       
       allSavedAddresses = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id));
@@ -800,8 +771,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             openingTime: v.openingTime,
             closingTime: v.closingTime,
             openingDays: v.openingDays,
-            operatingHours: v.operatingHours,
-            isTemporarilyClosed: v.isTemporarilyClosed,
             coverImage: v.coverImage,
             category: v.category,
             prepTime: v.prepTime,
@@ -812,10 +781,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             commissionType: v.commissionType,
             commissionValue: v.commissionValue,
             freeDelivery: v.freeDelivery,
-            businessRegNo: v.businessRegNo,
-            foodPermitNo: v.foodPermitNo,
-            verificationDoc: v.verificationDoc,
-            receiptPickupEnabled: v.receiptPickupEnabled ?? true,
           }).onConflictDoUpdate({
             target: vendors.id,
             set: {
@@ -830,8 +795,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               openingTime: v.openingTime,
               closingTime: v.closingTime,
               openingDays: v.openingDays,
-              operatingHours: v.operatingHours,
-              isTemporarilyClosed: v.isTemporarilyClosed,
               coverImage: v.coverImage,
               category: v.category,
               prepTime: v.prepTime,
@@ -842,32 +805,15 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               commissionType: v.commissionType,
               commissionValue: v.commissionValue,
               freeDelivery: v.freeDelivery,
-              businessRegNo: v.businessRegNo,
-              foodPermitNo: v.foodPermitNo,
-              verificationDoc: v.verificationDoc,
-              receiptPickupEnabled: v.receiptPickupEnabled ?? true,
             },
           });
         }
         break;
 
       case "VENDOR_UPSERT": {
-        let existingVendor: any[] = [];
-        if (payload.id) {
-          existingVendor = await db.select().from(vendors).where(eq(vendors.id, payload.id)).limit(1);
-        }
-
-        let empRecord: any = null;
-        if (reqUser && (reqUser.role === "employee" || reqUser.roles?.includes("employee"))) {
-          const empRows = await db.select().from(employees).where(sql`LOWER(${employees.email}) = LOWER(${reqUser.email})`).limit(1);
-          if (empRows.length > 0) empRecord = empRows[0];
-        }
-        const empPerms: string[] = empRecord?.permissions || [];
-        const empDept = empRecord?.department;
-        const canManageVendors = isAdmin || empPerms.includes("manage_vendors") || empDept === "manager" || empDept === "admin";
-
-        if (!isAdmin && !canManageVendors) {
+        if (!isAdmin) {
           if (payload.userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
+          const existingVendor = await db.select().from(vendors).where(eq(vendors.id, payload.id)).limit(1);
           if (existingVendor.length > 0) {
             if (existingVendor[0].userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
             payload.status = existingVendor[0].status;
@@ -880,13 +826,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             payload.rating = 5.0;
           }
         }
-
-        // Preserve existing verification/document and settings fields if omitted in partial payload
-        const businessRegNo = payload.businessRegNo !== undefined ? payload.businessRegNo : (existingVendor[0]?.businessRegNo || null);
-        const foodPermitNo = payload.foodPermitNo !== undefined ? payload.foodPermitNo : (existingVendor[0]?.foodPermitNo || null);
-        const verificationDoc = payload.verificationDoc !== undefined ? payload.verificationDoc : (existingVendor[0]?.verificationDoc || null);
-        const receiptPickupEnabled = payload.receiptPickupEnabled !== undefined ? payload.receiptPickupEnabled : (existingVendor[0]?.receiptPickupEnabled ?? true);
-
         await db.insert(vendors).values({
           id: payload.id,
           userId: payload.userId,
@@ -913,10 +852,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           commissionType: payload.commissionType,
           commissionValue: payload.commissionValue,
           freeDelivery: payload.freeDelivery,
-          businessRegNo,
-          foodPermitNo,
-          verificationDoc,
-          receiptPickupEnabled,
         }).onConflictDoUpdate({
           target: vendors.id,
           set: {
@@ -943,10 +878,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             commissionType: payload.commissionType,
             commissionValue: payload.commissionValue,
             freeDelivery: payload.freeDelivery,
-            businessRegNo,
-            foodPermitNo,
-            verificationDoc,
-            receiptPickupEnabled,
           },
         });
 
@@ -1436,10 +1367,6 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             status: r.status,
             isAvailable: r.isAvailable,
             createdAt: r.createdAt,
-            licenseNo: r.licenseNo,
-            plateNo: r.plateNo,
-            nationalIdNo: r.nationalIdNo,
-            verificationDoc: r.verificationDoc,
           }).onConflictDoUpdate({
             target: riders.id,
             set: {
@@ -1448,46 +1375,23 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               vehicleType: r.vehicleType,
               status: r.status,
               isAvailable: r.isAvailable,
-              licenseNo: r.licenseNo,
-              plateNo: r.plateNo,
-              nationalIdNo: r.nationalIdNo,
-              verificationDoc: r.verificationDoc,
             },
           });
         }
         break;
 
       case "RIDER_UPSERT": {
-        let existingRider: any[] = [];
-        if (payload.id) {
-          existingRider = await db.select().from(riders).where(eq(riders.id, payload.id)).limit(1);
-        }
-
-        let empRecord: any = null;
-        if (reqUser && (reqUser.role === "employee" || reqUser.roles?.includes("employee"))) {
-          const empRows = await db.select().from(employees).where(sql`LOWER(${employees.email}) = LOWER(${reqUser.email})`).limit(1);
-          if (empRows.length > 0) empRecord = empRows[0];
-        }
-        const empPerms: string[] = empRecord?.permissions || [];
-        const empDept = empRecord?.department;
-        const canManageRiders = isAdmin || empPerms.includes("manage_riders") || empDept === "manager" || empDept === "admin" || empDept === "dispatcher";
-
-        if (!isAdmin && !canManageRiders) {
+        if (!isAdmin) {
           if (payload.userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
-          if (existingRider.length > 0) {
-            if (existingRider[0].userId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
-            payload.status = existingRider[0].status;
-            payload.userId = existingRider[0].userId;
+          const existing = await db.select().from(riders).where(eq(riders.id, payload.id)).limit(1);
+          if (existing.length > 0) {
+            if (existing[0].userId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
+            payload.status = existing[0].status;
+            payload.userId = existing[0].userId;
           } else {
             payload.status = "pending";
           }
         }
-
-        const licenseNo = payload.licenseNo !== undefined ? payload.licenseNo : (existingRider[0]?.licenseNo || null);
-        const plateNo = payload.plateNo !== undefined ? payload.plateNo : (existingRider[0]?.plateNo || null);
-        const nationalIdNo = payload.nationalIdNo !== undefined ? payload.nationalIdNo : (existingRider[0]?.nationalIdNo || null);
-        const verificationDoc = payload.verificationDoc !== undefined ? payload.verificationDoc : (existingRider[0]?.verificationDoc || null);
-
         await db.insert(riders).values({
           id: payload.id,
           userId: payload.userId,
@@ -1495,12 +1399,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           phone: payload.phone,
           vehicleType: payload.vehicleType,
           status: payload.status,
-          isAvailable: payload.isAvailable !== undefined ? payload.isAvailable : true,
+          isAvailable: payload.isAvailable,
           createdAt: payload.createdAt || new Date().toISOString(),
-          licenseNo,
-          plateNo,
-          nationalIdNo,
-          verificationDoc,
         }).onConflictDoUpdate({
           target: riders.id,
           set: {
@@ -1508,11 +1408,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             phone: payload.phone,
             vehicleType: payload.vehicleType,
             status: payload.status,
-            isAvailable: payload.isAvailable !== undefined ? payload.isAvailable : true,
-            licenseNo,
-            plateNo,
-            nationalIdNo,
-            verificationDoc,
+            isAvailable: payload.isAvailable,
           },
         });
 
