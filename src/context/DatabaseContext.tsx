@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig, ReceiptPickupOrder } from "../types";
+import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
 import { hasRole } from "../roleHelper";
 import { useUpdateManager } from './UpdateManagerContext';
 
