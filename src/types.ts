@@ -191,27 +191,6 @@ export interface ReceiptPickupConfig {
   flatServiceFee: number;
 }
 
-export interface ReceiptPickupOrder {
-  id: string;
-  customerId: string;
-  customerName: string;
-  customerPhone?: string;
-  vendorId: string;
-  vendorName: string;
-  riderId?: string;
-  riderName?: string;
-  status: "awaiting_admin_verification" | "pending" | "accepted" | "picked_up" | "ready_for_rider" | "delivered" | "cancelled";
-  paymentStatus: "paid" | "unpaid";
-  paymentMethod: string;
-  deliveryAddress: string;
-  deliveryFee: number;
-  serviceFee?: number;
-  totalAmount?: number;
-  receiptImageOrQr?: string;
-  receiptNote?: string;
-  createdAt: string;
-}
-
 export interface PaymentGateway {
   id: string;
   name: string;
