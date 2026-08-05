@@ -857,14 +857,13 @@ export const AdminOrders: React.FC = () => {
                         <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
                         <td className="py-3.5 px-4">
                           {o.paymentReceiptUrl ? (
-                            <a
-                              href={o.paymentReceiptUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sky-600 hover:underline font-bold"
+                            <button
+                              type="button"
+                              onClick={() => setZoomedImage(o.paymentReceiptUrl)}
+                              className="text-sky-600 hover:underline font-bold cursor-pointer"
                             >
                               View Receipt
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-gray-400 italic">No receipt uploaded</span>
                           )}
