@@ -950,8 +950,14 @@ export const AdminOrders: React.FC = () => {
 
 /* 2. MERCHANT LICENSE MANAGER SCREEN */
 export const AdminVendors: React.FC = () => {
-  const { vendors, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [] } = useDatabase();
+  const { vendors, users, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [] } = useDatabase();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+
+  // Filtering, search, and sort state for the vendor list
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected" | "suspended">("all");
+  const [operationalFilter, setOperationalFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   
   // Local edit states
   const [editName, setEditName] = useState("");
@@ -1052,6 +1058,29 @@ export const AdminVendors: React.FC = () => {
     ? products.filter(p => p.vendorId === selectedVendor.id)
     : [];
 
+  // Applies search (name, and linked account's email/phone), status filter,
+  // active/inactive filter, and sort — recomputed only when an input changes.
+  const filteredVendors = React.useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    let list = vendors.filter(v => {
+      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (operationalFilter === "active" && v.isTemporarilyClosed) return false;
+      if (operationalFilter === "inactive" && !v.isTemporarilyClosed) return false;
+      if (term) {
+        const owner = users.find(u => u.id === v.userId);
+        const haystack = [v.name, owner?.email, owner?.phone].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      const da = new Date(a.createdAt).getTime();
+      const db = new Date(b.createdAt).getTime();
+      return sortOrder === "newest" ? db - da : da - db;
+    });
+    return list;
+  }, [vendors, users, searchTerm, statusFilter, operationalFilter, sortOrder]);
+
   return (
     <div className="space-y-8 font-sans text-xs">
       <div>
@@ -1061,9 +1090,59 @@ export const AdminVendors: React.FC = () => {
         </p>
       </div>
 
+      {/* FILTERS & SEARCH */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm flex flex-wrap gap-3 items-center">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search by name, email, or phone..."
+          className="flex-1 min-w-[220px] py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-sky-300"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as any)}
+          className="py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-sky-300"
+        >
+          <option value="all">All Statuses</option>
+          <option value="pending">Pending Approval</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="suspended">Suspended</option>
+        </select>
+        <select
+          value={operationalFilter}
+          onChange={(e) => setOperationalFilter(e.target.value as any)}
+          className="py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-sky-300"
+        >
+          <option value="all">Active & Inactive</option>
+          <option value="active">Active (Open)</option>
+          <option value="inactive">Inactive (Closed)</option>
+        </select>
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as any)}
+          className="py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-sky-300"
+        >
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+        </select>
+        {(searchTerm || statusFilter !== "all" || operationalFilter !== "all") && (
+          <button
+            onClick={() => { setSearchTerm(""); setStatusFilter("all"); setOperationalFilter("all"); }}
+            className="py-2.5 px-4 text-xs font-bold text-gray-500 hover:text-gray-700"
+          >
+            Clear filters
+          </button>
+        )}
+        <span className="text-[11px] text-gray-400 font-medium ml-auto">
+          Showing {filteredVendors.length} of {vendors.length}
+        </span>
+      </div>
+
       {/* VENDOR LIST TABLE */}
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-        {vendors.length > 0 ? (
+        {filteredVendors.length > 0 ? (
           <div>
             <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
               <span className="animate-pulse">👉</span> Swipe table horizontally to view all fields
@@ -1084,7 +1163,7 @@ export const AdminVendors: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 text-xs">
-                  {vendors.map((v) => {
+                  {filteredVendors.map((v) => {
                     // Category styling helper
                     const catColors = {
                       restaurant: "bg-orange-50 text-orange-700 border-orange-100",
@@ -1183,7 +1262,7 @@ export const AdminVendors: React.FC = () => {
           </div>
         ) : (
           <div className="text-center py-12 text-gray-400">
-            No merchant partners registered.
+            {vendors.length === 0 ? "No merchant partners registered." : "No vendors match your current search/filters."}
           </div>
         )}
       </div>
@@ -1581,12 +1660,38 @@ export const AdminVendors: React.FC = () => {
 
 /* 3. COURIER FLEETS SCREEN */
 export const AdminRiders: React.FC = () => {
-  const { riders, toggleRiderStatus } = useDatabase();
+  const { riders, users, toggleRiderStatus } = useDatabase();
   const [selectedRider, setSelectedRider] = useState<Rider | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected" | "suspended">("all");
+  const [operationalFilter, setOperationalFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
   const handleApproval = (id: string, s: Rider["status"]) => {
     toggleRiderStatus(id, s);
   };
+
+  const filteredRiders = React.useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    let list = riders.filter(r => {
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (operationalFilter === "active" && !r.isAvailable) return false;
+      if (operationalFilter === "inactive" && r.isAvailable) return false;
+      if (term) {
+        const owner = users.find(u => u.id === r.userId);
+        const haystack = [r.name, r.phone, owner?.email].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      const da = new Date(a.createdAt).getTime();
+      const db = new Date(b.createdAt).getTime();
+      return sortOrder === "newest" ? db - da : da - db;
+    });
+    return list;
+  }, [riders, users, searchTerm, statusFilter, operationalFilter, sortOrder]);
 
   return (
     <div className="space-y-8 font-sans text-xs">
@@ -1595,8 +1700,58 @@ export const AdminRiders: React.FC = () => {
         <p className="text-xs text-gray-400 mt-1 max-w-lg">Verify drivers licenses, background checks, and vehicle dispatch configuration settings.</p>
       </div>
 
+      {/* FILTERS & SEARCH */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm flex flex-wrap gap-3 items-center">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search by name, email, or phone..."
+          className="flex-1 min-w-[220px] py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-sky-300"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as any)}
+          className="py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-sky-300"
+        >
+          <option value="all">All Statuses</option>
+          <option value="pending">Pending Approval</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="suspended">Suspended</option>
+        </select>
+        <select
+          value={operationalFilter}
+          onChange={(e) => setOperationalFilter(e.target.value as any)}
+          className="py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-sky-300"
+        >
+          <option value="all">Active & Inactive</option>
+          <option value="active">Active (Available)</option>
+          <option value="inactive">Inactive (Unavailable)</option>
+        </select>
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as any)}
+          className="py-2.5 px-4 border border-gray-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-sky-300"
+        >
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+        </select>
+        {(searchTerm || statusFilter !== "all" || operationalFilter !== "all") && (
+          <button
+            onClick={() => { setSearchTerm(""); setStatusFilter("all"); setOperationalFilter("all"); }}
+            className="py-2.5 px-4 text-xs font-bold text-gray-500 hover:text-gray-700"
+          >
+            Clear filters
+          </button>
+        )}
+        <span className="text-[11px] text-gray-400 font-medium ml-auto">
+          Showing {filteredRiders.length} of {riders.length}
+        </span>
+      </div>
+
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-        {riders.length > 0 ? (
+        {filteredRiders.length > 0 ? (
           <div>
             <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
               <span className="animate-pulse">👉</span> Swipe table horizontally to view dispatchers
@@ -1614,7 +1769,7 @@ export const AdminRiders: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs">
-                {riders.map((r) => (
+                {filteredRiders.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50/50 transition">
                     <td className="py-3.5 px-4 font-extrabold text-[#070329] flex items-center gap-2">
                       <Bike className="w-4 h-4 text-purple-600 shrink-0" />
@@ -1694,7 +1849,7 @@ export const AdminRiders: React.FC = () => {
           </div>
         ) : (
           <div className="text-center py-12 text-gray-400">
-            No couriers registered.
+            {riders.length === 0 ? "No couriers registered." : "No riders match your current search/filters."}
           </div>
         )}
       </div>
