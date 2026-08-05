@@ -2691,32 +2691,26 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
       
       return { success: true, user: { ...user, role, roles: userRoles }, token: data.token };
     } catch (err) {
-      // Fallback to local login if backend is unavailable
-      const identifierLower = identifier.trim().toLowerCase();
-      const localUser = users.find(
-        (u) => u.email.toLowerCase() === identifierLower || u.phone === identifier
-      );
-      
-      if (!localUser) {
-        return { success: false, error: "No registered account matches this email or phone number. Try selecting 'Register'." };
-      }
-      
-      if (localUser.pin !== pin) {
-        return { success: false, error: "Incorrect PIN. Please try again." };
-      }
-      
-      const userRoles = localUser.roles || [localUser.role];
-      if (!userRoles.includes(role)) {
-        return { success: false, error: `This account does not have the ${role} role. Available roles: ${userRoles.join(", ")}.` };
-      }
-      
-      if (!preventStateUpdate) {
-        // We generate a dummy token for local session
-        const dummyToken = "local_token_" + localUser.id;
-        finalizeLogin(localUser, dummyToken, role);
-      }
-      
-      return { success: true, user: { ...localUser, role, roles: userRoles }, token: "local_token_" + localUser.id };
+      // Previously this silently fell back to a fake, locally-generated
+      // token ("local_token_" + id) whenever the real login request failed
+      // for any reason (network blip, cold start, brief server hiccup).
+      // The person appeared fully logged in with no error shown — but that
+      // fake token isn't a real signed JWT, so the backend correctly
+      // rejects it as unauthorized (401) the moment they try to do
+      // anything requiring real authentication, like applying to become a
+      // vendor/rider or placing an order. This was the actual root cause
+      // of those 401 errors: a broken, silent half-logged-in state that
+      // looked fine until the very next real action.
+      //
+      // A fake local session was never functional for anything requiring
+      // backend confirmation anyway, so removing it doesn't remove any
+      // working capability — it just means a failed login is reported
+      // honestly instead of hidden until it breaks something else later.
+      console.error("[login] Backend login failed:", err);
+      return {
+        success: false,
+        error: "Unable to reach the server right now. Please check your connection and try again.",
+      };
     }
   };
 
