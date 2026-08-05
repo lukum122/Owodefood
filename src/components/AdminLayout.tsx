@@ -30,6 +30,8 @@ export const AdminLayout: React.FC = () => {
     currentUser, 
     logout, 
     orders,
+    vendors = [],
+    riders = [],
     notifications = [],
     markNotificationAsRead,
     markAllNotificationsAsRead,
@@ -125,6 +127,8 @@ export const AdminLayout: React.FC = () => {
   const isAllowed = currentItem ? isItemAllowed(currentItem.name) : true;
 
   const pendingCount = orders.filter(o => o.status === "pending").length;
+  const pendingVendorsCount = vendors.filter(v => v.status === "pending").length;
+  const pendingRidersCount = riders.filter(r => r.status === "pending").length;
 
   const renderSidebarContent = () => (
     <>
@@ -168,6 +172,8 @@ export const AdminLayout: React.FC = () => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path || (item.path !== "/admin/dashboard" && location.pathname.startsWith(item.path));
           const isOrders = item.name === "Master Orders";
+          const isVendors = item.name === "Manage Vendors";
+          const isRiders = item.name === "Manage Riders";
           
           return (
             <Link
@@ -189,6 +195,16 @@ export const AdminLayout: React.FC = () => {
                 {isOrders && pendingCount > 0 && (
                   <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-bold rounded-full">
                     {pendingCount}
+                  </span>
+                )}
+                {isVendors && pendingVendorsCount > 0 && (
+                  <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-bold rounded-full">
+                    {pendingVendorsCount}
+                  </span>
+                )}
+                {isRiders && pendingRidersCount > 0 && (
+                  <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-bold rounded-full">
+                    {pendingRidersCount}
                   </span>
                 )}
                 {isActive && <ChevronRight className="w-4 h-4 text-purple-400" />}
