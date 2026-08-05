@@ -60,7 +60,8 @@ export const CustomerVendorMenu: React.FC = () => {
   const [zoneSearchQuery, setZoneSearchQuery] = useState("");
   const [pickupNote, setPickupNote] = useState("");
   const [receiptImage, setReceiptImage] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"wallet" | "cash">("wallet");
+  const [paymentMethod, setPaymentMethod] = useState<string>("wallet");
+  const [paymentProofImage, setPaymentProofImage] = useState("");
   const [isSubmittingPickup, setIsSubmittingPickup] = useState(false);
   const [pickupSuccessMsg, setPickupSuccessMsg] = useState<string | null>(null);
   const [pickupErrorMsg, setPickupErrorMsg] = useState<string | null>(null);
@@ -714,6 +715,10 @@ export const CustomerVendorMenu: React.FC = () => {
                     setPickupErrorMsg("Please upload a receipt/QR code image or pick a verification preset below.");
                     return;
                   }
+                  if (paymentMethod === "bank_transfer" && !paymentProofImage) {
+                    setPickupErrorMsg("Please upload your proof of payment for the bank transfer.");
+                    return;
+                  }
 
                   setIsSubmittingPickup(true);
                   setPickupErrorMsg(null);
@@ -725,7 +730,7 @@ export const CustomerVendorMenu: React.FC = () => {
                       combinedDeliveryAddress,
                       paymentMethod,
                       pickupPhone,
-                      undefined,
+                      paymentMethod === "bank_transfer" ? paymentProofImage : undefined,
                       {
                         orderType: "receipt_pickup",
                         vendorId: vendorObj?.id,
@@ -742,6 +747,7 @@ export const CustomerVendorMenu: React.FC = () => {
                       setPickupNote("");
                       setReceiptImage("");
                       setPresetReceipt("");
+                      setPaymentProofImage("");
                     } else {
                       setPickupErrorMsg(res.error || "Failed to create receipt pickup request. Please try again.");
                     }
@@ -993,6 +999,66 @@ export const CustomerVendorMenu: React.FC = () => {
                         </div>
                       ))}
                     </div>
+
+                    {paymentMethod === "bank_transfer" && (
+                      <div className="space-y-2 pt-1">
+                        {(() => {
+                          const tg = paymentGateways?.find(g => g.id === "bank_transfer");
+                          return (
+                            <div className="p-3.5 bg-white border border-gray-150 rounded-xl space-y-2">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Bank Name</span>
+                                <span className="font-bold text-gray-800">{tg?.bankName || "GT Bank"}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Account Number</span>
+                                <span className="font-bold font-mono text-[#0ea5e9] select-all tracking-wide">{tg?.accountNumber || "0123456789"}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Account Name</span>
+                                <span className="font-bold text-gray-800">{tg?.accountName || "Owode Food Marketplace LTD"}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <p className="text-[10px] font-bold text-sky-700 bg-sky-50 p-2.5 rounded-xl border border-sky-100">
+                          Please transfer {currency}{(dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)).toLocaleString()} to the account details shown, then upload your proof of payment below. Your pickup will be dispatched once an admin verifies it.
+                        </p>
+                        <label className="text-[10px] uppercase font-mono tracking-wider font-black text-gray-400 block">Proof of Payment</label>
+                        {paymentProofImage ? (
+                          <div className="relative">
+                            <img src={paymentProofImage} alt="Payment proof" className="max-h-24 mx-auto rounded-lg shadow-sm border border-gray-100" />
+                            <button
+                              type="button"
+                              onClick={() => setPaymentProofImage("")}
+                              className="absolute top-1 right-1 bg-white/90 hover:bg-white text-rose-600 text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow border border-gray-100"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="border-2 border-dashed border-gray-200 hover:border-[#0ea5e9] rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition bg-gray-50/20 hover:bg-sky-50/10 text-center space-y-1">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const r = new FileReader();
+                                  r.onloadend = () => {
+                                    setPaymentProofImage(r.result as string);
+                                  };
+                                  r.readAsDataURL(file);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                            <span className="text-xs font-bold text-gray-600">📁 Click to Upload Payment Receipt</span>
+                            <span className="text-[9px] text-gray-400 font-semibold">Supports JPEG, PNG, or screenshots</span>
+                          </label>
+                        )}
+                      </div>
+                    )}
 
                     {paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)) && (
                       <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2 rounded-xl border border-amber-100">
