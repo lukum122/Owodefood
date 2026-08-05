@@ -749,11 +749,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const saved = localStorage.getItem("fd_hero_banner");
       if (saved) return JSON.parse(saved);
     } catch {}
+    // No cached copy yet (genuine first-ever visit) — show a blank hero
+    // section rather than hardcoded placeholder text, so a real visitor
+    // never briefly sees content that isn't actually true for this store.
+    // The real text fills in the moment the backend responds.
     return {
       isEnabled: true,
-      badgeText: "EASY LOCAL DELIVERY",
-      title: "Good food,<br className=\"hidden sm:inline\" /> fast delivery",
-      description: "Order from your favorite restaurants and get it delivered to your door. Fresh meals brought with speed.",
+      badgeText: "",
+      title: "",
+      description: "",
       backgroundColor: "#070329",
       image: "/images/hero.png"
     };
