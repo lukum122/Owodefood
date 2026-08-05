@@ -37,6 +37,12 @@ export const AdminDashboard: React.FC = () => {
 
   const pendingApprovalVendors = vendors.filter(v => v.status === "pending").length;
   const pendingApprovalRiders = riders.filter(r => r.status === "pending").length;
+  const totalVendorApplications = vendors.length;
+  const approvedVendorsCount = vendors.filter(v => v.status === "approved").length;
+  const suspendedVendorsCount = vendors.filter(v => v.status === "suspended").length;
+  const totalRiderApplications = riders.length;
+  const approvedRidersCount = riders.filter(r => r.status === "approved").length;
+  const suspendedRidersCount = riders.filter(r => r.status === "suspended").length;
 
   // Realtime Active operations count
   const activeDeliveriesCount = orders.filter(
@@ -117,6 +123,54 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* Vendor & Rider Application Stats */}
+      <div>
+        <h2 className="text-sm font-bold text-gray-950 mb-4">Vendor & Rider Applications</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Total Vendor Applications</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{totalVendorApplications}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-yellow-600 uppercase tracking-wider block leading-none">Pending Vendors</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{pendingApprovalVendors}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider block leading-none">Approved Vendors</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{approvedVendorsCount}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider block leading-none">Suspended Vendors</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{suspendedVendorsCount}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Total Rider Applications</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{totalRiderApplications}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-yellow-600 uppercase tracking-wider block leading-none">Pending Riders</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{pendingApprovalRiders}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider block leading-none">Approved Riders</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{approvedRidersCount}</h3>
+          </div>
+
+          <div className="bg-white p-5 border border-gray-100 rounded-2xl shadow-sm">
+            <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider block leading-none">Suspended Riders</span>
+            <h3 className="text-lg font-black text-gray-950 mt-2 font-mono">{suspendedRidersCount}</h3>
+          </div>
+
+        </div>
       </div>
 
       {/* Main Grid: Revenue chart & Verifications checklist */}
