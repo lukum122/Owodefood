@@ -128,8 +128,8 @@ interface DatabaseContextType {
   updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
   
   // Admin Actions
-  toggleVendorStatus: (vendorId: string, status: Vendor["status"]) => void;
-  toggleRiderStatus: (riderId: string, status: Rider["status"]) => void;
+  toggleVendorStatus: (vendorId: string, status: Vendor["status"], reason?: string) => void;
+  toggleRiderStatus: (riderId: string, status: Rider["status"], reason?: string) => void;
   deleteUser: (userId: string) => void;
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => void;
   adminCreateOrder: (order: Order) => void;
@@ -3923,9 +3923,29 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // ADMIN ACTIONS
-  const toggleVendorStatus = (vendorId: string, status: Vendor["status"]) => {
+  const toggleVendorStatus = (vendorId: string, status: Vendor["status"], reason?: string) => {
+    const previousVendor = vendors.find(v => v.id === vendorId);
     const updatedVendors = vendors.map(v => v.id === vendorId ? { ...v, status } : v);
     persistVendors(updatedVendors);
+
+    // Audit trail: record exactly what happened, who did it (verified
+    // server-side from the admin's real token, not client-asserted), and
+    // why — right at the moment the action is taken, since this is the
+    // one place we reliably know all three.
+    if (previousVendor && previousVendor.status !== status) {
+      const wasReactivation = status === "approved" && (previousVendor.status === "suspended" || previousVendor.status === "rejected");
+      const action = wasReactivation
+        ? "REACTIVATE_VENDOR"
+        : status === "approved" ? "APPROVE_VENDOR"
+        : status === "rejected" ? "REJECT_VENDOR"
+        : status === "suspended" ? "SUSPEND_VENDOR"
+        : "UPDATE_VENDOR_STATUS";
+      syncSave("AUDIT_LOG_CREATE", {
+        action,
+        resource: vendorId,
+        details: `Vendor "${previousVendor.name}" status changed from ${previousVendor.status} to ${status}.${reason ? ` Reason: ${reason}` : ""}`,
+      });
+    }
 
     if (status === "approved") {
       const vendorObj = vendors.find(v => v.id === vendorId);
@@ -3956,9 +3976,25 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const toggleRiderStatus = (riderId: string, status: Rider["status"]) => {
+  const toggleRiderStatus = (riderId: string, status: Rider["status"], reason?: string) => {
+    const previousRider = riders.find(r => r.id === riderId);
     const updatedRiders = riders.map(r => r.id === riderId ? { ...r, status } : r);
     persistRiders(updatedRiders);
+
+    if (previousRider && previousRider.status !== status) {
+      const wasReactivation = status === "approved" && (previousRider.status === "suspended" || previousRider.status === "rejected");
+      const action = wasReactivation
+        ? "REACTIVATE_RIDER"
+        : status === "approved" ? "APPROVE_RIDER"
+        : status === "rejected" ? "REJECT_RIDER"
+        : status === "suspended" ? "SUSPEND_RIDER"
+        : "UPDATE_RIDER_STATUS";
+      syncSave("AUDIT_LOG_CREATE", {
+        action,
+        resource: riderId,
+        details: `Rider "${previousRider.name}" status changed from ${previousRider.status} to ${status}.${reason ? ` Reason: ${reason}` : ""}`,
+      });
+    }
 
     if (status === "approved") {
       const riderObj = riders.find(r => r.id === riderId);
