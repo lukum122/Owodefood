@@ -48,6 +48,7 @@ import { AdminEmployees } from "./pages/AdminEmployees";
 import { AdminWallets } from "./pages/AdminWallets";
 import { AdminPayouts } from "./pages/AdminPayouts";
 import { AdminNotifications } from "./pages/AdminNotifications";
+import { AdminAuditLog } from "./pages/AdminAuditLog";
 import { AdminDiscovery } from "./pages/AdminDiscovery";
 
 export default function App() {
@@ -159,6 +160,7 @@ export default function App() {
             <Route path="wallets" element={<AdminWallets />} />
             <Route path="payouts" element={<AdminPayouts />} />
             <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="audit-log" element={<AdminAuditLog />} />
             <Route path="discovery" element={<AdminDiscovery />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
