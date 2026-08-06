@@ -979,7 +979,12 @@ export const AdminVendors: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState("");
 
   const handleApproval = (id: string, s: Vendor["status"]) => {
-    toggleVendorStatus(id, s);
+    let reason: string | undefined;
+    if (s === "rejected" || s === "suspended") {
+      const input = window.prompt(`Please provide a reason for ${s === "rejected" ? "rejecting" : "suspending"} this vendor (optional, but recommended for the audit trail):`);
+      reason = input?.trim() || undefined;
+    }
+    toggleVendorStatus(id, s, reason);
     if (selectedVendor && selectedVendor.id === id) {
       setSelectedVendor(prev => prev ? { ...prev, status: s } : null);
     }
@@ -1668,7 +1673,12 @@ export const AdminRiders: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
   const handleApproval = (id: string, s: Rider["status"]) => {
-    toggleRiderStatus(id, s);
+    let reason: string | undefined;
+    if (s === "rejected" || s === "suspended") {
+      const input = window.prompt(`Please provide a reason for ${s === "rejected" ? "rejecting" : "suspending"} this rider (optional, but recommended for the audit trail):`);
+      reason = input?.trim() || undefined;
+    }
+    toggleRiderStatus(id, s, reason);
   };
 
   const filteredRiders = React.useMemo(() => {
