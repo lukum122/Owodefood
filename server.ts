@@ -551,6 +551,45 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
   }
 });
 
+// Admin-only: view the audit trail. Supports optional ?resource= filtering
+// (e.g. a specific vendor/rider ID) so the admin panel can show "history
+// for this application" as well as the full platform-wide log.
+app.get("/api/admin/audit-logs", verifyTokenOptional, async (req: any, res) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Unauthorized: Admins only." });
+    }
+
+    const resourceFilter = typeof req.query.resource === "string" ? req.query.resource : null;
+    const rows = resourceFilter
+      ? await db.select().from(auditLogs).where(eq(auditLogs.resource, resourceFilter))
+      : await db.select().from(auditLogs);
+
+    // Newest first, and attach the admin's name/email for readability
+    // instead of forcing the UI to cross-reference user IDs itself.
+    const sorted = rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const actorIds = [...new Set(sorted.map(r => r.userId))];
+    const actors = actorIds.length > 0
+      ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, actorIds))
+      : [];
+    const actorMap = new Map(actors.map(a => [a.id, a]));
+
+    res.json({
+      logs: sorted.map(r => ({
+        ...r,
+        actorName: actorMap.get(r.userId)?.name || "Unknown",
+        actorEmail: actorMap.get(r.userId)?.email || "",
+      })),
+    });
+  } catch (error: any) {
+    console.error("Failed to load audit logs:", error);
+    res.status(500).json({ error: "Failed to load audit logs." });
+  }
+});
+
 // 3. Database Synchronization Endpoint: SAVE
 app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
   try {
@@ -624,6 +663,24 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     }
 
     switch (type) {
+      case "AUDIT_LOG_CREATE": {
+        // Only real, verified admins can write audit entries — and the
+        // "who did this" field always comes from the verified token, never
+        // from whatever the client claims, so it can't be spoofed.
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Unauthorized: Only admins can create audit log entries." });
+        }
+        await db.insert(auditLogs).values({
+          id: payload.id || `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          userId: reqUser.id,
+          action: String(payload.action || "UNKNOWN_ACTION"),
+          resource: String(payload.resource || ""),
+          details: payload.details ? String(payload.details) : null,
+          createdAt: new Date().toISOString(),
+        });
+        break;
+      }
+
       case "USERS_BULK":
         for (const u of payload) {
           await db.insert(users).values({
