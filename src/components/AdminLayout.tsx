@@ -118,6 +118,7 @@ export const AdminLayout: React.FC = () => {
     { name: "Wallet Management", path: "/admin/wallets", icon: Coins },
     { name: "Payout Approvals", path: "/admin/payouts", icon: Receipt },
     { name: "Platform Communications", path: "/admin/notifications", icon: Bell },
+    { name: "Audit Trail", path: "/admin/audit-log", icon: Activity },
     { name: "Homepage Engine", path: "/admin/discovery", icon: Layers },
     { name: "Global Settings", path: "/admin/settings", icon: Settings },
   ];
