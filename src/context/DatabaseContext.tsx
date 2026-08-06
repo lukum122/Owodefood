@@ -128,8 +128,8 @@ interface DatabaseContextType {
   updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
   
   // Admin Actions
-  toggleVendorStatus: (vendorId: string, status: Vendor["status"], reason?: string) => void;
-  toggleRiderStatus: (riderId: string, status: Rider["status"], reason?: string) => void;
+  toggleVendorStatus: (vendorId: string, status: Vendor["status"], reason?: string) => Promise<void>;
+  toggleRiderStatus: (riderId: string, status: Rider["status"], reason?: string) => Promise<void>;
   deleteUser: (userId: string) => void;
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => void;
   adminCreateOrder: (order: Order) => void;
@@ -2598,7 +2598,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const persistVendors = (newVendors: Vendor[]) => {
     setVendors(newVendors);
     localStorage.setItem("fd_vendors", JSON.stringify(newVendors));
-    syncSave("VENDORS_BULK", newVendors);
+    return syncSave("VENDORS_BULK", newVendors);
   };
 
   const persistProducts = (newProducts: Product[]) => {
@@ -2616,7 +2616,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   const persistRiders = (newRiders: Rider[]) => {
     setRiders(newRiders);
     localStorage.setItem("fd_riders", JSON.stringify(newRiders));
-    syncSave("RIDERS_BULK", newRiders);
+    return syncSave("RIDERS_BULK", newRiders);
   };
 
   // AUTH ACTIONS
@@ -3923,10 +3923,16 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
   };
 
   // ADMIN ACTIONS
-  const toggleVendorStatus = (vendorId: string, status: Vendor["status"], reason?: string) => {
+  const toggleVendorStatus = async (vendorId: string, status: Vendor["status"], reason?: string) => {
     const previousVendor = vendors.find(v => v.id === vendorId);
     const updatedVendors = vendors.map(v => v.id === vendorId ? { ...v, status } : v);
-    persistVendors(updatedVendors);
+    // Wait for the actual status change to be fully saved and confirmed
+    // before doing anything else. Previously the audit log entry was fired
+    // immediately afterward without waiting — if that second, smaller
+    // request happened to reach the server and trigger a data refresh
+    // before this larger one had actually landed, the refresh would fetch
+    // the still-old status and visibly revert it back on screen.
+    await persistVendors(updatedVendors);
 
     // Audit trail: record exactly what happened, who did it (verified
     // server-side from the admin's real token, not client-asserted), and
@@ -3940,7 +3946,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         : status === "rejected" ? "REJECT_VENDOR"
         : status === "suspended" ? "SUSPEND_VENDOR"
         : "UPDATE_VENDOR_STATUS";
-      syncSave("AUDIT_LOG_CREATE", {
+      await syncSave("AUDIT_LOG_CREATE", {
         action,
         resource: vendorId,
         details: `Vendor "${previousVendor.name}" status changed from ${previousVendor.status} to ${status}.${reason ? ` Reason: ${reason}` : ""}`,
@@ -3976,10 +3982,10 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     }
   };
 
-  const toggleRiderStatus = (riderId: string, status: Rider["status"], reason?: string) => {
+  const toggleRiderStatus = async (riderId: string, status: Rider["status"], reason?: string) => {
     const previousRider = riders.find(r => r.id === riderId);
     const updatedRiders = riders.map(r => r.id === riderId ? { ...r, status } : r);
-    persistRiders(updatedRiders);
+    await persistRiders(updatedRiders);
 
     if (previousRider && previousRider.status !== status) {
       const wasReactivation = status === "approved" && (previousRider.status === "suspended" || previousRider.status === "rejected");
@@ -3989,7 +3995,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         : status === "rejected" ? "REJECT_RIDER"
         : status === "suspended" ? "SUSPEND_RIDER"
         : "UPDATE_RIDER_STATUS";
-      syncSave("AUDIT_LOG_CREATE", {
+      await syncSave("AUDIT_LOG_CREATE", {
         action,
         resource: riderId,
         details: `Rider "${previousRider.name}" status changed from ${previousRider.status} to ${status}.${reason ? ` Reason: ${reason}` : ""}`,
