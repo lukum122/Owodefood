@@ -143,7 +143,7 @@ interface DatabaseContextType {
   extremeLocationTiers: ExtremeLocationTier[];
   updateExtremeLocationTiers: (tiers: ExtremeLocationTier[]) => void;
   extremeLocations: ExtremeLocation[];
-  addExtremeLocation: (name: string, tierId: string) => void;
+  addExtremeLocation: (name: string, tierId: string) => Promise<{ success: boolean; error?: string }>;
   removeExtremeLocation: (id: string) => Promise<{ success: boolean; error?: string }>;
   updateExtremeLocations: (locations: ExtremeLocation[]) => void;
   savedAddresses: UserSavedAddress[];
@@ -2157,12 +2157,24 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
   };
 
-  const addExtremeLocation = (name: string, tierId: string) => {
+  const addExtremeLocation = async (name: string, tierId: string): Promise<{ success: boolean; error?: string }> => {
     const newLoc: ExtremeLocation = { id: "ex-" + generateId(), name, tierId };
+
+    // Individual EXTREME_LOCATION_UPSERT — not EXTREME_LOCATIONS_BULK, which
+    // replaces the entire table with whatever's in local state. If local
+    // state ever had stale/zombie entries (from any prior sync issue),
+    // using bulk here would silently resurrect them into the database
+    // every time a single new location was added.
+    const result = await syncSave("EXTREME_LOCATION_UPSERT", newLoc);
+    if (!result?.success) {
+      console.error("[addExtremeLocation] Failed to add location:", result?.error);
+      return { success: false, error: result?.error || "Failed to add the location. Please check your connection and try again." };
+    }
+
     const updated = [...extremeLocations, newLoc];
     setExtremeLocations(updated);
     localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
-    syncSave("EXTREME_LOCATIONS_BULK", updated);
+    return { success: true };
   };
 
   const removeExtremeLocation = async (id: string): Promise<{ success: boolean; error?: string }> => {
@@ -2411,6 +2423,7 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     if (deliveryAddress) {
       const lowerAddress = deliveryAddress.toLowerCase();
       for (const ex of extremeLocations) {
+        if (!ex || typeof ex.name !== "string") continue; // skip any malformed/corrupted entry
         if (lowerAddress.includes(ex.name.toLowerCase())) {
           const tier = extremeLocationTiers.find(t => t.id === ex.tierId);
           if (tier) {
