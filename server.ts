@@ -466,14 +466,27 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
     
-    // Always load public baseline data
-    const allVendors = await db.select().from(vendors);
-    const allProducts = await db.select().from(products);
-    const allPaymentGateways = await db.select().from(paymentGateways);
-    const allExtremeLocationTiers = await db.select().from(extremeLocationTiers);
-    const allExtremeLocations = await db.select().from(extremeLocations);
-    const allSystemSettings = await db.select().from(systemSettings);
-    const allReviews = await db.select().from(reviews);
+    // Always load public baseline data. These 7 queries have no
+    // interdependency, so they run concurrently instead of one at a time —
+    // this was previously 7 sequential round-trips before even reaching
+    // user-specific data.
+    const [
+      allVendors,
+      allProducts,
+      allPaymentGateways,
+      allExtremeLocationTiers,
+      allExtremeLocations,
+      allSystemSettings,
+      allReviews,
+    ] = await Promise.all([
+      db.select().from(vendors),
+      db.select().from(products),
+      db.select().from(paymentGateways),
+      db.select().from(extremeLocationTiers),
+      db.select().from(extremeLocations),
+      db.select().from(systemSettings),
+      db.select().from(reviews),
+    ]);
 
     let allUsers: any[] = [];
     let allOrders: any[] = [];
@@ -485,39 +498,61 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
     let allAppNotifications: any[] = [];
 
     if (isAdmin) {
-      // Admins get everything
-      allUsers = await db.select().from(users);
-      allOrders = await db.select().from(orders);
-      allOrderItems = await db.select().from(orderItems);
-      allRiders = await db.select().from(riders);
-      allSavedAddresses = await db.select().from(userSavedAddresses);
-      allEmployees = await db.select().from(employees);
-      allWalletTransactions = await db.select().from(walletTransactions);
-      allAppNotifications = await db.select().from(appNotifications);
+      // Admins get everything — these 8 queries are independent of each
+      // other too, so they also run concurrently.
+      [
+        allUsers,
+        allOrders,
+        allOrderItems,
+        allRiders,
+        allSavedAddresses,
+        allEmployees,
+        allWalletTransactions,
+        allAppNotifications,
+      ] = await Promise.all([
+        db.select().from(users),
+        db.select().from(orders),
+        db.select().from(orderItems),
+        db.select().from(riders),
+        db.select().from(userSavedAddresses),
+        db.select().from(employees),
+        db.select().from(walletTransactions),
+        db.select().from(appNotifications),
+      ]);
     } else if (reqUser) {
-      // Regular user / Vendor / Rider - Tenant Isolation
-      allUsers = await db.select().from(users).where(eq(users.id, reqUser.id));
-      
+      // Regular user / Vendor / Rider - Tenant Isolation.
+      // userVendor is derived synchronously from allVendors (already loaded
+      // above), so it's available before firing off this batch — only the
+      // order-items query genuinely has to wait, since it needs the
+      // resolved order IDs first.
       const userVendor = allVendors.find(v => v.userId === reqUser.id);
-      
-      const ordersFilter = userVendor 
+
+      const ordersFilter = userVendor
         ? sql`${orders.customerId} = ${reqUser.id} OR ${orders.vendorId} = ${userVendor.id}`
         : eq(orders.customerId, reqUser.id);
-        
-      allOrders = await db.select().from(orders).where(ordersFilter);
-      
+
+      [
+        allUsers,
+        allOrders,
+        allRiders,
+        allSavedAddresses,
+        allWalletTransactions,
+        allAppNotifications,
+      ] = await Promise.all([
+        db.select().from(users).where(eq(users.id, reqUser.id)),
+        db.select().from(orders).where(ordersFilter),
+        reqUser.roles?.includes("rider")
+          ? db.select().from(riders).where(eq(riders.userId, reqUser.id))
+          : Promise.resolve([]),
+        db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id)),
+        db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id)),
+        db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id)),
+      ]);
+
       if (allOrders.length > 0) {
         const orderIds = allOrders.map(o => o.id);
         allOrderItems = await db.select().from(orderItems).where(sql`${orderItems.orderId} IN (${sql.join(orderIds, sql`, `)})`);
       }
-      
-      if (reqUser.roles?.includes("rider")) {
-        allRiders = await db.select().from(riders).where(eq(riders.userId, reqUser.id));
-      }
-      
-      allSavedAddresses = await db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id));
-      allWalletTransactions = await db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id));
-      allAppNotifications = await db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id));
     }
 
     res.json({
