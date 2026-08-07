@@ -1,53 +1,74 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { DollarSign, ShoppingBag, Store, Bike, Users, Shield, TrendingUp, UsersRound, Award, CheckCircle } from "lucide-react";
-import { hasRole } from "../roleHelper";
+
+interface DashboardStats {
+  totalOrdersCount: number;
+  activeDeliveriesCount: number;
+  totalCustomersCount: number;
+  gmv: number;
+  commission: number;
+  totalVendorApplications: number;
+  pendingApprovalVendors: number;
+  approvedVendorsCount: number;
+  suspendedVendorsCount: number;
+  totalRiderApplications: number;
+  pendingApprovalRiders: number;
+  approvedRidersCount: number;
+  suspendedRidersCount: number;
+}
 
 export const AdminDashboard: React.FC = () => {
-  const { 
-    orders, 
-    vendors, 
-    riders, 
-    users, 
-    currency,
-    platformCommissionRate,
-    riderCommissionType,
-    riderCommissionValue
-  } = useDatabase();
+  const { currency } = useDatabase();
 
-  const totalDeliveredOrders = orders.filter(o => o.status === "delivered");
-  
-  // Calculate Gross Merchandise Value (GMV)
-  const gmv = totalDeliveredOrders.reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
-  
-  // Calculate system commission dynamically: corporate platform fee + rider courier commissions
-  const vendorCommission = gmv * (platformCommissionRate / 100);
-  const totalRiderCommissions = totalDeliveredOrders.reduce((sum, o) => {
-    const deliveryFee = o.deliveryFee ?? 750;
-    const netFee = riderCommissionType === "flat" 
-      ? Math.max(0, deliveryFee - riderCommissionValue) 
-      : Math.max(0, deliveryFee - (deliveryFee * riderCommissionValue) / 100);
-    return sum + (deliveryFee - netFee);
-  }, 0);
+  // Fetches pre-computed aggregates from a dedicated endpoint instead of
+  // requiring the full orders/vendors/riders/users dataset to be loaded
+  // client-side just to show 8 numbers.
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
-  const commission = vendorCommission + totalRiderCommissions;
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setStatsLoading(true);
+        setStatsError(null);
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch("/api/admin/dashboard-stats", { headers });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatsError(data.error || "Failed to load dashboard stats.");
+          return;
+        }
+        setStats(data);
+      } catch (err) {
+        console.error("[AdminDashboard] Failed to fetch stats:", err);
+        setStatsError("Failed to load dashboard stats. Please check your connection.");
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    fetchStats();
+  }, []);
 
-  const totalOrdersCount = orders.length;
-  const totalCustomersCount = users.filter(u => hasRole(u, "customer")).length;
-
-  const pendingApprovalVendors = vendors.filter(v => v.status === "pending").length;
-  const pendingApprovalRiders = riders.filter(r => r.status === "pending").length;
-  const totalVendorApplications = vendors.length;
-  const approvedVendorsCount = vendors.filter(v => v.status === "approved").length;
-  const suspendedVendorsCount = vendors.filter(v => v.status === "suspended").length;
-  const totalRiderApplications = riders.length;
-  const approvedRidersCount = riders.filter(r => r.status === "approved").length;
-  const suspendedRidersCount = riders.filter(r => r.status === "suspended").length;
-
-  // Realtime Active operations count
-  const activeDeliveriesCount = orders.filter(
-    o => ["accepted", "preparing", "ready", "out_for_delivery"].includes(o.status)
-  ).length;
+  const totalOrdersCount = stats?.totalOrdersCount ?? 0;
+  const activeDeliveriesCount = stats?.activeDeliveriesCount ?? 0;
+  const totalCustomersCount = stats?.totalCustomersCount ?? 0;
+  const gmv = stats?.gmv ?? 0;
+  const commission = stats?.commission ?? 0;
+  const totalVendorApplications = stats?.totalVendorApplications ?? 0;
+  const pendingApprovalVendors = stats?.pendingApprovalVendors ?? 0;
+  const approvedVendorsCount = stats?.approvedVendorsCount ?? 0;
+  const suspendedVendorsCount = stats?.suspendedVendorsCount ?? 0;
+  const totalRiderApplications = stats?.totalRiderApplications ?? 0;
+  const pendingApprovalRiders = stats?.pendingApprovalRiders ?? 0;
+  const approvedRidersCount = stats?.approvedRidersCount ?? 0;
+  const suspendedRidersCount = stats?.suspendedRidersCount ?? 0;
 
   // Custom responsive SVG layout data points (past 7 days sales)
   const dailyCommisionsData = [45, 78, 62, 95, 110, 140, 155];
@@ -57,7 +78,19 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 font-sans text-gray-900 selection:bg-purple-600/10">
-      
+
+      {statsError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-rose-700 flex items-center justify-between gap-3">
+          <span>{statsError}</span>
+          <button onClick={() => window.location.reload()} className="underline shrink-0">Retry</button>
+        </div>
+      )}
+      {statsLoading && !stats && (
+        <div className="p-4 bg-gray-50 border border-gray-150 rounded-2xl text-xs font-bold text-gray-400">
+          Loading dashboard stats...
+        </div>
+      )}
+
       {/* Admin banner */}
       <div className="p-6 bg-slate-900 text-white rounded-3xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
