@@ -393,9 +393,9 @@ export const CustomerLayout: React.FC = () => {
     </div>
   );
 
-  const userNotifications = notifications.filter(
-    n => n.userId === (currentUser?.id || "cust-1") || n.userId === "all"
-  );
+  const userNotifications = currentUser
+    ? notifications.filter(n => n.userId === currentUser.id || n.userId === "all")
+    : notifications.filter(n => n.userId === "all");
   const unreadCount = userNotifications.filter(n => !n.read).length;
 
   return (
@@ -581,7 +581,7 @@ export const CustomerLayout: React.FC = () => {
                       <div className="flex gap-2 text-[10px]">
                         {unreadCount > 0 && (
                           <button 
-                            onClick={() => markAllNotificationsAsRead(currentUser?.id || "cust-1")}
+                            onClick={() => currentUser?.id && markAllNotificationsAsRead(currentUser.id)}
                             className="text-purple-600 hover:text-purple-800 font-bold transition cursor-pointer bg-transparent border-none p-0"
                           >
                             Read All
@@ -589,7 +589,7 @@ export const CustomerLayout: React.FC = () => {
                         )}
                         {userNotifications.length > 0 && (
                           <button 
-                            onClick={() => clearAllNotifications(currentUser?.id || "cust-1")}
+                            onClick={() => currentUser?.id && clearAllNotifications(currentUser.id)}
                             className="text-gray-400 hover:text-gray-650 transition cursor-pointer font-medium bg-transparent border-none p-0"
                           >
                             Clear
@@ -1087,7 +1087,7 @@ export const CustomerLayout: React.FC = () => {
                             setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Authorizing immediate Paystack gateway confirmation..." } : null);
                             setTimeout(() => {
                               const amt = fundingProcess.amount;
-                              requestWalletFunding(currentUser?.id || "cust-1", amt, "paystack", fundingProcess.txRef);
+                              if (currentUser?.id) requestWalletFunding(currentUser.id, amt, "paystack", fundingProcess.txRef);
                               setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                             }, 1400);
                           }}
@@ -1135,7 +1135,7 @@ export const CustomerLayout: React.FC = () => {
                             setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Validating Monnify merchant node settlement feed..." } : null);
                             setTimeout(() => {
                               const amt = fundingProcess.amount;
-                              requestWalletFunding(currentUser?.id || "cust-1", amt, "monnify", fundingProcess.txRef);
+                              if (currentUser?.id) requestWalletFunding(currentUser.id, amt, "monnify", fundingProcess.txRef);
                               setFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
                             }, 1400);
                           }}
@@ -1214,7 +1214,7 @@ export const CustomerLayout: React.FC = () => {
                             setFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Submitting bank transfer ledger for approval..." } : null);
                             setTimeout(() => {
                               const amt = fundingProcess.amount;
-                              requestWalletFunding(currentUser?.id || "cust-1", amt, "bank_transfer", fundingProcess.txRef);
+                              if (currentUser?.id) requestWalletFunding(currentUser.id, amt, "bank_transfer", fundingProcess.txRef);
                               setFundingProcess(prev => prev ? { ...prev, stage: "transfer_pending" } : null);
                             }, 1500);
                           }}
