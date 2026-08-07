@@ -510,7 +510,16 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         allWalletTransactions,
         allAppNotifications,
       ] = await Promise.all([
-        db.select().from(users),
+        db.select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          phone: users.phone,
+          role: users.role,
+          gender: users.gender,
+          createdAt: users.createdAt,
+          roles: users.roles,
+        }).from(users),
         db.select().from(orders),
         db.select().from(orderItems),
         db.select().from(riders),
