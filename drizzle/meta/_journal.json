@@ -43,6 +43,13 @@
       "when": 1786000000000,
       "tag": "0005_enable_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786089430709,
+      "tag": "0006_happy_skrulls",
+      "breakpoints": true
     }
   ]
 }
