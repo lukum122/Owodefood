@@ -144,7 +144,7 @@ interface DatabaseContextType {
   updateExtremeLocationTiers: (tiers: ExtremeLocationTier[]) => void;
   extremeLocations: ExtremeLocation[];
   addExtremeLocation: (name: string, tierId: string) => void;
-  removeExtremeLocation: (id: string) => void;
+  removeExtremeLocation: (id: string) => Promise<{ success: boolean; error?: string }>;
   updateExtremeLocations: (locations: ExtremeLocation[]) => void;
   savedAddresses: UserSavedAddress[];
   addSavedAddress: (streetAddress: string, district: string, landmarkNote: string) => void;
@@ -2165,11 +2165,16 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     syncSave("EXTREME_LOCATIONS_BULK", updated);
   };
 
-  const removeExtremeLocation = (id: string) => {
+  const removeExtremeLocation = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await syncSave("EXTREME_LOCATION_DELETE", { id });
+    if (!result?.success) {
+      console.error("[removeExtremeLocation] Failed to delete location:", result?.error);
+      return { success: false, error: result?.error || "Failed to delete the location. Please check your connection and try again." };
+    }
     const updated = extremeLocations.filter(item => item.id !== id);
     setExtremeLocations(updated);
     localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
-    syncSave("EXTREME_LOCATIONS_DELETE", { id });
+    return { success: true };
   };
 
   const updateExtremeLocations = (locations: ExtremeLocation[]) => {
