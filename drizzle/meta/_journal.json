@@ -50,6 +50,13 @@
       "when": 1786090182032,
       "tag": "0006_smooth_psylocke",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786112660178,
+      "tag": "0007_cute_queen_noir",
+      "breakpoints": true
     }
   ]
 }
