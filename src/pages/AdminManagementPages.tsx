@@ -3086,7 +3086,7 @@ export const AdminSettings: React.FC = () => {
     }, 3000);
   };
 
-  const handleAddLocation = (e: React.FormEvent) => {
+  const handleAddLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newLocInput.trim();
     if (trimmed) {
@@ -3095,12 +3095,16 @@ export const AdminSettings: React.FC = () => {
         return; // skip duplicate
       }
       updateAvailableLocations([...availableLocations, trimmed]);
-      
+
       // If a tier is specified, also add it to extremeLocations
       if (newLocTierId) {
-        addExtremeLocation(trimmed, newLocTierId);
+        const result = await addExtremeLocation(trimmed, newLocTierId);
+        if (!result?.success) {
+          window.alert(result?.error || "Failed to register the surcharge mapping for this location. Please try again.");
+          return;
+        }
       }
-      
+
       setNewLocInput("");
       setNewLocTierId("");
       setSuccessWord("Fulfillment location registered successfully!");

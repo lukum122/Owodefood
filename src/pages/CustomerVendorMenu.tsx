@@ -726,31 +726,41 @@ export const CustomerVendorMenu: React.FC = () => {
                   setPickupSuccessMsg(null);
 
                   const performPickupSubmit = async () => {
-                    const chosenReceipt = receiptImage || presetReceipt;
-                    const res = await placeOrder(
-                      combinedDeliveryAddress,
-                      paymentMethod,
-                      pickupPhone,
-                      paymentMethod === "bank_transfer" ? paymentProofImage : undefined,
-                      {
-                        orderType: "receipt_pickup",
-                        vendorId: vendorObj?.id,
-                        receiptImageOrQr: chosenReceipt,
-                        receiptNote: pickupNote
-                      }
-                    );
+                    try {
+                      const chosenReceipt = receiptImage || presetReceipt;
+                      const res = await placeOrder(
+                        combinedDeliveryAddress,
+                        paymentMethod,
+                        pickupPhone,
+                        paymentMethod === "bank_transfer" ? paymentProofImage : undefined,
+                        {
+                          orderType: "receipt_pickup",
+                          vendorId: vendorObj?.id,
+                          receiptImageOrQr: chosenReceipt,
+                          receiptNote: pickupNote
+                        }
+                      );
 
-                    setIsSubmittingPickup(false);
-                    if (res.success) {
-                      setPickupSuccessMsg("Rider pickup delivery booked successfully! Track its status on the right.");
-                      // Reset fields
-                      setPickupAddress("");
-                      setPickupNote("");
-                      setReceiptImage("");
-                      setPresetReceipt("");
-                      setPaymentProofImage("");
-                    } else {
-                      setPickupErrorMsg(res.error || "Failed to create receipt pickup request. Please try again.");
+                      if (res.success) {
+                        setPickupSuccessMsg("Rider pickup delivery booked successfully! Track its status on the right.");
+                        // Reset fields
+                        setPickupAddress("");
+                        setPickupNote("");
+                        setReceiptImage("");
+                        setPresetReceipt("");
+                        setPaymentProofImage("");
+                      } else {
+                        setPickupErrorMsg(res.error || "Failed to create receipt pickup request. Please try again.");
+                      }
+                    } catch (err) {
+                      // Defensive safety net: if anything throws unexpectedly
+                      // (a bug, a malformed data entry, a network failure),
+                      // the button must never get stuck in "submitting"
+                      // forever with no explanation shown to the customer.
+                      console.error("[performPickupSubmit] Unexpected error:", err);
+                      setPickupErrorMsg("Something went wrong while submitting your request. Please try again.");
+                    } finally {
+                      setIsSubmittingPickup(false);
                     }
                   };
                   
