@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
 import { hasRole } from "../roleHelper";
@@ -18,7 +18,13 @@ export const AdminOrders: React.FC = () => {
     currentUser
   } = useDatabase();
 
-  const [orderTypeTab, setOrderTypeTab] = useState<"standard" | "receipt_pickup" | "verification">("standard");
+  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification">("standard");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const ORDERS_PAGE_SIZE = 25;
+  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification") => {
+    setOrderTypeTabRaw(tab);
+    setOrdersPage(1); // reset to page 1 whenever the tab changes
+  };
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -107,6 +113,14 @@ export const AdminOrders: React.FC = () => {
   };
 
   const activeRiders = (riders || []).filter(r => r.status === "approved");
+
+  // Client-side pagination for the Standard Food Orders tab -- keeps the
+  // full orders list in context (so approve/reject/payout actions keep
+  // working normally), just renders 25 rows at a time instead of
+  // potentially hundreds at once.
+  const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification");
+  const standardTotalPages = Math.max(1, Math.ceil(standardOrders.length / ORDERS_PAGE_SIZE));
+  const standardPageOrders = standardOrders.slice((ordersPage - 1) * ORDERS_PAGE_SIZE, ordersPage * ORDERS_PAGE_SIZE);
 
   return (
     <div className="space-y-6 font-sans text-xs">
@@ -683,7 +697,7 @@ export const AdminOrders: React.FC = () => {
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
         {orderTypeTab === "standard" ? (
-          orders.filter(o => o.orderType !== "receipt_pickup").length > 0 ? (
+          standardOrders.length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
                 <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
@@ -703,7 +717,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
-                    {orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification").map((o) => (
+                    {standardPageOrders.map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
@@ -747,6 +761,29 @@ export const AdminOrders: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              {standardTotalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-400">
+                    Page {ordersPage} of {standardTotalPages} ({standardOrders.length} total orders)
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={ordersPage <= 1}
+                      onClick={() => setOrdersPage(p => Math.max(1, p - 1))}
+                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      disabled={ordersPage >= standardTotalPages}
+                      onClick={() => setOrdersPage(p => Math.min(standardTotalPages, p + 1))}
+                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-12 text-gray-400 font-semibold text-xs">
@@ -2012,6 +2049,13 @@ export const AdminCustomers: React.FC = () => {
   // Filtering & search states
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  const [usersPage, setUsersPage] = useState(1);
+
+  // Reset to page 1 whenever the search or role filter changes, so the
+  // person doesn't end up looking at an out-of-range page silently.
+  useEffect(() => {
+    setUsersPage(1);
+  }, [searchQuery, roleFilter]);
   
   // Creation modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -2192,6 +2236,13 @@ export const AdminCustomers: React.FC = () => {
       u.phone.includes(searchLower);
     return matchesRole && matchesSearch;
   });
+
+  // Client-side pagination -- keeps the full users list in context (so
+  // edit/delete/role-change actions keep working normally), just renders
+  // 25 rows at a time instead of potentially hundreds at once.
+  const USERS_PAGE_SIZE = 25;
+  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PAGE_SIZE));
+  const pageUsers = filteredUsers.slice((usersPage - 1) * USERS_PAGE_SIZE, usersPage * USERS_PAGE_SIZE);
 
   const getRoleBadgeStyle = (role: UserRole) => {
     switch (role) {
@@ -2771,7 +2822,7 @@ export const AdminCustomers: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 text-xs">
-                  {filteredUsers.map((c) => (
+                  {pageUsers.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50/50 transition">
                       <td className="py-3.5 px-4 font-extrabold text-[#070329]">
                          <div className="flex items-center gap-2.5">
@@ -2797,13 +2848,13 @@ export const AdminCustomers: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono">
                         <div className="inline-flex items-center justify-center gap-1.5 bg-purple-50 px-2 py-1 rounded-xl border border-purple-100">
-                          <span className="font-mono font-black text-[#070329] tracking-widest text-[10px]">
-                            {c.pin || "1234"}
+                          <span className="font-mono font-black text-[#070329] tracking-widest text-[10px]" title="PINs aren't shown in bulk listings for security — use Edit Account to reset a user's PIN.">
+                            ••••
                           </span>
                           <button
                             onClick={() => handleStartEditUser(c)}
                             className="p-0.5 text-[9px] hover:scale-110 active:scale-95 transition cursor-pointer"
-                            title="Edit User details & PIN"
+                            title="Edit User details & reset PIN"
                           >
                             ✏️
                           </button>
@@ -2831,6 +2882,29 @@ export const AdminCustomers: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            {usersTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
+                <span className="text-[10px] font-bold text-gray-400">
+                  Page {usersPage} of {usersTotalPages} ({filteredUsers.length} matching users)
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    disabled={usersPage <= 1}
+                    onClick={() => setUsersPage(p => Math.max(1, p - 1))}
+                    className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={usersPage >= usersTotalPages}
+                    onClick={() => setUsersPage(p => Math.min(usersTotalPages, p + 1))}
+                    className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-12 text-gray-400">
