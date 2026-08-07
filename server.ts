@@ -1583,6 +1583,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             id: el.id,
             name: el.name,
             tierId: el.tierId,
+          }).onConflictDoUpdate({
+            target: extremeLocations.id,
+            set: {
+              name: el.name,
+              tierId: el.tierId,
+            },
           });
         }
         break;
