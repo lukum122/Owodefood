@@ -25,7 +25,7 @@ import {
   auditLogs,
   payoutLogs,
 } from "./src/db/schema.ts";
-import { eq, sql, inArray } from "drizzle-orm";
+import { eq, sql, inArray, count, sum, and, or } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
 import http from "http";
@@ -449,6 +449,106 @@ app.post("/api/auth/register", async (req, res) => {
 // actually changed since it last loaded, so it doesn't need to re-download
 // the entire dataset on every 15-second poll. This is a tiny response
 // (a single timestamp string) versus the full /api/sync/load payload.
+// Lightweight admin dashboard stats: computes aggregates directly in the
+// database (COUNT/SUM) instead of requiring the client to download every
+// order, user, vendor, and rider just to display a handful of numbers.
+// Admin-only, since these are platform-wide figures.
+app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const isAdmin = reqUser?.role === "admin" || reqUser?.roles?.includes("admin");
+    if (!reqUser) {
+      return res.status(401).json({ error: "Unauthorized: Please log in." });
+    }
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const [
+      totalOrdersResult,
+      activeDeliveriesResult,
+      deliveredOrdersFees,
+      totalCustomersResult,
+      vendorStatusCounts,
+      riderStatusCounts,
+      commissionSettings,
+    ] = await Promise.all([
+      db.select({ value: count() }).from(orders),
+      db.select({ value: count() }).from(orders).where(
+        inArray(orders.status, ["accepted", "preparing", "ready", "out_for_delivery"])
+      ),
+      // Only the two columns actually needed for the GMV + rider-commission
+      // calculation, only for delivered orders — not the full 27-column
+      // table for every order regardless of status.
+      db.select({ totalAmount: orders.totalAmount, deliveryFee: orders.deliveryFee })
+        .from(orders)
+        .where(eq(orders.status, "delivered")),
+      db.select({ value: count() }).from(users).where(
+        or(eq(users.role, "customer"), sql`${users.roles} @> '["customer"]'::jsonb`)
+      ),
+      db.select({ status: vendors.status, value: count() }).from(vendors).groupBy(vendors.status),
+      db.select({ status: riders.status, value: count() }).from(riders).groupBy(riders.status),
+      db.select().from(systemSettings).where(
+        inArray(systemSettings.key, ["platformCommissionRate", "riderCommissionType", "riderCommissionValue"])
+      ),
+    ]);
+
+    const settingsMap: Record<string, string> = {};
+    for (const s of commissionSettings) settingsMap[s.key] = s.value;
+    const platformCommissionRate = Number(settingsMap.platformCommissionRate || 15);
+    const riderCommissionType = settingsMap.riderCommissionType || "percentage";
+    const riderCommissionValue = Number(settingsMap.riderCommissionValue ?? 20);
+
+    const gmv = deliveredOrdersFees.reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
+    const vendorCommission = gmv * (platformCommissionRate / 100);
+    const totalRiderCommissions = deliveredOrdersFees.reduce((sum, o) => {
+      const deliveryFee = o.deliveryFee ?? 750;
+      const netFee = riderCommissionType === "flat"
+        ? Math.max(0, deliveryFee - riderCommissionValue)
+        : Math.max(0, deliveryFee - (deliveryFee * riderCommissionValue) / 100);
+      return sum + (deliveryFee - netFee);
+    }, 0);
+    const commission = vendorCommission + totalRiderCommissions;
+
+    const vendorCounts = { pending: 0, approved: 0, suspended: 0, total: 0 };
+    for (const row of vendorStatusCounts) {
+      const c = Number(row.value);
+      vendorCounts.total += c;
+      if (row.status === "pending") vendorCounts.pending = c;
+      if (row.status === "approved") vendorCounts.approved = c;
+      if (row.status === "suspended") vendorCounts.suspended = c;
+    }
+
+    const riderCounts = { pending: 0, approved: 0, suspended: 0, total: 0 };
+    for (const row of riderStatusCounts) {
+      const c = Number(row.value);
+      riderCounts.total += c;
+      if (row.status === "pending") riderCounts.pending = c;
+      if (row.status === "approved") riderCounts.approved = c;
+      if (row.status === "suspended") riderCounts.suspended = c;
+    }
+
+    res.json({
+      totalOrdersCount: Number(totalOrdersResult[0]?.value || 0),
+      activeDeliveriesCount: Number(activeDeliveriesResult[0]?.value || 0),
+      totalCustomersCount: Number(totalCustomersResult[0]?.value || 0),
+      gmv,
+      commission,
+      totalVendorApplications: vendorCounts.total,
+      pendingApprovalVendors: vendorCounts.pending,
+      approvedVendorsCount: vendorCounts.approved,
+      suspendedVendorsCount: vendorCounts.suspended,
+      totalRiderApplications: riderCounts.total,
+      pendingApprovalRiders: riderCounts.pending,
+      approvedRidersCount: riderCounts.approved,
+      suspendedRidersCount: riderCounts.suspended,
+    });
+  } catch (error: any) {
+    console.error("Dashboard stats failed:", error);
+    res.status(500).json({ error: "Failed to load dashboard stats." });
+  }
+});
+
 app.get("/api/sync/version", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const versionRow = await db.select().from(systemSettings).where(eq(systemSettings.key, "dataVersion")).limit(1);
