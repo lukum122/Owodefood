@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
+import { compressImageToDataUrl } from "../imageUtils";
 import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, ShieldCheck, X, Truck, AlertTriangle, Heart } from "lucide-react";
 
 export const CustomerVendorMenu: React.FC = () => {
@@ -922,15 +923,17 @@ export const CustomerVendorMenu: React.FC = () => {
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const r = new FileReader();
-                            r.onloadend = () => {
-                              setReceiptImage(r.result as string);
+                            try {
+                              const compressed = await compressImageToDataUrl(file);
+                              setReceiptImage(compressed);
                               setPresetReceipt("");
-                            };
-                            r.readAsDataURL(file);
+                            } catch (err) {
+                              console.error("[receipt upload] Failed to process image:", err);
+                              window.alert("Failed to process that image. Please try a different photo.");
+                            }
                           }
                         }}
                         className="hidden"
@@ -1041,14 +1044,16 @@ export const CustomerVendorMenu: React.FC = () => {
                             <input
                               type="file"
                               accept="image/*"
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  const r = new FileReader();
-                                  r.onloadend = () => {
-                                    setPaymentProofImage(r.result as string);
-                                  };
-                                  r.readAsDataURL(file);
+                                  try {
+                                    const compressed = await compressImageToDataUrl(file);
+                                    setPaymentProofImage(compressed);
+                                  } catch (err) {
+                                    console.error("[payment proof upload] Failed to process image:", err);
+                                    window.alert("Failed to process that image. Please try a different photo.");
+                                  }
                                 }
                               }}
                               className="hidden"

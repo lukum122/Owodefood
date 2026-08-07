@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
 import { CartItem } from "../context/DatabaseContext";
+import { compressImageToDataUrl } from "../imageUtils";
 import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle, Wallet, Shield, Lock, KeyRound, Copy, AlertCircle, User, Mail } from "lucide-react";
 
 export const CustomerCart: React.FC = () => {
@@ -390,14 +391,16 @@ export const CustomerCheckout: React.FC = () => {
   const serviceFee = calculateServiceFee(cartVendor?.id, total);
   const grandTotal = total + tax + deliveryFee + serviceFee;
 
-  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptBase64(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageToDataUrl(file);
+        setReceiptBase64(compressed);
+      } catch (err) {
+        console.error("[receipt upload] Failed to process image:", err);
+        window.alert("Failed to process that image. Please try a different photo.");
+      }
     }
   };
 
