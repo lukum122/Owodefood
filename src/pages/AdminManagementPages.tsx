@@ -3110,15 +3110,19 @@ export const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleRemoveLocation = (locToRemove: string) => {
+  const handleRemoveLocation = async (locToRemove: string) => {
     updateAvailableLocations(availableLocations.filter(loc => loc !== locToRemove));
-    
+
     // Also remove its extreme/surcharge mapping if any
     const matchedEx = extremeLocations.find(el => el.name === locToRemove);
     if (matchedEx) {
-      removeExtremeLocation(matchedEx.id);
+      const result = await removeExtremeLocation(matchedEx.id);
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to remove the surcharge mapping for this location. Please try again.");
+        return;
+      }
     }
-    
+
     setSuccessWord("Fulfillment location removed successfully.");
     setTimeout(() => {
       setSuccessWord("");
