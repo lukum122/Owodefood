@@ -173,13 +173,6 @@ interface DatabaseContextType {
   requestWalletFunding: (userId: string, amount: number, gateway: "bank_transfer" | "monnify" | "paystack", reference?: string) => Promise<string>;
   approveWalletFunding: (transactionId: string) => void;
   declineWalletFunding: (transactionId: string) => void;
-
-  // Receipt Pickup & Delivery System (Strictly for pre-purchased items from listed vendors)
-  receiptPickupOrders: ReceiptPickupOrder[];
-  createReceiptPickupOrder: (order: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => { success: boolean; error?: string; orderId?: string };
-  acceptReceiptPickupDelivery: (orderId: string, riderId: string) => void;
-  updateReceiptPickupStatus: (orderId: string, status: ReceiptPickupOrder["status"]) => void;
-  cancelReceiptPickupOrder: (orderId: string) => void;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
@@ -796,22 +789,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     syncSave("SYSTEM_SETTING_UPSERT", { key: "receiptPickupConfig", value: JSON.stringify(config) });
   };
 
-  const [receiptPickupOrders, setReceiptPickupOrders] = useState<ReceiptPickupOrder[]>(() => {
-    try {
-      const saved = localStorage.getItem("fd_receipt_pickup_orders");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(receiptPickupOrders));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [receiptPickupOrders]);
   const [riders, setRiders] = useState<Rider[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -1326,13 +1303,6 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
           if (data.savedAddresses) {
             setSavedAddresses(data.savedAddresses);
             localStorage.setItem("fd_saved_addresses", JSON.stringify(data.savedAddresses));
-          }
-
-          if (data.receiptPickupOrders) {
-            let mergedReceipts = [...data.receiptPickupOrders];
-            mergedReceipts.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-            setReceiptPickupOrders(mergedReceipts);
-            localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(mergedReceipts));
           }
 
           if (data.extremeLocationTiers) {
@@ -4330,151 +4300,6 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
     return { success: true };
   };
 
-  // --- RECEIPT PICKUP & DELIVERY FUNCTIONS ---
-  const createReceiptPickupOrder = (orderData: Omit<ReceiptPickupOrder, "id" | "riderId" | "riderName" | "status" | "paymentStatus" | "createdAt">) => {
-    if (!currentUser) return { success: false, error: "Not logged in" };
-    
-    // Auto-approve if standard method, else pending
-    const status = orderData.paymentMethod === "cash" || orderData.paymentMethod === "wallet" 
-      ? "pending" 
-      : "pending";
-
-    // Deduct from wallet if wallet
-    if (orderData.paymentMethod === "wallet") {
-      const bal = getUserWalletBalance(currentUser.id);
-      const totalAmount = orderData.deliveryFee + receiptPickupConfig.flatServiceFee;
-      if (bal < totalAmount) {
-        return { success: false, error: "Insufficient wallet balance" };
-      }
-      updateUserWalletBalance(
-        currentUser.id,
-        -totalAmount,
-        "purchase",
-        `Payment for receipt pickup from ${orderData.vendorName}`
-      );
-    }
-
-    const newOrder: ReceiptPickupOrder = {
-      ...orderData,
-      id: "owf-rp-" + Math.random().toString(36).substr(2, 6).toUpperCase(),
-      status: "awaiting_admin_verification",
-      paymentStatus: orderData.paymentMethod === "wallet" ? "paid" : "unpaid",
-      createdAt: new Date().toISOString()
-    };
-
-    const nextOrders = [newOrder, ...receiptPickupOrders];
-    setReceiptPickupOrders(nextOrders);
-    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(nextOrders));
-    syncSave("RECEIPT_PICKUP_UPSERT", newOrder);
-
-    addNotification(
-      "admin",
-      "New Receipt Pickup & Delivery Request",
-      `${orderData.customerName} requested pickup from ${orderData.vendorName} for delivery to ${orderData.deliveryAddress}.`,
-      "delivery",
-      newOrder.id
-    );
-
-    addNotification(
-      orderData.vendorId,
-      "Receipt Pickup Scheduled",
-      `A customer (${orderData.customerName}) has scheduled a receipt/QR-code pickup at your store. Ref: #${newOrder.id}`,
-      "delivery",
-      newOrder.id
-    );
-
-    return { success: true, orderId: newOrder.id };
-  };
-
-  const acceptReceiptPickupDelivery = (orderId: string, riderId: string) => {
-    const rider = riders.find(r => r.id === riderId);
-    if (!rider) return;
-
-    const updated = receiptPickupOrders.map(o => {
-      if (o.id === orderId) {
-        addNotification(
-          o.customerId,
-          "Rider Assigned to Receipt Pickup",
-          `Rider ${rider.name} is on the way to pick up your pre-purchased items from ${o.vendorName}.`,
-          "delivery",
-          orderId
-        );
-        addNotification(
-          o.vendorId,
-          "Rider Dispatched for Pickup",
-          `Rider ${rider.name} has accepted the pickup for #${orderId} and is on their way to your store.`,
-          "delivery",
-          orderId
-        );
-        return {
-          ...o,
-          riderId: rider.id,
-          riderName: rider.name,
-          status: "accepted" as const
-        };
-      }
-      return o;
-    });
-    setReceiptPickupOrders(updated);
-    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(updated));
-    
-    const updatedOrder = updated.find(o => o.id === orderId);
-    if (updatedOrder) {
-      syncSave("RECEIPT_PICKUP_UPSERT", updatedOrder);
-    }
-  };
-
-  const updateReceiptPickupStatus = (orderId: string, status: ReceiptPickupOrder["status"]) => {
-    const updated = receiptPickupOrders.map(o => {
-      if (o.id === orderId) {
-        let title = "";
-        let msg = "";
-        if (status === "picked_up") {
-          title = "Receipt Order Picked Up";
-          msg = `Rider has verified the receipt at ${o.vendorName} and picked up your items!`;
-        } else if (status === "delivered") {
-          title = "Receipt Order Delivered";
-          msg = `Your pre-purchased items from ${o.vendorName} have been delivered successfully!`;
-        } else if (status === "cancelled") {
-          title = "Receipt Order Cancelled";
-          msg = `Your receipt pickup and delivery order #${orderId} was cancelled.`;
-          
-          if (o.paymentMethod === "wallet" && o.paymentStatus === "paid") {
-            updateUserWalletBalance(
-              o.customerId,
-              o.deliveryFee,
-              "refund",
-              `Refund of delivery fee for cancelled receipt order #${orderId}`
-            );
-          }
-        }
-
-        if (title && msg) {
-          addNotification(o.customerId, title, msg, "delivery", orderId);
-          addNotification(o.vendorId, title, msg, "delivery", orderId);
-        }
-
-        return {
-          ...o,
-          status,
-          paymentStatus: status === "delivered" ? "paid" as const : o.paymentStatus
-        };
-      }
-      return o;
-    });
-    setReceiptPickupOrders(updated);
-    localStorage.setItem("fd_receipt_pickup_orders", JSON.stringify(updated));
-    
-    const updatedOrder = updated.find(o => o.id === orderId);
-    if (updatedOrder) {
-      syncSave("RECEIPT_PICKUP_UPSERT", updatedOrder);
-    }
-  };
-
-  const cancelReceiptPickupOrder = (orderId: string) => {
-    updateReceiptPickupStatus(orderId, "cancelled");
-  };
-
   const socketRef = useRef<Socket | null>(null);
 
   const publicVapidKey = "BPEg3-o75k9oT_P58tN3X8w3D0aC7CgT8Qd2lE_244FqL9c-859ZpA34A_R-V9t-V7h48x3Yp8M06xR61O4hXwI";
@@ -4718,11 +4543,6 @@ Certain destinations located on the absolute outer outskirts of Ilorin require p
         // Receipt Pickup & Delivery System
         receiptPickupConfig,
         updateReceiptPickupConfig,
-        receiptPickupOrders,
-        createReceiptPickupOrder,
-        acceptReceiptPickupDelivery,
-        updateReceiptPickupStatus,
-        cancelReceiptPickupOrder,
       }}
     >
       {children}
