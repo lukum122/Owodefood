@@ -12,6 +12,7 @@ import { RiderLayout } from "./components/RiderLayout";
 import { AdminLayout } from "./components/AdminLayout";
 import { PortalSimulator } from "./components/PortalSimulator";
 import { PwaUpdater } from "./components/PwaUpdater";
+import { LoadErrorBanner } from "./components/LoadErrorBanner";
 
 // Customer Pages
 import { CustomerHome } from "./pages/CustomerHome";
@@ -59,6 +60,7 @@ export default function App() {
           <ScrollToTop />
           <PortalSimulator />
           <PwaUpdater />
+          <LoadErrorBanner />
 
         <Routes>
           
