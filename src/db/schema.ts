@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, doublePrecision, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, doublePrecision, jsonb, index } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Firebase Auth UID
@@ -38,7 +38,9 @@ export const vendors = pgTable("vendors", {
   commissionType: text("commission_type"), // flat | percentage
   commissionValue: integer("commission_value"),
   freeDelivery: boolean("free_delivery").default(false),
-});
+}, (table) => ({
+  userIdIdx: index("vendors_user_id_idx").on(table.userId),
+}));
 
 export const products = pgTable("products", {
   id: text("id").primaryKey(),
@@ -53,7 +55,9 @@ export const products = pgTable("products", {
   addons: jsonb("addons"), // stores array of Addon objects
   maxAddons: integer("max_addons"),
   addonGroups: jsonb("addon_groups"), // stores array of AddonGroup objects
-});
+}, (table) => ({
+  vendorIdIdx: index("products_vendor_id_idx").on(table.vendorId),
+}));
 
 export const orders = pgTable("orders", {
   id: text("id").primaryKey(),
@@ -83,7 +87,10 @@ export const orders = pgTable("orders", {
   orderType: text("order_type").default("standard"),
   receiptImageOrQr: text("receipt_image_or_qr"),
   receiptNote: text("receipt_note"),
-});
+}, (table) => ({
+  customerIdIdx: index("orders_customer_id_idx").on(table.customerId),
+  vendorIdIdx: index("orders_vendor_id_idx").on(table.vendorId),
+}));
 
 export const orderItems = pgTable("order_items", {
   id: text("id").primaryKey(),
@@ -92,7 +99,9 @@ export const orderItems = pgTable("order_items", {
   name: text("name").notNull(),
   price: integer("price").notNull(),
   quantity: integer("quantity").notNull(),
-});
+}, (table) => ({
+  orderIdIdx: index("order_items_order_id_idx").on(table.orderId),
+}));
 
 export const riders = pgTable("riders", {
   id: text("id").primaryKey(),
@@ -103,7 +112,9 @@ export const riders = pgTable("riders", {
   status: text("status").notNull(), // pending | approved | suspended
   isAvailable: boolean("is_available").notNull().default(true),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => ({
+  userIdIdx: index("riders_user_id_idx").on(table.userId),
+}));
 
 export const addresses = pgTable("addresses", {
   id: text("id").primaryKey(),
@@ -138,7 +149,9 @@ export const userSavedAddresses = pgTable("user_saved_addresses", {
   streetAddress: text("street_address").notNull(),
   district: text("district").notNull(),
   landmarkNote: text("landmark_note").notNull(),
-});
+}, (table) => ({
+  userIdIdx: index("user_saved_addresses_user_id_idx").on(table.userId),
+}));
 
 export const extremeLocationTiers = pgTable("extreme_location_tiers", {
   id: text("id").primaryKey(),
@@ -150,7 +163,9 @@ export const extremeLocations = pgTable("extreme_locations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   tierId: text("tier_id").references(() => extremeLocationTiers.id).notNull(),
-});
+}, (table) => ({
+  tierIdIdx: index("extreme_locations_tier_id_idx").on(table.tierId),
+}));
 
 export const employees = pgTable("employees", {
   id: text("id").primaryKey(),
@@ -176,7 +191,10 @@ export const reviews = pgTable("reviews", {
   rating: integer("rating").notNull(),
   comment: text("comment").notNull(),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => ({
+  vendorIdIdx: index("reviews_vendor_id_idx").on(table.vendorId),
+  customerIdIdx: index("reviews_customer_id_idx").on(table.customerId),
+}));
 
 export const walletTransactions = pgTable("wallet_transactions", {
   id: text("id").primaryKey(),
@@ -189,7 +207,9 @@ export const walletTransactions = pgTable("wallet_transactions", {
   status: text("status"), // approved | pending | declined
   gateway: text("gateway"), // bank_transfer | monnify | paystack
   reference: text("reference"),
-});
+}, (table) => ({
+  userIdIdx: index("wallet_transactions_user_id_idx").on(table.userId),
+}));
 
 export const appNotifications = pgTable("app_notifications", {
   id: text("id").primaryKey(),
@@ -200,7 +220,9 @@ export const appNotifications = pgTable("app_notifications", {
   read: boolean("read").notNull().default(false),
   createdAt: text("created_at").notNull(),
   relatedId: text("related_id"),
-});
+}, (table) => ({
+  userIdIdx: index("app_notifications_user_id_idx").on(table.userId),
+}));
 
 
 export const pushSubscriptions = pgTable("push_subscriptions", {
@@ -210,7 +232,9 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => ({
+  userIdIdx: index("push_subscriptions_user_id_idx").on(table.userId),
+}));
 
 export const auditLogs = pgTable("audit_logs", {
   id: text("id").primaryKey(),
@@ -243,4 +267,7 @@ export const payoutLogs = pgTable("payout_logs", {
   reference: text("reference"),
   notes: text("notes"),
   status: text("status").notNull().default("released"), // pending | released | reversed | failed
-});
+}, (table) => ({
+  orderIdIdx: index("payout_logs_order_id_idx").on(table.orderId),
+  recipientIdIdx: index("payout_logs_recipient_id_idx").on(table.recipientId),
+}));
