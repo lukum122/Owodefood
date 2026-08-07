@@ -4,7 +4,7 @@ import { OrderStatus } from "../types";
 import { Check, X, Flame, ShieldCheck, ShoppingBag, MapPin, Phone, User, Clock } from "lucide-react";
 
 export const VendorOrders: React.FC = () => {
-  const { currentVendor, orders, updateVendorOrder, currency, receiptPickupOrders, updateReceiptPickupStatus } = useDatabase();
+  const { currentVendor, orders, updateVendorOrder, currency } = useDatabase();
 
   if (!currentVendor) {
     return <div className="text-sm font-semibold text-gray-500">No store record configured.</div>;
@@ -17,10 +17,6 @@ export const VendorOrders: React.FC = () => {
   const activeStatuses = ["pending", "accepted", "preparing", "ready", "out_for_delivery"];
   const activeOrders = vendorOrders.filter(o => activeStatuses.includes(o.status));
   const historicOrders = vendorOrders.filter(o => ["delivered", "cancelled"].includes(o.status));
-
-  // Vendor Receipt Pickups
-  const vendorReceipts = (receiptPickupOrders || []).filter(o => o.vendorId === currentVendor.id);
-  const activeReceipts = vendorReceipts.filter(o => ["awaiting_vendor_confirmation", "ready_for_rider", "accepted", "picked_up"].includes(o.status));
 
   const handleAction = async (orderId: string, actionStatus: OrderStatus) => {
     const result = await updateVendorOrder(orderId, actionStatus);
@@ -224,50 +220,6 @@ export const VendorOrders: React.FC = () => {
           )}
         </div>
 
-      </div>
-
-      {/* Receipt Pickup Validation Section */}
-      <div className="mt-12 pt-12 border-t border-gray-150">
-        <h2 className="text-xl font-black text-gray-950 tracking-tight">Receipt Pickup Validation</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Confirm receipt availability for courier pickup.</p>
-        
-        <div className="mt-6 space-y-4">
-          {activeReceipts.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-gray-100 p-8 text-center shadow-sm">
-              <p className="text-xs font-bold text-gray-500">No active receipt pickup requests.</p>
-            </div>
-          ) : (
-            activeReceipts.map(rp => (
-              <div key={rp.id} className="bg-white rounded-3xl border border-blue-100 p-6 shadow-sm flex flex-col sm:flex-row justify-between items-start gap-4">
-                <div className="space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold">Ref: #{rp.id}</span>
-                    <span className="text-[10px] font-bold text-gray-400 capitalize">{rp.status.replace(/_/g, ' ')}</span>
-                  </div>
-                  <p className="text-sm font-bold text-gray-900">{rp.customerName}</p>
-                  <p className="text-xs text-gray-600">Proof: {rp.receiptImageOrQr === "PRESET_INVOICE_1" ? "Invoice #88210" : "Digital Receipt"}</p>
-                  {rp.riderId && <p className="text-[10px] font-bold text-sky-700 pt-1">Assigned Rider: {rp.riderName}</p>}
-                </div>
-                
-                <div className="w-full sm:w-auto">
-                  {rp.status === "awaiting_vendor_confirmation" && (
-                    <button
-                      onClick={() => updateReceiptPickupStatus(rp.id, "ready_for_rider")}
-                      className="w-full sm:w-auto py-2.5 px-6 rounded-xl font-bold text-xs bg-green-500 text-white hover:bg-green-600 shadow-sm transition"
-                    >
-                      Confirm Ready for Pickup
-                    </button>
-                  )}
-                  {rp.status === "ready_for_rider" && (
-                    <span className="py-2.5 px-4 bg-green-50 text-green-700 border border-green-200 rounded-xl text-xs font-bold block text-center">
-                      Waiting for Rider...
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
       </div>
 
     </div>
