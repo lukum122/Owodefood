@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { DatabaseProvider } from "./context/DatabaseContext";
+import { DatabaseProvider, useDatabase } from "./context/DatabaseContext";
 import { UpdateManagerProvider } from "./context/UpdateManagerContext";
 import { AuthGuard, PublicOnlyRoute } from "./components/Guards";
 import { ScrollToTop } from "./components/ScrollToTop";
@@ -56,7 +56,31 @@ export default function App() {
   return (
     <UpdateManagerProvider>
       <DatabaseProvider>
-        <BrowserRouter>
+        <AppShell />
+      </DatabaseProvider>
+    </UpdateManagerProvider>
+  );
+}
+
+// Separate component so it can call useDatabase() (needs to be inside
+// DatabaseProvider) to gate rendering until the first real load completes.
+// Without this, every page briefly rendered with empty state (₦0, 0
+// profiles, "no restaurants found") on every fresh load/refresh, which
+// looked like broken/missing data rather than "still loading."
+function AppShell() {
+  const { isInitialLoading } = useDatabase();
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white">
+        <div className="w-10 h-10 border-4 border-gray-200 border-t-slate-900 rounded-full animate-spin" />
+        <p className="text-sm font-semibold text-gray-400">Loading...</p>
+      </div>
+    );
+  }
+
+  return (
+    <BrowserRouter>
           <ScrollToTop />
           <PortalSimulator />
           <PwaUpdater />
@@ -171,8 +195,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
-      </BrowserRouter>
-    </DatabaseProvider>
-    </UpdateManagerProvider>
+    </BrowserRouter>
   );
 }
