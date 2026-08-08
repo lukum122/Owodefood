@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, UserRole } from "../types";
-import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign, XCircle } from "lucide-react";
+import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign, XCircle, Download, X } from "lucide-react";
 
 export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string } | null | undefined) => {
   if (user?.profileImage) return user.profileImage;
@@ -17,6 +17,7 @@ export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string 
 
 export const CustomerOrders: React.FC = () => {
   const { orders, currentUser, currency, resubmitOrderReceipt } = useDatabase();
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   // Filter orders where customer matches current logged user
   const customerOrders = orders.filter(o => o.customerId === currentUser?.id);
@@ -177,9 +178,13 @@ export const CustomerOrders: React.FC = () => {
                             <span className="text-gray-600 text-[10px]">Note: {order.receiptNote}</span>
                           )}
                           {order.receiptImageOrQr && (
-                            <a href={order.receiptImageOrQr} target="_blank" rel="noreferrer" className="text-blue-600 underline text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setZoomedImage(order.receiptImageOrQr)}
+                              className="text-blue-600 underline text-[10px] text-left cursor-pointer"
+                            >
                               View Receipt / QR
-                            </a>
+                            </button>
                           )}
                         </div>
                       ) : (
@@ -238,6 +243,50 @@ export const CustomerOrders: React.FC = () => {
           <ClipboardList className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-bold text-gray-700">No active orders found</p>
           <p className="text-xs text-gray-400 mt-1">Browse restaurants and order fresh food to initialize a ticket.</p>
+        </div>
+      )}
+
+      {zoomedImage && (
+        <div
+          onClick={() => setZoomedImage(null)}
+          className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="absolute top-4 right-4 flex items-center gap-3 z-[110]">
+            <a
+              href={zoomedImage}
+              download="receipt-proof.png"
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition shadow-lg flex items-center justify-center cursor-pointer"
+              title="Download Original Image"
+            >
+              <Download className="w-5 h-5" />
+            </a>
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition shadow-lg flex items-center justify-center cursor-pointer"
+              title="Close Viewer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl max-h-[80vh] w-full flex items-center justify-center p-2 rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150"
+          >
+            <img
+              src={zoomedImage}
+              alt="Receipt / QR Preview"
+              className="max-w-full max-h-[75vh] object-contain rounded-2xl select-none"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+
+          <p className="text-white/60 text-xs mt-4 font-sans font-medium text-center max-w-md select-none">
+            Click anywhere to close.
+          </p>
         </div>
       )}
     </div>
