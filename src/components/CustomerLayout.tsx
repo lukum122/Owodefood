@@ -61,6 +61,7 @@ export const CustomerLayout: React.FC = () => {
     requestWalletFunding,
     getUserWalletBalance,
     switchRole,
+    brandLogo,
   } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
@@ -220,8 +221,12 @@ export const CustomerLayout: React.FC = () => {
           onClick={() => setMobileMenuOpen(false)}
           className="flex items-center gap-3 group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-white text-[#070329] flex items-center justify-center font-black text-xl shadow-lg group-hover:scale-105 transition-transform duration-200">
-            O
+          <div className="w-10 h-10 rounded-2xl bg-white text-[#070329] flex items-center justify-center font-black text-xl shadow-lg group-hover:scale-105 transition-transform duration-200 overflow-hidden">
+            {brandLogo ? (
+              <img src={brandLogo} alt="Owode Food" className="w-full h-full object-contain" />
+            ) : (
+              "O"
+            )}
           </div>
           <div>
             <span className="font-bold text-lg tracking-widest text-white uppercase block">
