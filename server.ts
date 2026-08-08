@@ -2068,10 +2068,15 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     let validatedBatchTime: string | null = null;
     if (batchDate && batchTime) {
       const batchSettingsRows = await db.select().from(systemSettings).where(
-        inArray(systemSettings.key, ["batchDeliveryTimes", "batchCutoffMinutes", "batchExcludedZones"])
+        inArray(systemSettings.key, ["batchDeliverySystemEnabled", "batchDeliveryTimes", "batchCutoffMinutes", "batchExcludedZones"])
       );
       const batchSettingsMap: Record<string, string> = {};
       for (const s of batchSettingsRows) batchSettingsMap[s.key] = s.value;
+
+      const systemEnabled = batchSettingsMap.batchDeliverySystemEnabled !== "false";
+      if (!systemEnabled) {
+        return res.status(400).json({ error: "Batch delivery is not currently available. Please order now instead." });
+      }
 
       let batchTimes: string[] = [];
       try { batchTimes = JSON.parse(batchSettingsMap.batchDeliveryTimes || "[]"); } catch {}
