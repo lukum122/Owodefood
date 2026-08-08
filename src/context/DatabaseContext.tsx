@@ -68,6 +68,7 @@ interface DatabaseContextType {
   batchDiscountValue: number;
   updateBatchDiscount: (type: "free" | "flat" | "percentage", value: number) => void;
   getAvailableBatchSlots: (vendorId: string, deliveryAddress?: string) => { date: string; time: string; label: string }[];
+  applyBatchDiscount: (normalDeliveryFee: number) => number;
   calculateServiceFee: (vendorId: string | undefined, subtotal: number) => number;
   calculateDeliveryFee: (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean) => number;
   currency: string;
@@ -3202,6 +3203,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         batchDiscountValue,
         updateBatchDiscount,
         getAvailableBatchSlots,
+        applyBatchDiscount,
         surgeConfig,
         updateSurgeConfig,
         legalContent,
