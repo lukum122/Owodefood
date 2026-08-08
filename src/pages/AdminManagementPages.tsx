@@ -2997,7 +2997,18 @@ export const AdminSettings: React.FC = () => {
     updateReceiptPickupConfig,
     orders,
     updateAdminSettings,
-    saveReceiptPickupConfig
+    saveReceiptPickupConfig,
+    batchDeliveryTimes,
+    updateBatchDeliveryTimes,
+    batchCutoffMinutes,
+    updateBatchCutoffMinutes,
+    batchCategoryCutoffs,
+    updateBatchCategoryCutoffs,
+    batchExcludedZones,
+    updateBatchExcludedZones,
+    batchDiscountType,
+    batchDiscountValue,
+    updateBatchDiscount
   } = useDatabase();
   
   const [newLocTierId, setNewLocTierId] = useState(""); // "" means No Surcharge / Base Fee
@@ -3008,6 +3019,13 @@ export const AdminSettings: React.FC = () => {
   const [delCommission, setDelCommission] = useState(String(riderCommissionValue));
   const [localVatEnabled, setLocalVatEnabled] = useState<boolean>(vatEnabled);
   const [localVatRate, setLocalVatRate] = useState<string>(String(vatRate));
+
+  // Batch Delivery local editing state
+  const [newBatchTime, setNewBatchTime] = useState("");
+  const [localBatchCutoff, setLocalBatchCutoff] = useState(String(batchCutoffMinutes));
+  const [newExcludedZone, setNewExcludedZone] = useState("");
+  const [localBatchDiscountType, setLocalBatchDiscountType] = useState<"free" | "flat" | "percentage">(batchDiscountType);
+  const [localBatchDiscountValue, setLocalBatchDiscountValue] = useState(String(batchDiscountValue));
   const [localMaxCartItems, setLocalMaxCartItems] = useState<string>(String(maxCartItems));
   const [successWord, setSuccessWord] = useState("");
   const [newLocInput, setNewLocInput] = useState("");
@@ -3426,6 +3444,194 @@ export const AdminSettings: React.FC = () => {
           </div>
         </form>
       </div>
+
+      {/* CARD: Batch Delivery Configuration */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center p-1 shadow-md shadow-emerald-100">
+            <Layers className="w-8 h-8" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Batch Delivery</h3>
+            <p className="text-xs text-gray-400">Customers can schedule into a batch for free/discounted delivery. Batch times apply platform-wide; only the lead-time cutoff can be adjusted per category or per vendor.</p>
+          </div>
+        </div>
+
+        {/* Batch times */}
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-gray-600">Batch Times (platform-wide, e.g. 09:00, 13:00, 17:00)</label>
+          <div className="flex flex-wrap gap-2">
+            {batchDeliveryTimes.map((time) => (
+              <span key={time} className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                {time}
+                <button
+                  type="button"
+                  onClick={() => updateBatchDeliveryTimes(batchDeliveryTimes.filter(t => t !== time))}
+                  className="text-emerald-500 hover:text-rose-600 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {batchDeliveryTimes.length === 0 && (
+              <span className="text-xs text-gray-400 italic">No batch times configured yet — batch delivery is invisible to customers until at least one is added.</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="time"
+              value={newBatchTime}
+              onChange={(e) => setNewBatchTime(e.target.value)}
+              className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (newBatchTime && !batchDeliveryTimes.includes(newBatchTime)) {
+                  updateBatchDeliveryTimes([...batchDeliveryTimes, newBatchTime].sort());
+                  setNewBatchTime("");
+                }
+              }}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition"
+            >
+              Add Time
+            </button>
+          </div>
+        </div>
+
+        {/* Platform default cutoff */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-gray-600">Platform Default Cutoff (minutes before batch closes)</label>
+          <div className="flex gap-2 max-w-xs">
+            <input
+              type="number"
+              min={0}
+              value={localBatchCutoff}
+              onChange={(e) => setLocalBatchCutoff(e.target.value)}
+              className="flex-1 text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => updateBatchCutoffMinutes(Math.max(0, Number(localBatchCutoff) || 0))}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold rounded-xl cursor-pointer transition"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+
+        {/* Category cutoff overrides */}
+        {vendorCategories.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-600">Category Cutoff Overrides (leave blank to use platform default)</label>
+            <div className="space-y-2">
+              {vendorCategories.map((cat) => (
+                <div key={cat.id} className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-700 w-32 shrink-0">{cat.name}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="platform default"
+                    value={batchCategoryCutoffs[cat.name] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const updated = { ...batchCategoryCutoffs };
+                      if (val === "") {
+                        delete updated[cat.name];
+                      } else {
+                        updated[cat.name] = Math.max(0, Number(val) || 0);
+                      }
+                      updateBatchCategoryCutoffs(updated);
+                    }}
+                    className="flex-1 text-xs p-2 border border-gray-150 rounded-xl bg-gray-50/50 outline-none max-w-[140px]"
+                  />
+                  <span className="text-[10px] text-gray-400">minutes</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Excluded zones */}
+        <div className="space-y-3">
+          <label className="text-xs font-bold text-gray-600">Zones Excluded From Batch Delivery</label>
+          <div className="flex flex-wrap gap-2">
+            {batchExcludedZones.map((zone) => (
+              <span key={zone} className="flex items-center gap-1.5 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                {zone}
+                <button
+                  type="button"
+                  onClick={() => updateBatchExcludedZones(batchExcludedZones.filter(z => z !== zone))}
+                  className="text-rose-500 hover:text-rose-800 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {batchExcludedZones.length === 0 && (
+              <span className="text-xs text-gray-400 italic">No zones excluded — batch delivery is offered everywhere.</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={newExcludedZone}
+              onChange={(e) => setNewExcludedZone(e.target.value)}
+              className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none flex-1"
+            >
+              <option value="">Select a zone...</option>
+              {availableLocations.filter(loc => !batchExcludedZones.includes(loc)).map((loc) => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                if (newExcludedZone) {
+                  updateBatchExcludedZones([...batchExcludedZones, newExcludedZone]);
+                  setNewExcludedZone("");
+                }
+              }}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl cursor-pointer transition"
+            >
+              Exclude
+            </button>
+          </div>
+        </div>
+
+        {/* Discount configuration */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-gray-600">Batch Delivery Discount</label>
+          <div className="flex flex-wrap gap-2 items-center">
+            <select
+              value={localBatchDiscountType}
+              onChange={(e) => setLocalBatchDiscountType(e.target.value as "free" | "flat" | "percentage")}
+              className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+            >
+              <option value="free">Free Delivery</option>
+              <option value="flat">Flat Amount Off</option>
+              <option value="percentage">Percentage Off</option>
+            </select>
+            {localBatchDiscountType !== "free" && (
+              <input
+                type="number"
+                min={0}
+                value={localBatchDiscountValue}
+                onChange={(e) => setLocalBatchDiscountValue(e.target.value)}
+                placeholder={localBatchDiscountType === "flat" ? "Amount" : "Percent"}
+                className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none w-32"
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => updateBatchDiscount(localBatchDiscountType, Math.max(0, Number(localBatchDiscountValue) || 0))}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition"
+            >
+              Save Discount
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* CARD: Receipt Pickup Configuration */}
       <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
         <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
