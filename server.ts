@@ -982,6 +982,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             commissionType: v.commissionType,
             commissionValue: v.commissionValue,
             freeDelivery: v.freeDelivery,
+            batchDeliveryEnabled: v.batchDeliveryEnabled,
+            batchCutoffOverrideMinutes: v.batchCutoffOverrideMinutes,
           }).onConflictDoUpdate({
             target: vendors.id,
             set: {
@@ -1006,6 +1008,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               commissionType: v.commissionType,
               commissionValue: v.commissionValue,
               freeDelivery: v.freeDelivery,
+              batchDeliveryEnabled: v.batchDeliveryEnabled,
+              batchCutoffOverrideMinutes: v.batchCutoffOverrideMinutes,
             },
           });
         }
@@ -1053,6 +1057,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           commissionType: payload.commissionType,
           commissionValue: payload.commissionValue,
           freeDelivery: payload.freeDelivery,
+          batchDeliveryEnabled: payload.batchDeliveryEnabled,
+          batchCutoffOverrideMinutes: payload.batchCutoffOverrideMinutes,
         }).onConflictDoUpdate({
           target: vendors.id,
           set: {
@@ -1079,6 +1085,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             commissionType: payload.commissionType,
             commissionValue: payload.commissionValue,
             freeDelivery: payload.freeDelivery,
+            batchDeliveryEnabled: payload.batchDeliveryEnabled,
+            batchCutoffOverrideMinutes: payload.batchCutoffOverrideMinutes,
           },
         });
 
