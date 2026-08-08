@@ -285,7 +285,9 @@ export const CustomerCheckout: React.FC = () => {
     savedAddresses,
     register,
     login,
-    getUserWalletBalance
+    getUserWalletBalance,
+    getAvailableBatchSlots,
+    applyBatchDiscount
   } = useDatabase();
   const navigate = useNavigate();
 
@@ -335,6 +337,8 @@ export const CustomerCheckout: React.FC = () => {
   });
   
   const [paymentMethod, setPaymentMethod] = useState("Credit Card");
+  const [deliveryMode, setDeliveryMode] = useState<"now" | "batch">("now");
+  const [selectedBatch, setSelectedBatch] = useState<{ date: string; time: string; label: string } | null>(null);
 
   // Interactive Sandbox Funding Process for Checkout page
   const [checkoutFundingProcess, setCheckoutFundingProcess] = useState<{
@@ -387,7 +391,9 @@ export const CustomerCheckout: React.FC = () => {
   const tax = vatEnabled ? total * (vatRate / 100) : 0;
   const firstCartItem = cart[0];
   const cartVendor = firstCartItem ? vendors.find(v => v.id === firstCartItem.product.vendorId) : null;
-  const deliveryFee = calculateDeliveryFee(cartVendor?.id, total, deliveryAddress);
+  const normalDeliveryFee = calculateDeliveryFee(cartVendor?.id, total, deliveryAddress);
+  const availableBatchSlots = cartVendor ? getAvailableBatchSlots(cartVendor.id, deliveryAddress) : [];
+  const deliveryFee = (deliveryMode === "batch" && selectedBatch) ? applyBatchDiscount(normalDeliveryFee) : normalDeliveryFee;
   const serviceFee = calculateServiceFee(cartVendor?.id, total);
   const grandTotal = total + tax + deliveryFee + serviceFee;
 
@@ -424,6 +430,13 @@ export const CustomerCheckout: React.FC = () => {
 
     if (!deliveryPhone.trim()) {
       setErrorWord("Please state an active delivery phone number.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (deliveryMode === "batch" && !selectedBatch) {
+      setErrorWord("Please select a batch delivery time, or switch to Deliver Now.");
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -508,7 +521,8 @@ export const CustomerCheckout: React.FC = () => {
       deliveryAddress.trim(),
       paymentMethod,
       deliveryPhone.trim(),
-      paymentMethod === "Local Bank Transfer" ? receiptBase64 : undefined
+      paymentMethod === "Local Bank Transfer" ? receiptBase64 : undefined,
+      (deliveryMode === "batch" && selectedBatch) ? { batchDate: selectedBatch.date, batchTime: selectedBatch.time } : undefined
     );
     if (success) {
       setIsOrdered(true);
@@ -811,6 +825,71 @@ export const CustomerCheckout: React.FC = () => {
               </p>
             </div>
           </div>
+
+          {/* Delivery timing: now vs batch */}
+          {availableBatchSlots.length > 0 && (
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
+                <Layers className="w-4 h-4 text-emerald-500" />
+                Delivery Timing
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setDeliveryMode("now"); setSelectedBatch(null); }}
+                  className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
+                    deliveryMode === "now" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-150 bg-gray-50/50 text-gray-600"
+                  }`}
+                >
+                  Deliver Now
+                  <div className="text-[10px] font-medium mt-0.5 opacity-70">{currency}{normalDeliveryFee.toLocaleString()} delivery</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("batch")}
+                  className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
+                    deliveryMode === "batch" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-150 bg-gray-50/50 text-gray-600"
+                  }`}
+                >
+                  Schedule & Save
+                  <div className="text-[10px] font-medium mt-0.5 opacity-70">Batch delivery discount</div>
+                </button>
+              </div>
+
+              {deliveryMode === "batch" && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-[10px] text-gray-500 font-medium">Choose a batch time — orders grouped together get discounted delivery.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {availableBatchSlots.map((slot) => {
+                      const discountedFee = applyBatchDiscount(normalDeliveryFee);
+                      const isSelected = selectedBatch?.date === slot.date && selectedBatch?.time === slot.time;
+                      return (
+                        <button
+                          key={`${slot.date}-${slot.time}`}
+                          type="button"
+                          onClick={() => setSelectedBatch(slot)}
+                          className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
+                            isSelected ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-150 bg-white text-gray-700 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>{slot.label}</span>
+                            {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                          </div>
+                          <div className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                            {discountedFee === 0 ? "FREE DELIVERY" : `${currency}${discountedFee.toLocaleString()} delivery`}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {!selectedBatch && (
+                    <p className="text-[10px] text-amber-600 font-bold">Please select a batch time to continue with scheduled delivery.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Payment Method selector */}
           <div className="space-y-3">
