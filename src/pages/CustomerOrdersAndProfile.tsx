@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, UserRole } from "../types";
 import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign, XCircle, Download, X } from "lucide-react";
+import { compressImageToDataUrl } from "../imageUtils";
 
 export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string } | null | undefined) => {
   if (user?.profileImage) return user.profileImage;
@@ -139,15 +140,18 @@ export const CustomerOrders: React.FC = () => {
                           accept="image/*" 
                           id={`receipt-upload-${order.id}`}
                           className="hidden"
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             if (e.target.files && e.target.files[0]) {
-                              const reader = new FileReader();
-                              reader.onload = (evt) => {
-                                if (evt.target?.result) {
-                                  resubmitOrderReceipt(order.id, evt.target.result as string);
+                              try {
+                                const compressed = await compressImageToDataUrl(e.target.files[0]);
+                                const result = await resubmitOrderReceipt(order.id, compressed);
+                                if (!result?.success) {
+                                  window.alert(result?.error || "Failed to upload your receipt. Please try again.");
                                 }
-                              };
-                              reader.readAsDataURL(e.target.files[0]);
+                              } catch (err) {
+                                console.error("[receipt resubmit] Failed to process image:", err);
+                                window.alert("Failed to process that image. Please try a different photo.");
+                              }
                             }
                           }}
                         />
