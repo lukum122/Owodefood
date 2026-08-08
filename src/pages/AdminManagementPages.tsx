@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
 import { hasRole } from "../roleHelper";
+import { compressImageToDataUrl } from "../imageUtils";
 import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
@@ -3094,6 +3095,8 @@ export const AdminSettings: React.FC = () => {
     orders,
     updateAdminSettings,
     saveReceiptPickupConfig,
+    brandLogo,
+    updateBrandLogo,
     batchDeliverySystemEnabled,
     updateBatchDeliverySystemEnabled,
     batchDeliveryTimes,
@@ -3417,6 +3420,60 @@ export const AdminSettings: React.FC = () => {
           {successWord}
         </div>
       )}
+
+      {/* CARD: Brand Logo */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-5">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-[#070329] text-white flex items-center justify-center p-1 shadow-md overflow-hidden">
+            {brandLogo ? (
+              <img src={brandLogo} alt="Brand Logo" className="w-full h-full object-contain" />
+            ) : (
+              <span className="font-black text-2xl">O</span>
+            )}
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Brand Logo</h3>
+            <p className="text-xs text-gray-400">Used across the app — header, loading screen, and anywhere else the logo appears. Upload once, updates everywhere automatically.</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="cursor-pointer px-4 py-2.5 bg-[#070329] hover:bg-[#0a0540] text-white text-xs font-bold rounded-xl transition">
+            {brandLogo ? "Replace Logo" : "Upload Logo"}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const compressed = await compressImageToDataUrl(file, 512, 0.85);
+                  updateBrandLogo(compressed);
+                  setSuccessWord("Brand logo updated successfully!");
+                  setTimeout(() => setSuccessWord(""), 3000);
+                } catch (err) {
+                  console.error("[logo upload] Failed to process image:", err);
+                  window.alert("Failed to process that image. Please try a different photo.");
+                }
+              }}
+            />
+          </label>
+          {brandLogo && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Remove the current logo? The app will fall back to the default styled letter until a new one is uploaded.")) {
+                  updateBrandLogo("");
+                }
+              }}
+              className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition border border-rose-100"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* CARD 1: Operational Settings */}
       <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
