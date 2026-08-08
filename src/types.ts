@@ -70,6 +70,8 @@ export interface Vendor {
   foodPermitNo?: string;
   verificationDoc?: string;
   receiptPickupEnabled?: boolean;
+  batchDeliveryEnabled?: boolean; // vendor's own opt-out toggle for batch delivery, defaults to true
+  batchCutoffOverrideMinutes?: number; // vendor's own lead-time override, null = inherit category/platform default
 }
 
 export interface Addon {
@@ -144,6 +146,8 @@ export interface Order {
   orderType?: "standard" | "receipt_pickup";
   receiptImageOrQr?: string;
   receiptNote?: string;
+  batchDate?: string; // e.g. "2026-08-10"
+  batchTime?: string; // e.g. "13:00"
 }
 
 export interface OrderItem {
