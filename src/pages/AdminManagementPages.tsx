@@ -3616,22 +3616,13 @@ export const AdminSettings: React.FC = () => {
         {/* Platform default cutoff */}
         <div className="space-y-2">
           <label className="text-xs font-bold text-gray-600">Platform Default Cutoff (minutes before batch closes)</label>
-          <div className="flex gap-2 max-w-xs">
-            <input
-              type="number"
-              min={0}
-              value={localBatchCutoff}
-              onChange={(e) => setLocalBatchCutoff(e.target.value)}
-              className="flex-1 text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => updateBatchCutoffMinutes(Math.max(0, Number(localBatchCutoff) || 0))}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold rounded-xl cursor-pointer transition"
-            >
-              Save
-            </button>
-          </div>
+          <input
+            type="number"
+            min={0}
+            value={localBatchCutoff}
+            onChange={(e) => setLocalBatchCutoff(e.target.value)}
+            className="max-w-xs text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+          />
         </div>
 
         {/* Category cutoff overrides */}
@@ -3735,15 +3726,22 @@ export const AdminSettings: React.FC = () => {
                 className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none w-32"
               />
             )}
-            <button
-              type="button"
-              onClick={() => updateBatchDiscount(localBatchDiscountType, Math.max(0, Number(localBatchDiscountValue) || 0))}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer transition"
-            >
-              Save Discount
-            </button>
           </div>
         </div>
+
+        {/* Unified save for cutoff + discount (times/zones save immediately when added/removed above) */}
+        <button
+          type="button"
+          onClick={() => {
+            updateBatchCutoffMinutes(Math.max(0, Number(localBatchCutoff) || 0));
+            updateBatchDiscount(localBatchDiscountType, Math.max(0, Number(localBatchDiscountValue) || 0));
+            setSuccessWord("Batch delivery settings saved successfully!");
+            setTimeout(() => setSuccessWord(""), 3000);
+          }}
+          className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-2xl cursor-pointer transition flex items-center justify-center gap-2"
+        >
+          <Save className="w-4 h-4" /> Save Batch Delivery Settings
+        </button>
       </div>
 
       {/* CARD: Receipt Pickup Configuration */}
