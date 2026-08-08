@@ -23,10 +23,10 @@ export const AdminOrders: React.FC = () => {
   // nothing while the request is in progress.
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
 
-  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification">("standard");
+  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch">("standard");
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PAGE_SIZE = 25;
-  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification") => {
+  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification" | "batch") => {
     setOrderTypeTabRaw(tab);
     setOrdersPage(1); // reset to page 1 whenever the tab changes
   };
@@ -706,6 +706,16 @@ export const AdminOrders: React.FC = () => {
         >
           <ShieldAlert className="w-4 h-4" /> Payment Verification ({orders.filter(o => o.status === "awaiting_payment_verification").length})
         </button>
+        <button
+          onClick={() => setOrderTypeTab("batch")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "batch"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <Layers className="w-4 h-4" /> Batch Deliveries ({orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled"].includes(o.status)).length})
+        </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
         {orderTypeTab === "standard" ? (
@@ -879,7 +889,7 @@ export const AdminOrders: React.FC = () => {
               No Receipt Pickups & Delivery requests logged on the platform yet.
             </div>
           )
-        ) : (
+        ) : orderTypeTab === "verification" ? (
           orders.filter(o => o.status === "awaiting_payment_verification").length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
@@ -953,6 +963,92 @@ export const AdminOrders: React.FC = () => {
               No payments currently awaiting verification.
             </div>
           )
+        ) : (
+          (() => {
+            const batchOrders = orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled"].includes(o.status));
+            if (batchOrders.length === 0) {
+              return (
+                <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+                  No active batch delivery orders right now.
+                </div>
+              );
+            }
+
+            // Group by batchDate + batchTime, sorted chronologically.
+            const groups: Record<string, typeof batchOrders> = {};
+            for (const o of batchOrders) {
+              const key = `${o.batchDate}|${o.batchTime}`;
+              if (!groups[key]) groups[key] = [];
+              groups[key].push(o);
+            }
+            const sortedKeys = Object.keys(groups).sort();
+
+            return (
+              <div className="space-y-6">
+                {sortedKeys.map((key) => {
+                  const [date, time] = key.split("|");
+                  const groupOrders = groups[key];
+                  return (
+                    <div key={key} className="border border-gray-100 rounded-2xl overflow-hidden">
+                      <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-3 flex items-center justify-between">
+                        <span className="text-xs font-black text-emerald-800">
+                          Batch: {date} @ {time} ({groupOrders.length} order{groupOrders.length !== 1 ? "s" : ""})
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[900px]">
+                          <thead>
+                            <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                              <th className="py-3 px-4">Order ID</th>
+                              <th className="py-3 px-4">Merchant Node</th>
+                              <th className="py-3 px-4">Customer</th>
+                              <th className="py-3 px-4">Destination</th>
+                              <th className="py-3 px-4 font-mono text-right">Sum</th>
+                              <th className="py-3 px-4">Status</th>
+                              <th className="py-3 px-4">Assign Rider</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                            {groupOrders.map((o) => (
+                              <tr key={o.id} className="hover:bg-gray-50/50">
+                                <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id.slice(0, 8)}</td>
+                                <td className="py-3.5 px-4 font-bold text-gray-800">{o.vendorName}</td>
+                                <td className="py-3.5 px-4 text-gray-600">{o.customerName}</td>
+                                <td className="py-3.5 px-4 text-gray-500 max-w-[180px] truncate" title={o.deliveryAddress}>{o.deliveryAddress}</td>
+                                <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
+                                <td className="py-3.5 px-4">
+                                  <span className="text-[10px] font-bold text-gray-500 capitalize">{o.status.replace(/_/g, " ")}</span>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <select
+                                    value={o.riderId || ""}
+                                    onChange={async (e) => {
+                                      const selectedRiderId = e.target.value;
+                                      if (!selectedRiderId) return;
+                                      const result = await acceptDelivery(o.id, selectedRiderId);
+                                      if (!result?.success) {
+                                        window.alert(result?.error || "Failed to dispatch the rider. Please try again.");
+                                      }
+                                    }}
+                                    className="text-[10px] p-1.5 border border-gray-150 rounded-lg bg-gray-50/50 outline-none max-w-[140px]"
+                                  >
+                                    <option value="">{o.riderId ? o.riderName : "Unassigned"}</option>
+                                    {activeRiders.filter(r => r.id !== o.riderId).map((r) => (
+                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
         )}
       </div>
 

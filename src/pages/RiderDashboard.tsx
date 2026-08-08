@@ -28,9 +28,13 @@ export const RiderDashboard: React.FC = () => {
   }
 
   // Active riders see unassigned orders that are either accepted, preparing, or ready
-  const unassignedJobs = orders.filter(
+  const allUnassignedJobs = orders.filter(
     o => !o.riderId && ["accepted", "preparing", "ready"].includes(o.status)
   );
+  // Split into immediate ("now") jobs and batch-scheduled jobs -- riders see
+  // both, but batch jobs are grouped separately by their slot.
+  const unassignedJobs = allUnassignedJobs.filter(o => !o.batchDate || !o.batchTime);
+  const unassignedBatchJobs = allUnassignedJobs.filter(o => o.batchDate && o.batchTime);
 
   const unassignedReceiptJobs = (orders || []).filter(
     j => j.orderType === "receipt_pickup" && j.status === "pending"
@@ -186,6 +190,80 @@ export const RiderDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Batch Delivery Pool */}
+      {currentRider.isAvailable && unassignedBatchJobs.length > 0 && (
+        <div className="space-y-4 pt-8 border-t border-gray-150">
+          <div>
+            <h3 className="text-sm font-black text-gray-950 uppercase tracking-wider block flex items-center gap-2">
+              <Truck className="w-4 h-4 text-emerald-600" />
+              Batch Delivery Pool ({unassignedBatchJobs.length})
+            </h3>
+            <p className="text-xs text-gray-400 mt-1.5">
+              These orders are grouped for scheduled batch delivery. Grab several from the same batch to run one efficient trip.
+            </p>
+          </div>
+
+          {(() => {
+            const groups: Record<string, typeof unassignedBatchJobs> = {};
+            for (const o of unassignedBatchJobs) {
+              const key = `${o.batchDate}|${o.batchTime}`;
+              if (!groups[key]) groups[key] = [];
+              groups[key].push(o);
+            }
+            const sortedKeys = Object.keys(groups).sort();
+
+            return sortedKeys.map((key) => {
+              const [date, time] = key.split("|");
+              const groupJobs = groups[key];
+              return (
+                <div key={key} className="space-y-3">
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-2.5">
+                    <span className="text-xs font-black text-emerald-800">Batch: {date} @ {time} ({groupJobs.length} order{groupJobs.length !== 1 ? "s" : ""})</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {groupJobs.map((job) => (
+                      <div key={job.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between gap-5 hover:shadow-md transition">
+                        <div className="space-y-3 text-xs leading-relaxed">
+                          <div className="flex items-center justify-between border-b border-gray-50 pb-3">
+                            <span className="font-mono font-black text-gray-900 bg-gray-100 px-2.5 py-1 rounded-lg"># {job.id}</span>
+                            <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-black tracking-widest capitalize font-mono">
+                              Batch {time}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                              <Store className="w-3.5 h-3.5 text-blue-500" />
+                              Restaurant Pickup
+                            </span>
+                            <p className="font-bold text-gray-900 capitalize">{job.vendorName}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-red-500" />
+                              Destination drop-off
+                            </span>
+                            <p className="text-gray-700 leading-snug">{job.deliveryAddress}</p>
+                          </div>
+                          <div className="text-[11px] text-indigo-700 font-bold block bg-indigo-50/50 p-2 rounded-xl">
+                            Estimated earnings: {currency}{getNetPayout(job.deliveryFee ?? 750).toLocaleString()} (after commission)
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleClaimJob(job.id)}
+                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow cursor-pointer transition uppercase"
+                        >
+                          Claim This Batch Order
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
 
       {/* Receipt Pickup Queue */}
       <div className="space-y-4 pt-8 border-t border-gray-150">
