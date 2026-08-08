@@ -2001,7 +2001,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 // 4. Secure Checkout API
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage, orderType, receiptImageOrQr, receiptNote } = req.body;
+    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage, orderType, receiptImageOrQr, receiptNote, batchDate, batchTime } = req.body;
 
     const isReceiptPickup = orderType === "receipt_pickup";
 
@@ -2049,6 +2049,52 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     // Enforce base minimums for receipt pickup
     if (isReceiptPickup && validServiceFee < 50) {
       validServiceFee = 50;
+    }
+
+    // Validate batch delivery selection server-side. A client could try to
+    // claim a batch discount for a time that's fictional or already past
+    // its cutoff -- this closes that gap without rebuilding the whole
+    // fee-trust model (delivery fee itself is still client-computed,
+    // consistent with how it already worked before batching existed).
+    let validatedBatchDate: string | null = null;
+    let validatedBatchTime: string | null = null;
+    if (batchDate && batchTime) {
+      const batchSettingsRows = await db.select().from(systemSettings).where(
+        inArray(systemSettings.key, ["batchDeliveryTimes", "batchCutoffMinutes", "batchExcludedZones"])
+      );
+      const batchSettingsMap: Record<string, string> = {};
+      for (const s of batchSettingsRows) batchSettingsMap[s.key] = s.value;
+
+      let batchTimes: string[] = [];
+      try { batchTimes = JSON.parse(batchSettingsMap.batchDeliveryTimes || "[]"); } catch {}
+      const platformCutoffMinutes = Number(batchSettingsMap.batchCutoffMinutes || 60);
+      let excludedZones: string[] = [];
+      try { excludedZones = JSON.parse(batchSettingsMap.batchExcludedZones || "[]"); } catch {}
+
+      const vendorForBatch = await db.select().from(vendors).where(eq(vendors.id, vendorId)).limit(1);
+      const vendorBatchEnabled = vendorForBatch[0]?.batchDeliveryEnabled !== false;
+      const effectiveCutoffMinutes = vendorForBatch[0]?.batchCutoffOverrideMinutes ?? platformCutoffMinutes;
+
+      const isZoneExcluded = excludedZones.some(z => deliveryAddress?.toLowerCase().includes(z.toLowerCase()));
+
+      if (!batchTimes.includes(batchTime)) {
+        return res.status(400).json({ error: "That batch time is not currently offered." });
+      }
+      if (!vendorBatchEnabled) {
+        return res.status(400).json({ error: "This vendor is not currently participating in batch delivery." });
+      }
+      if (isZoneExcluded) {
+        return res.status(400).json({ error: "Batch delivery is not available for this delivery zone." });
+      }
+
+      const batchDateTime = new Date(`${batchDate}T${batchTime}:00`);
+      const cutoffTime = new Date(batchDateTime.getTime() - effectiveCutoffMinutes * 60000);
+      if (isNaN(batchDateTime.getTime()) || new Date() > cutoffTime) {
+        return res.status(400).json({ error: "That batch's ordering window has closed. Please choose a different batch or order now." });
+      }
+
+      validatedBatchDate = batchDate;
+      validatedBatchTime = batchTime;
     }
 
     const finalTotal = calculatedTotal + validServiceFee + validDeliveryFee + validTax;
@@ -2099,6 +2145,8 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       orderType: orderType || "standard",
       receiptImageOrQr: receiptImageOrQr || null,
       receiptNote: receiptNote || null,
+      batchDate: validatedBatchDate,
+      batchTime: validatedBatchTime,
       createdAt: new Date().toISOString()
     });
 
@@ -2133,6 +2181,8 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       orderType: orderType || "standard",
       receiptImageOrQr: receiptImageOrQr || null,
       receiptNote: receiptNote || null,
+      batchDate: validatedBatchDate,
+      batchTime: validatedBatchTime,
       createdAt: new Date().toISOString(),
       items: isReceiptPickup ? [] : items.map((item: any) => ({
         id: Math.random().toString(36).substring(2, 11),
