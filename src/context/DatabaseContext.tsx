@@ -136,6 +136,7 @@ interface DatabaseContextType {
   
   // Vendor Actions
   updateVendorOrder: (orderId: string, status: OrderStatus, extra?: { verifiedBy?: string; verifiedAt?: string; rejectedBy?: string; rejectedAt?: string; rejectionReason?: string }) => Promise<{ success: boolean; error?: string }>;
+  resubmitOrderReceipt: (orderId: string, receiptDataUrl: string) => Promise<{ success: boolean; error?: string }>;
   addProduct: (product: Omit<Product, "id" | "createdAt">) => Promise<{ success: boolean; error?: string }>;
   updateProduct: (product: Product) => Promise<{ success: boolean; error?: string }>;
   deleteProduct: (productId: string) => Promise<{ success: boolean; error?: string }>;
@@ -2424,19 +2425,40 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
 
     // Notify Customer about status change
-    let statusText = status as string;
-    if (status === "preparing") statusText = "is being prepared 🍳";
-    else if (status === "ready") statusText = "is ready for delivery! 📦";
-    else if (status === "delivered") statusText = "has been completed! 🎉";
-    else if (status === "cancelled") statusText = "has been cancelled. ❌";
+    if (extra?.rejectionReason) {
+      // Payment verification was rejected — this is the case that was
+      // previously silent to the customer beyond the generic "status
+      // updated" text, which didn't actually explain what happened.
+      addNotification(
+        orderToUpdate.customerId,
+        `Payment Rejected — Order #${orderId}`,
+        `Your payment for order #${orderId} at ${orderToUpdate.vendorName} was rejected. Reason: ${extra.rejectionReason}. Please upload a valid replacement receipt to continue.`,
+        "order",
+        orderId
+      );
+    } else if (extra?.verifiedBy) {
+      addNotification(
+        orderToUpdate.customerId,
+        `Payment Verified — Order #${orderId}`,
+        `Your payment for order #${orderId} at ${orderToUpdate.vendorName} has been verified. Your order is now being processed.`,
+        "order",
+        orderId
+      );
+    } else {
+      let statusText = status as string;
+      if (status === "preparing") statusText = "is being prepared 🍳";
+      else if (status === "ready") statusText = "is ready for delivery! 📦";
+      else if (status === "delivered") statusText = "has been completed! 🎉";
+      else if (status === "cancelled") statusText = "has been cancelled. ❌";
 
-    addNotification(
-      orderToUpdate.customerId,
-      `Order Update: ${orderToUpdate.vendorName}`,
-      `Your order #${orderId} from ${orderToUpdate.vendorName} ${statusText}.`,
-      "order",
-      orderId
-    );
+      addNotification(
+        orderToUpdate.customerId,
+        `Order Update: ${orderToUpdate.vendorName}`,
+        `Your order #${orderId} from ${orderToUpdate.vendorName} ${statusText}.`,
+        "order",
+        orderId
+      );
+    }
 
     // Notify Admin about status change
     addNotification(
@@ -2446,6 +2468,42 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       "order",
       orderId
     );
+
+    return { success: true };
+  };
+
+  const resubmitOrderReceipt = async (orderId: string, receiptDataUrl: string): Promise<{ success: boolean; error?: string }> => {
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return { success: false, error: "Order not found" };
+
+    // Backend requires paymentReceiptUrl to be explicitly present (not
+    // undefined) to recognize this as the customer's own legitimate
+    // re-upload while the order is locked awaiting verification — see the
+    // isCustomerUploadingReceipt check server-side.
+    const candidateOrder = { ...orderToUpdate, paymentReceiptUrl: receiptDataUrl };
+
+    const result = await syncSave("ORDER_UPSERT", candidateOrder);
+    if (!result?.success) {
+      console.error(`[resubmitOrderReceipt] Failed to resubmit receipt for order ${orderId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to upload your receipt. Please check your connection and try again." };
+    }
+
+    const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
+    const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
+    setOrders(updatedOrders);
+    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
+
+    // Let admin know a corrected receipt is waiting for review again.
+    const allAdmins = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
+    allAdmins.forEach(admin => {
+      addNotification(
+        admin.id,
+        "Receipt Resubmitted",
+        `${orderToUpdate.customerName} uploaded a new payment receipt for order #${orderId}. Ready for re-review.`,
+        "order",
+        orderId
+      );
+    });
 
     return { success: true };
   };
@@ -3301,6 +3359,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         clearCart,
         placeOrder,
         updateVendorOrder,
+        resubmitOrderReceipt,
         addProduct,
         updateProduct,
         deleteProduct,
