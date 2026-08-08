@@ -56,6 +56,18 @@ interface DatabaseContextType {
   updateGlobalServiceFeeSettings: (type: "category" | "flat" | "percentage", value: number) => void;
   globalFreeDelivery: boolean;
   updateGlobalFreeDelivery: (isEnabled: boolean) => void;
+  batchDeliveryTimes: string[];
+  updateBatchDeliveryTimes: (times: string[]) => void;
+  batchCutoffMinutes: number;
+  updateBatchCutoffMinutes: (minutes: number) => void;
+  batchCategoryCutoffs: Record<string, number>;
+  updateBatchCategoryCutoffs: (cutoffs: Record<string, number>) => void;
+  batchExcludedZones: string[];
+  updateBatchExcludedZones: (zones: string[]) => void;
+  batchDiscountType: "free" | "flat" | "percentage";
+  batchDiscountValue: number;
+  updateBatchDiscount: (type: "free" | "flat" | "percentage", value: number) => void;
+  getAvailableBatchSlots: (vendorId: string, deliveryAddress?: string) => { date: string; time: string; label: string }[];
   calculateServiceFee: (vendorId: string | undefined, subtotal: number) => number;
   calculateDeliveryFee: (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean) => number;
   currency: string;
@@ -423,6 +435,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     groceries: 400,
   });
   const [vendorCategories, setVendorCategories] = useState<VendorCategoryInfo[]>([]);
+
+  // Batch Delivery config -- admin-controlled schedule + discount + cutoffs
+  const [batchDeliveryTimes, setBatchDeliveryTimes] = useState<string[]>([]); // e.g. ["09:00","13:00","17:00"]
+  const [batchCutoffMinutes, setBatchCutoffMinutes] = useState<number>(60); // platform-wide default lead time
+  const [batchCategoryCutoffs, setBatchCategoryCutoffs] = useState<Record<string, number>>({}); // per vendor-category override
+  const [batchExcludedZones, setBatchExcludedZones] = useState<string[]>([]); // zones where batching isn't offered
+  const [batchDiscountType, setBatchDiscountType] = useState<"free" | "flat" | "percentage">("free");
+  const [batchDiscountValue, setBatchDiscountValue] = useState<number>(0); // used only when type is flat/percentage
   
   const [globalServiceFeeType, setGlobalServiceFeeType] = useState<"category" | "flat" | "percentage">("category");
   const [globalServiceFeeValue, setGlobalServiceFeeValue] = useState<number>(0);
@@ -566,6 +586,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (data.systemSettings.globalServiceFeeType) setGlobalServiceFeeType(data.systemSettings.globalServiceFeeType as any);
             if (data.systemSettings.globalServiceFeeValue) setGlobalServiceFeeValue(Number(data.systemSettings.globalServiceFeeValue));
             if (data.systemSettings.globalFreeDelivery) setGlobalFreeDelivery(data.systemSettings.globalFreeDelivery === "true");
+            if (data.systemSettings.batchDeliveryTimes) {
+              try { setBatchDeliveryTimes(JSON.parse(data.systemSettings.batchDeliveryTimes)); } catch(e){}
+            }
+            if (data.systemSettings.batchCutoffMinutes) setBatchCutoffMinutes(Number(data.systemSettings.batchCutoffMinutes));
+            if (data.systemSettings.batchCategoryCutoffs) {
+              try { setBatchCategoryCutoffs(JSON.parse(data.systemSettings.batchCategoryCutoffs)); } catch(e){}
+            }
+            if (data.systemSettings.batchExcludedZones) {
+              try { setBatchExcludedZones(JSON.parse(data.systemSettings.batchExcludedZones)); } catch(e){}
+            }
+            if (data.systemSettings.batchDiscountType) setBatchDiscountType(data.systemSettings.batchDiscountType as any);
+            if (data.systemSettings.batchDiscountValue) setBatchDiscountValue(Number(data.systemSettings.batchDiscountValue));
             if (data.systemSettings.surgeConfig) {
               try { setSurgeConfig(JSON.parse(data.systemSettings.surgeConfig)); } catch(e){}
             }
@@ -878,6 +910,33 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_global_free_delivery", String(isEnabled));
   };
 
+  const updateBatchDeliveryTimes = (times: string[]) => {
+    setBatchDeliveryTimes(times);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchDeliveryTimes", value: JSON.stringify(times) });
+  };
+
+  const updateBatchCutoffMinutes = (minutes: number) => {
+    setBatchCutoffMinutes(minutes);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchCutoffMinutes", value: String(minutes) });
+  };
+
+  const updateBatchCategoryCutoffs = (cutoffs: Record<string, number>) => {
+    setBatchCategoryCutoffs(cutoffs);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchCategoryCutoffs", value: JSON.stringify(cutoffs) });
+  };
+
+  const updateBatchExcludedZones = (zones: string[]) => {
+    setBatchExcludedZones(zones);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchExcludedZones", value: JSON.stringify(zones) });
+  };
+
+  const updateBatchDiscount = (type: "free" | "flat" | "percentage", value: number) => {
+    setBatchDiscountType(type);
+    setBatchDiscountValue(value);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchDiscountType", value: type });
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchDiscountValue", value: String(value) });
+  };
+
   const updateSurgeConfig = (config: Partial<SystemSurgeConfig>) => {
     setSurgeConfig(prev => {
       const updated = { ...prev, ...config };
@@ -1006,6 +1065,61 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (addr.includes("fate")) return "fate";
     if (addr.includes("adewole")) return "adewole";
     return "other";
+  };
+
+  /**
+   * Returns the batch delivery slots currently selectable for a given
+   * vendor, right now. Only ever returns slots from today (still open) or,
+   * once today's are exhausted, tomorrow -- never further out than that.
+   * Each entry includes the resolved batchDate/batchTime and whether the
+   * discount applies (it always does for a returned slot, since anything
+   * past its cutoff is already excluded).
+   */
+  const getAvailableBatchSlots = (vendorId: string, deliveryAddress?: string): { date: string; time: string; label: string }[] => {
+    if (!batchDeliveryTimes || batchDeliveryTimes.length === 0) return [];
+
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor) return [];
+    if (vendor.batchDeliveryEnabled === false) return []; // vendor opted out
+
+    if (deliveryAddress) {
+      const lowerAddress = deliveryAddress.toLowerCase();
+      const isZoneExcluded = batchExcludedZones.some(z => lowerAddress.includes(z.toLowerCase()));
+      if (isZoneExcluded) return [];
+    }
+
+    // Effective cutoff: vendor's own override > their category's setting > platform default
+    const categoryDefault = vendor.category ? batchCategoryCutoffs[vendor.category] : undefined;
+    const effectiveCutoffMinutes = vendor.batchCutoffOverrideMinutes ?? categoryDefault ?? batchCutoffMinutes;
+
+    const now = new Date();
+    const results: { date: string; time: string; label: string }[] = [];
+
+    // Check today first, then tomorrow -- never further.
+    for (let dayOffset = 0; dayOffset <= 1 && results.length === 0; dayOffset++) {
+      const targetDate = new Date(now);
+      targetDate.setDate(targetDate.getDate() + dayOffset);
+      const dateStr = targetDate.toISOString().split("T")[0];
+
+      for (const time of batchDeliveryTimes) {
+        const batchDateTime = new Date(`${dateStr}T${time}:00`);
+        const cutoffTime = new Date(batchDateTime.getTime() - effectiveCutoffMinutes * 60000);
+        if (now <= cutoffTime) {
+          const label = dayOffset === 0 ? `Today, ${time}` : `Tomorrow, ${time}`;
+          results.push({ date: dateStr, time, label });
+        }
+      }
+    }
+
+    return results;
+  };
+
+  /** Applies the configured batch discount to a normal delivery fee. */
+  const applyBatchDiscount = (normalDeliveryFee: number): number => {
+    if (batchDiscountType === "free") return 0;
+    if (batchDiscountType === "flat") return Math.max(0, normalDeliveryFee - batchDiscountValue);
+    // percentage
+    return Math.max(0, Math.round(normalDeliveryFee - (normalDeliveryFee * batchDiscountValue) / 100));
   };
 
   const calculateDeliveryFee = (vendorId: string | undefined, subtotal: number, deliveryAddress?: string, isReceiptPickup?: boolean): number => {
@@ -1770,7 +1884,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const clearCart = () => setCart([]);
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
     let activeUser = currentUser;
     if (!activeUser) {
       const savedSession = localStorage.getItem("fd_session_user");
@@ -1806,8 +1920,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return sum + ((item.product.price + addonCost) * item.quantity);
     }, 0);
     const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
-    const deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress, isReceiptPickup);
+    let deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress, isReceiptPickup);
     const serviceFee = isReceiptPickup ? (receiptPickupConfig.flatServiceFee || 0) : calculateServiceFee(vendorObj.id, total);
+
+    // Batch delivery: re-validate the selection is still actually open right
+    // now (the customer may have sat on the checkout page long enough for
+    // the cutoff to pass) and apply the discount to the delivery fee.
+    if (options?.batchDate && options?.batchTime) {
+      const stillValid = getAvailableBatchSlots(vendorObj.id, deliveryAddress).some(
+        s => s.date === options.batchDate && s.time === options.batchTime
+      );
+      if (!stillValid) {
+        return { success: false, error: "That batch is no longer available. Please choose a different one or order now." };
+      }
+      deliveryFee = applyBatchDiscount(deliveryFee);
+    }
 
     try {
       let token = localStorage.getItem("fd_jwt_token");
@@ -1859,6 +1986,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           receiptImage,
           receiptImageOrQr: options?.receiptImageOrQr,
           receiptNote: options?.receiptNote,
+          batchDate: options?.batchDate,
+          batchTime: options?.batchTime,
           items: isReceiptPickup ? [] : cart.map(item => ({
             productId: item.product.id,
             name: item.product.name,
@@ -1930,6 +2059,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         paymentReceiptUrl: receiptImage,
         receiptImageOrQr: options?.receiptImageOrQr,
         receiptNote: options?.receiptNote,
+        batchDate: options?.batchDate,
+        batchTime: options?.batchTime,
         items: isReceiptPickup ? [] : cart.map(item => ({
           id: "oi-" + generateId(),
           orderId: data.orderId,
@@ -3059,6 +3190,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateGlobalServiceFeeSettings,
         globalFreeDelivery,
         updateGlobalFreeDelivery,
+        batchDeliveryTimes,
+        updateBatchDeliveryTimes,
+        batchCutoffMinutes,
+        updateBatchCutoffMinutes,
+        batchCategoryCutoffs,
+        updateBatchCategoryCutoffs,
+        batchExcludedZones,
+        updateBatchExcludedZones,
+        batchDiscountType,
+        batchDiscountValue,
+        updateBatchDiscount,
+        getAvailableBatchSlots,
         surgeConfig,
         updateSurgeConfig,
         legalContent,
