@@ -56,6 +56,8 @@ interface DatabaseContextType {
   updateGlobalServiceFeeSettings: (type: "category" | "flat" | "percentage", value: number) => void;
   globalFreeDelivery: boolean;
   updateGlobalFreeDelivery: (isEnabled: boolean) => void;
+  batchDeliverySystemEnabled: boolean;
+  updateBatchDeliverySystemEnabled: (isEnabled: boolean) => void;
   batchDeliveryTimes: string[];
   updateBatchDeliveryTimes: (times: string[]) => void;
   batchCutoffMinutes: number;
@@ -438,6 +440,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [vendorCategories, setVendorCategories] = useState<VendorCategoryInfo[]>([]);
 
   // Batch Delivery config -- admin-controlled schedule + discount + cutoffs
+  // Platform-wide master switch. When off, no new batch selections are
+  // offered or accepted -- but any order already placed with a batch
+  // continues through the normal order pipeline untouched. Distinct from
+  // vendor.batchDeliveryEnabled, which is a single vendor's own opt-out.
+  const [batchDeliverySystemEnabled, setBatchDeliverySystemEnabled] = useState<boolean>(true);
   const [batchDeliveryTimes, setBatchDeliveryTimes] = useState<string[]>([]); // e.g. ["09:00","13:00","17:00"]
   const [batchCutoffMinutes, setBatchCutoffMinutes] = useState<number>(60); // platform-wide default lead time
   const [batchCategoryCutoffs, setBatchCategoryCutoffs] = useState<Record<string, number>>({}); // per vendor-category override
@@ -587,6 +594,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (data.systemSettings.globalServiceFeeType) setGlobalServiceFeeType(data.systemSettings.globalServiceFeeType as any);
             if (data.systemSettings.globalServiceFeeValue) setGlobalServiceFeeValue(Number(data.systemSettings.globalServiceFeeValue));
             if (data.systemSettings.globalFreeDelivery) setGlobalFreeDelivery(data.systemSettings.globalFreeDelivery === "true");
+            if (data.systemSettings.batchDeliverySystemEnabled) setBatchDeliverySystemEnabled(data.systemSettings.batchDeliverySystemEnabled === "true");
             if (data.systemSettings.batchDeliveryTimes) {
               try { setBatchDeliveryTimes(JSON.parse(data.systemSettings.batchDeliveryTimes)); } catch(e){}
             }
@@ -911,6 +919,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_global_free_delivery", String(isEnabled));
   };
 
+  const updateBatchDeliverySystemEnabled = (isEnabled: boolean) => {
+    setBatchDeliverySystemEnabled(isEnabled);
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "batchDeliverySystemEnabled", value: String(isEnabled) });
+  };
+
   const updateBatchDeliveryTimes = (times: string[]) => {
     setBatchDeliveryTimes(times);
     syncSave("SYSTEM_SETTING_UPSERT", { key: "batchDeliveryTimes", value: JSON.stringify(times) });
@@ -1077,6 +1090,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
    * past its cutoff is already excluded).
    */
   const getAvailableBatchSlots = (vendorId: string, deliveryAddress?: string): { date: string; time: string; label: string }[] => {
+    if (!batchDeliverySystemEnabled) return []; // platform-wide kill switch
     if (!batchDeliveryTimes || batchDeliveryTimes.length === 0) return [];
 
     const vendor = vendors.find(v => v.id === vendorId);
@@ -3191,6 +3205,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateGlobalServiceFeeSettings,
         globalFreeDelivery,
         updateGlobalFreeDelivery,
+        batchDeliverySystemEnabled,
+        updateBatchDeliverySystemEnabled,
         batchDeliveryTimes,
         updateBatchDeliveryTimes,
         batchCutoffMinutes,
