@@ -71,10 +71,28 @@ function AppShell() {
   const { isInitialLoading } = useDatabase();
 
   if (isInitialLoading) {
+    // The logo itself comes from the same data fetch this screen is
+    // waiting on, so it can't show on a genuinely first-ever visit --
+    // this reads whatever was cached from the last successful load
+    // instead. Purely cosmetic; never used as a source of truth.
+    let cachedLogo = "";
+    try { cachedLogo = localStorage.getItem("fd_cached_brand_logo") || ""; } catch {}
+
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white">
-        <div className="w-10 h-10 border-4 border-gray-200 border-t-slate-900 rounded-full animate-spin" />
-        <p className="text-sm font-semibold text-gray-400">Loading...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-5 bg-[#070329]">
+        {cachedLogo ? (
+          <img
+            src={cachedLogo}
+            alt="Owode Food"
+            className="w-20 h-20 object-contain rounded-2xl animate-pulse"
+          />
+        ) : (
+          <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center text-4xl animate-pulse">
+            🍲
+          </div>
+        )}
+        <div className="w-8 h-8 border-[3px] border-white/20 border-t-white rounded-full animate-spin" />
+        <p className="text-sm font-semibold text-white/60">Loading Owode Food...</p>
       </div>
     );
   }
