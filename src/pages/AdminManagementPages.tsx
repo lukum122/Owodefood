@@ -3094,6 +3094,8 @@ export const AdminSettings: React.FC = () => {
     orders,
     updateAdminSettings,
     saveReceiptPickupConfig,
+    batchDeliverySystemEnabled,
+    updateBatchDeliverySystemEnabled,
     batchDeliveryTimes,
     updateBatchDeliveryTimes,
     batchCutoffMinutes,
@@ -3547,9 +3549,25 @@ export const AdminSettings: React.FC = () => {
           <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center p-1 shadow-md shadow-emerald-100">
             <Layers className="w-8 h-8" />
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="font-bold text-lg text-gray-950">Batch Delivery</h3>
             <p className="text-xs text-gray-400">Customers can schedule into a batch for free/discounted delivery. Batch times apply platform-wide; only the lead-time cutoff can be adjusted per category or per vendor.</p>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className={`text-[10px] font-bold ${batchDeliverySystemEnabled ? "text-emerald-600" : "text-gray-400"}`}>
+                {batchDeliverySystemEnabled ? "ON" : "OFF"}
+              </span>
+              <input
+                type="checkbox"
+                checked={batchDeliverySystemEnabled}
+                onChange={(e) => updateBatchDeliverySystemEnabled(e.target.checked)}
+                className="w-9 h-5 cursor-pointer accent-emerald-600"
+              />
+            </label>
+            {!batchDeliverySystemEnabled && (
+              <span className="text-[9px] text-amber-600 font-bold max-w-[140px] text-right">Orders already in progress will still complete normally.</span>
+            )}
           </div>
         </div>
 
