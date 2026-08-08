@@ -18,6 +18,11 @@ export const AdminOrders: React.FC = () => {
     currentUser
   } = useDatabase();
 
+  // Tracks which specific order (and which action) is currently mid-flight,
+  // so the button can show real feedback instead of appearing to do
+  // nothing while the request is in progress.
+  const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
+
   const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification">("standard");
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PAGE_SIZE = 25;
@@ -35,21 +40,28 @@ export const AdminOrders: React.FC = () => {
 
   const handleVerifyPayment = async (id: string, action: "approve" | "reject") => {
     if (action === "approve") {
+      if (!window.confirm("Approve this payment? The order will move to Pending and become visible to the vendor.")) {
+        return;
+      }
+      setVerifyingOrderId(id);
       const result = await updateVendorOrder(id, "pending", {
         verifiedBy: currentUser?.id || "admin",
         verifiedAt: new Date().toISOString(),
       });
+      setVerifyingOrderId(null);
       if (!result?.success) {
         window.alert(result?.error || "Failed to approve the payment. Please try again.");
       }
     } else {
       const reason = prompt("Enter rejection reason:");
       if (!reason) return; // cancelled prompt
+      setVerifyingOrderId(id);
       const result = await updateVendorOrder(id, "awaiting_payment_verification", {
         rejectedBy: currentUser?.id || "admin",
         rejectedAt: new Date().toISOString(),
         rejectionReason: reason,
       });
+      setVerifyingOrderId(null);
       if (!result?.success) {
         window.alert(result?.error || "Failed to reject the payment. Please try again.");
       }
@@ -889,7 +901,14 @@ export const AdminOrders: React.FC = () => {
                     {orders.filter(o => o.status === "awaiting_payment_verification").map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50">
                         <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id.slice(0, 8)}</td>
-                        <td className="py-3.5 px-4 font-bold text-gray-800">{o.vendorName}</td>
+                        <td className="py-3.5 px-4 font-bold text-gray-800">
+                          {o.vendorName}
+                          {o.rejectedAt && (
+                            <div className="mt-1 text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1 inline-block normal-case">
+                              ⚠ Previously rejected: {o.rejectionReason || "No reason given"}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-3.5 px-4 text-gray-600">{o.customerName}</td>
                         <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
                         <td className="py-3.5 px-4">
@@ -908,16 +927,18 @@ export const AdminOrders: React.FC = () => {
                         <td className="py-3.5 px-4 text-center">
                           <div className="flex gap-1.5 justify-center">
                             <button
+                              disabled={verifyingOrderId === o.id}
                               onClick={() => handleVerifyPayment(o.id, "approve")}
-                              className="py-1 px-2.5 bg-green-50 hover:bg-green-100 text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
+                              className="py-1 px-2.5 bg-green-50 hover:bg-green-100 disabled:opacity-50 disabled:cursor-wait text-green-700 font-bold border border-green-100 rounded-lg cursor-pointer text-[10px] transition"
                             >
-                              Approve
+                              {verifyingOrderId === o.id ? "Working..." : "Approve"}
                             </button>
                             <button
+                              disabled={verifyingOrderId === o.id}
                               onClick={() => handleVerifyPayment(o.id, "reject")}
-                              className="py-1 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-100 rounded-lg cursor-pointer text-[10px] transition"
+                              className="py-1 px-2.5 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 disabled:cursor-wait text-rose-700 font-bold border border-rose-100 rounded-lg cursor-pointer text-[10px] transition"
                             >
-                              Reject
+                              {verifyingOrderId === o.id ? "Working..." : "Reject"}
                             </button>
                           </div>
                         </td>
