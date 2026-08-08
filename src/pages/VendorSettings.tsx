@@ -47,6 +47,8 @@ export const VendorSettings: React.FC = () => {
   const [prepTime, setPrepTime] = useState<number>(currentVendor?.prepTime || 20);
   const [deliveryFee, setDeliveryFee] = useState<number>(currentVendor?.deliveryFee || 750);
   const [receiptPickupEnabled, setReceiptPickupEnabled] = useState<boolean>(currentVendor?.receiptPickupEnabled !== false);
+  const [batchDeliveryEnabled, setBatchDeliveryEnabled] = useState<boolean>(currentVendor?.batchDeliveryEnabled !== false);
+  const [batchCutoffOverride, setBatchCutoffOverride] = useState<string>(currentVendor?.batchCutoffOverrideMinutes != null ? String(currentVendor.batchCutoffOverrideMinutes) : "");
   const [isTemporarilyClosed, setIsTemporarilyClosed] = useState<boolean>(currentVendor?.isTemporarilyClosed || false);
 
   const [errorStr, setErrorStr] = useState("");
@@ -89,6 +91,8 @@ export const VendorSettings: React.FC = () => {
       setPrepTime(currentVendor.prepTime || 20);
       setDeliveryFee(currentVendor.deliveryFee || 750);
       setReceiptPickupEnabled(currentVendor.receiptPickupEnabled !== false);
+      setBatchDeliveryEnabled(currentVendor.batchDeliveryEnabled !== false);
+      setBatchCutoffOverride(currentVendor.batchCutoffOverrideMinutes != null ? String(currentVendor.batchCutoffOverrideMinutes) : "");
       setIsTemporarilyClosed(currentVendor.isTemporarilyClosed || false);
       hasInitialized.current = true;
       const dist = availableLocations.find(loc => {
@@ -177,6 +181,8 @@ export const VendorSettings: React.FC = () => {
         prepTime,
         deliveryFee,
         receiptPickupEnabled,
+        batchDeliveryEnabled,
+        batchCutoffOverrideMinutes: batchCutoffOverride === "" ? null : Math.max(0, Number(batchCutoffOverride) || 0),
         isTemporarilyClosed,
       });
 
@@ -433,6 +439,39 @@ export const VendorSettings: React.FC = () => {
                 />
               </label>
             </div>
+
+            {/* Batch Delivery Toggle */}
+            <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
+              <div>
+                <label className="text-[11px] font-bold text-gray-800 block">Participate in Batch Delivery</label>
+                <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Let customers schedule orders into an admin-coordinated batch for free/discounted delivery. "Buy now" always stays available regardless of this setting.</span>
+              </div>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={batchDeliveryEnabled}
+                  onChange={(e) => setBatchDeliveryEnabled(e.target.checked)}
+                  className="w-5 h-5 text-emerald-600 focus:ring-emerald-100 border-gray-300 rounded cursor-pointer"
+                />
+              </label>
+            </div>
+
+            {batchDeliveryEnabled && (
+              <div className="pt-2 flex items-center justify-between">
+                <div>
+                  <label className="text-[11px] font-bold text-gray-800 block">Your Batch Cutoff Override (minutes)</label>
+                  <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Leave blank to use your category's default lead time.</span>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={batchCutoffOverride}
+                  onChange={(e) => setBatchCutoffOverride(e.target.value)}
+                  placeholder="default"
+                  className="w-24 text-xs p-2 border border-gray-150 rounded-xl bg-gray-50/50 outline-none text-right"
+                />
+              </div>
+            )}
 
             {/* Temporarily Closed Toggle */}
             <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
