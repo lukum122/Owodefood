@@ -38,6 +38,8 @@ export const vendors = pgTable("vendors", {
   commissionType: text("commission_type"), // flat | percentage
   commissionValue: integer("commission_value"),
   freeDelivery: boolean("free_delivery").default(false),
+  batchDeliveryEnabled: boolean("batch_delivery_enabled").default(true), // vendor's own opt-out toggle - defaults to participating
+  batchCutoffOverrideMinutes: integer("batch_cutoff_override_minutes"), // null = inherit category/platform default
 }, (table) => ({
   userIdIdx: index("vendors_user_id_idx").on(table.userId),
 }));
@@ -87,6 +89,8 @@ export const orders = pgTable("orders", {
   orderType: text("order_type").default("standard"),
   receiptImageOrQr: text("receipt_image_or_qr"),
   receiptNote: text("receipt_note"),
+  batchDate: text("batch_date"), // e.g. "2026-08-10" -- set only for batch-delivery orders
+  batchTime: text("batch_time"), // e.g. "13:00" -- the batch slot the customer chose
 }, (table) => ({
   customerIdIdx: index("orders_customer_id_idx").on(table.customerId),
   vendorIdIdx: index("orders_vendor_id_idx").on(table.vendorId),
