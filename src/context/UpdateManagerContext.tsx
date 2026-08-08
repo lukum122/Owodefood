@@ -22,6 +22,21 @@ export const useUpdateManager = () => {
 };
 
 const DISMISSED_VERSION_KEY = "fd_dismissed_update_version";
+const DISMISSED_AT_KEY = "fd_dismissed_update_at";
+
+// How long a fresh session waits before it's even allowed to show an
+// update prompt. This exists specifically so a brand-new visitor (whose
+// very first load can race with a just-finished deploy across Vercel's
+// edge cache) never gets told "update available" the moment they land --
+// they're already on the current version; there's nothing to update from.
+const STARTUP_GRACE_PERIOD_MS = 60 * 1000;
+
+// After a dismissal, don't re-show the banner for this long even if one of
+// the two detection sources fires again on its own -- unless the server
+// reports a version that's genuinely different from the one dismissed,
+// which overrides the cooldown since that's a real new update, not the
+// same one re-triggering.
+const DISMISS_COOLDOWN_MS = 30 * 60 * 1000;
 
 export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [criticalOperationsCount, setCriticalOperationsCount] = useState(0);
@@ -29,17 +44,22 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   const [lastActivityTime, setLastActivityTime] = useState<number>(Date.now());
   const [serverVersion, setServerVersion] = useState<string | null>(null);
 
-  // The specific new version currently being offered, and whichever version
-  // was last dismissed (persisted, so it survives reloads/tab switches).
-  // If they match, we already know the person said "not right now" to this
-  // exact update, so we don't nag them again until a genuinely newer version
-  // shows up — instead of forgetting that choice on every reload.
+  const appMountTimeRef = useRef<number>(Date.now());
   const pendingVersionRef = useRef<string | null>(null);
   const dismissedVersionRef = useRef<string | null>(
     typeof window !== "undefined" ? localStorage.getItem(DISMISSED_VERSION_KEY) : null
   );
+  const dismissedAtRef = useRef<number>(
+    typeof window !== "undefined" ? Number(localStorage.getItem(DISMISSED_AT_KEY)) || 0 : 0
+  );
 
-  // Initialize SW updater
+  // Initialize SW updater. Note: `needRefresh` can become true from the
+  // library's own internal detection, completely independent of the
+  // custom /api/version polling below -- that mismatch (two sources,
+  // only one respecting dismissal) was the actual cause of the banner
+  // reappearing after being dismissed once. The unified "shouldShow"
+  // logic further down is what actually fixes it, by gating on both
+  // sources through the same grace-period + cooldown rules.
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -54,7 +74,18 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     },
   });
 
-  const isUpdateAvailable = needRefresh;
+  // Unified visibility rule, regardless of which of the two sources
+  // (native SW detection or the custom version poll) flipped the
+  // underlying "an update exists" signal:
+  // 1. Never show within the startup grace period (fresh-visit noise).
+  // 2. Never show during a dismissal cooldown, unless the server-reported
+  //    version has genuinely changed since the dismissal.
+  const withinGracePeriod = Date.now() - appMountTimeRef.current < STARTUP_GRACE_PERIOD_MS;
+  const withinDismissCooldown =
+    Date.now() - dismissedAtRef.current < DISMISS_COOLDOWN_MS &&
+    (!pendingVersionRef.current || pendingVersionRef.current === dismissedVersionRef.current);
+
+  const isUpdateAvailable = needRefresh && !withinGracePeriod && !withinDismissCooldown;
 
   // Poll backend for new versions every 5 minutes
   useEffect(() => {
@@ -67,12 +98,6 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
             const data = await res.json();
             if (serverVersion && serverVersion !== data.version) {
               pendingVersionRef.current = data.version;
-              // If this exact version was already dismissed before (e.g. on
-              // a prior page load), keep the banner suppressed for it.
-              // A version we haven't seen dismissed yet will show normally.
-              if (dismissedVersionRef.current !== data.version) {
-                setIsBannerDismissed(false);
-              }
               setNeedRefresh(true);
             } else if (!serverVersion) {
               setServerVersion(data.version);
@@ -152,13 +177,17 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const dismissUpdateBanner = useCallback(() => {
     setIsBannerDismissed(true);
-    if (pendingVersionRef.current) {
-      dismissedVersionRef.current = pendingVersionRef.current;
-      try {
+    dismissedAtRef.current = Date.now();
+    // Record whichever version triggered this (if known via the custom
+    // poll) so a genuinely newer version can still override the cooldown.
+    dismissedVersionRef.current = pendingVersionRef.current;
+    try {
+      localStorage.setItem(DISMISSED_AT_KEY, String(dismissedAtRef.current));
+      if (pendingVersionRef.current) {
         localStorage.setItem(DISMISSED_VERSION_KEY, pendingVersionRef.current);
-      } catch {
-        // localStorage unavailable — dismissal just won't persist across reloads, not fatal
       }
+    } catch {
+      // localStorage unavailable — dismissal just won't persist across reloads, not fatal
     }
   }, []);
 

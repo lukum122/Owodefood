@@ -34,6 +34,8 @@ interface DatabaseContextType {
   updateHomepageSections: (sections: HomepageSection[]) => void;
   collections: Collection[];
   updateCollections: (collections: Collection[]) => void;
+  brandLogo: string;
+  updateBrandLogo: (logoDataUrl: string) => void;
   heroBanner: HeroBannerConfig;
   updateHeroBanner: (config: HeroBannerConfig) => void;
 
@@ -297,6 +299,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCollections(colls);
     syncSave("SYSTEM_SETTING_UPSERT", { key: "collections", value: JSON.stringify(colls) });
   };
+
+  // Uploadable brand logo (base64 data URL). Empty string = no logo
+  // uploaded yet, in which case the app falls back to a styled letter or
+  // food-themed default wherever it's used.
+  const [brandLogo, setBrandLogo] = useState<string>("");
 
   const [heroBanner, setHeroBanner] = useState<HeroBannerConfig>({
     isEnabled: true,
@@ -616,6 +623,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 if (parsed) setReceiptPickupConfig(parsed);
               } catch(e){}
             }
+            if (data.systemSettings.brandLogo) {
+              setBrandLogo(data.systemSettings.brandLogo);
+              // Cached purely so the loading screen (which renders before
+              // this data exists) can show the last-known logo on the
+              // *next* load instead of a generic fallback. Cosmetic only —
+              // never used as a source of truth anywhere else.
+              try { localStorage.setItem("fd_cached_brand_logo", data.systemSettings.brandLogo); } catch {}
+            }
             if (data.systemSettings.heroBanner) {
               try {
                 const parsed = JSON.parse(data.systemSettings.heroBanner);
@@ -917,6 +932,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateGlobalFreeDelivery = (isEnabled: boolean) => {
     setGlobalFreeDelivery(isEnabled);
     localStorage.setItem("fd_global_free_delivery", String(isEnabled));
+  };
+
+  const updateBrandLogo = (logoDataUrl: string) => {
+    setBrandLogo(logoDataUrl);
+    try {
+      if (logoDataUrl) {
+        localStorage.setItem("fd_cached_brand_logo", logoDataUrl);
+      } else {
+        localStorage.removeItem("fd_cached_brand_logo");
+      }
+    } catch {}
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "brandLogo", value: logoDataUrl });
   };
 
   const updateBatchDeliverySystemEnabled = (isEnabled: boolean) => {
@@ -3184,6 +3211,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateHomepageSections,
         collections,
         updateCollections,
+        brandLogo,
+        updateBrandLogo,
         heroBanner,
         updateHeroBanner,
         availableLocations,
