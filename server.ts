@@ -68,9 +68,19 @@ const verifyTokenOptional = (req: express.Request, res: express.Response, next: 
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import compression from "compression";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Compresses every response before it goes over the wire (gzip/brotli,
+// negotiated automatically per-client). Purely transport-level -- no
+// data shape, field, or endpoint behavior changes at all, so nothing
+// that already works can break from this. JSON responses in particular
+// compress very well (repeated field names like "customerId" across
+// many orders), and it's completely transparent to every consumer since
+// fetch()/res.json() handle decompression automatically on both ends.
+app.use(compression());
 
 // Socket.io Server Setup
 const server = http.createServer(app);
