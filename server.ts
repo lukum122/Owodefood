@@ -2277,7 +2277,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         target: systemSettings.key,
         set: { value: newVersion },
       });
-      io.emit("sync_update", { type, payload, version: newVersion });
+      // Prefer the server-confirmed record over the raw client payload --
+      // the payload is exactly what the client submitted, which may be
+      // missing fields the server itself computed (like a recalculated
+      // rating). Falls back to payload for types with no confirmed
+      // record captured above.
+      const confirmedData = responseExtra.order || responseExtra.vendor || responseExtra.product || payload;
+      io.emit("sync_update", { type, payload: confirmedData, version: newVersion });
     } else {
       // Everything else here is personal/operational data — a single
       // user's own profile edit, one order, one rider's status — and has
@@ -2287,6 +2293,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       // still sees the change within ~15s via the regular lightweight
       // version-check poll, so nothing is silently missed — it's just
       // not instantly pushed to strangers it has nothing to do with.
+      const confirmedData = responseExtra.order || responseExtra.vendor || responseExtra.product || payload;
       const notifyRooms = new Set<string>(["admin"]);
       if (payload?.id) notifyRooms.add(payload.id);
       if (payload?.customerId) notifyRooms.add(payload.customerId);
@@ -2295,7 +2302,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       if (payload?.userId) notifyRooms.add(payload.userId);
 
       for (const room of notifyRooms) {
-        io.to(room).emit("sync_update", { type, payload });
+        io.to(room).emit("sync_update", { type, payload: confirmedData });
       }
     }
 
