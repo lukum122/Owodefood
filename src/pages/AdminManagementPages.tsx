@@ -24,10 +24,10 @@ export const AdminOrders: React.FC = () => {
   // nothing while the request is in progress.
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
 
-  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all">("all");
+  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all" | "cancelled">("all");
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PAGE_SIZE = 25;
-  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification" | "batch" | "all") => {
+  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification" | "batch" | "all" | "cancelled") => {
     setOrderTypeTabRaw(tab);
     setOrdersPage(1); // reset to page 1 whenever the tab changes
   };
@@ -143,7 +143,8 @@ export const AdminOrders: React.FC = () => {
   // full orders list in context (so approve/reject/payout actions keep
   // working normally), just renders 25 rows at a time instead of
   // potentially hundreds at once.
-  const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification" && !(o.batchDate && o.batchTime));
+  const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification" && o.status !== "cancelled" && !(o.batchDate && o.batchTime));
+  const receiptPickupOrders = orders.filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled");
   const standardTotalPages = Math.max(1, Math.ceil(standardOrders.length / ORDERS_PAGE_SIZE));
   const standardPageOrders = standardOrders.slice((ordersPage - 1) * ORDERS_PAGE_SIZE, ordersPage * ORDERS_PAGE_SIZE);
 
@@ -739,7 +740,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <Truck className="w-4 h-4" /> Receipt Pickups ({orders.filter(o => o.orderType === "receipt_pickup").length})
+          <Truck className="w-4 h-4" /> Receipt Pickups ({receiptPickupOrders.length})
         </button>
         <button
           onClick={() => setOrderTypeTab("verification")}
@@ -760,6 +761,16 @@ export const AdminOrders: React.FC = () => {
           }`}
         >
           <Layers className="w-4 h-4" /> Batch Deliveries ({orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled", "awaiting_payment_verification"].includes(o.status)).length})
+        </button>
+        <button
+          onClick={() => setOrderTypeTab("cancelled")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "cancelled"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <XCircle className="w-4 h-4" /> Cancelled Orders ({orders.filter(o => o.status === "cancelled").length})
         </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
@@ -858,7 +869,7 @@ export const AdminOrders: React.FC = () => {
             </div>
           )
         ) : orderTypeTab === "receipt_pickup" ? (
-          orders.filter(o => o.orderType === "receipt_pickup").length > 0 ? (
+          receiptPickupOrders.length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
                 <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
@@ -878,7 +889,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
-                    {orders.filter(o => o.orderType === "receipt_pickup").map((rp: any) => (
+                    {receiptPickupOrders.map((rp: any) => (
                       <tr key={rp.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-3.5 px-4 font-mono font-bold text-sky-950">#{rp.id}</td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{rp.vendorName}</td>
@@ -1116,6 +1127,75 @@ export const AdminOrders: React.FC = () => {
                     </div>
                   );
                 })}
+              </div>
+            );
+          })()
+        ) : orderTypeTab === "cancelled" ? (
+          (() => {
+            const cancelledOrders = orders.filter(o => o.status === "cancelled");
+            if (cancelledOrders.length === 0) {
+              return (
+                <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+                  No cancelled orders on record.
+                </div>
+              );
+            }
+            return (
+              <div>
+                <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                  <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[900px]">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4">Order ID</th>
+                        <th className="py-3 px-4">Type</th>
+                        <th className="py-3 px-4">Merchant Node</th>
+                        <th className="py-3 px-4">Customer</th>
+                        <th className="py-3 px-4 font-mono text-right">Sum</th>
+                        <th className="py-3 px-4">Cancellation Context</th>
+                        <th className="py-3 px-4 text-center">Auditing Operations</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                      {cancelledOrders.map((o) => (
+                        <tr key={o.id} className="hover:bg-gray-50/50">
+                          <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id}</td>
+                          <td className="py-3.5 px-4">
+                            {o.batchDate && o.batchTime ? (
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Batch</span>
+                            ) : o.orderType === "receipt_pickup" ? (
+                              <span className="text-[9px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Pickup</span>
+                            ) : (
+                              <span className="text-[9px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Standard</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
+                          <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                          <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
+                          <td className="py-3.5 px-4">
+                            {o.rejectionReason ? (
+                              <div className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1 max-w-[180px] normal-case">
+                                ⚠ Cancelled after payment rejection: {o.rejectionReason}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 italic">No additional context recorded</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <button
+                              onClick={() => setSelectedOrder(o)}
+                              className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition mx-auto"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             );
           })()
