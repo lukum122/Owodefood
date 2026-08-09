@@ -1755,6 +1755,67 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                 </div>
                 `
               ).catch(err => console.error("Error sending order placement email:", err));
+
+              // Vendor notification -- previously vendors only got an
+              // in-app notification for a new order, nothing in their
+              // inbox. Reuses the same email infrastructure and template
+              // style already proven working for the customer email above.
+              if (payload.vendorId) {
+                const vendorRecord = await db.select().from(vendors).where(eq(vendors.id, payload.vendorId)).limit(1);
+                if (vendorRecord.length > 0 && vendorRecord[0].userId) {
+                  const vendorUserRecords = await db.select().from(users).where(eq(users.id, vendorRecord[0].userId)).limit(1);
+                  if (vendorUserRecords.length > 0 && vendorUserRecords[0].email) {
+                    sendEmailNotification(
+                      vendorUserRecords[0].email,
+                      `New Order Received! #${payload.id.substring(0, 8)} 🔔`,
+                      `
+                      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+                        <div style="text-align: center; margin-bottom: 24px;">
+                          <span style="font-size: 32px;">🔔</span>
+                          <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">New Order Received!</h2>
+                          <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Action Required</span>
+                        </div>
+                        <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello <strong>${payload.vendorName}</strong>,</p>
+                        <p style="font-size: 14px; color: #374151; line-height: 1.6;">You have a new order waiting to be accepted and prepared.</p>
+
+                        <div style="background-color: #f8fafc; border: 1px solid #f1f5f9; padding: 16px; border-radius: 12px; margin: 24px 0;">
+                          <span style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #64748b; display: block; margin-bottom: 8px;">Order Details</span>
+                          <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #334155;">
+                            <tr>
+                              <td style="padding: 4px 0; font-weight: bold; width: 120px;">Order ID:</td>
+                              <td style="padding: 4px 0; font-family: monospace; color: #0f172a;">#${payload.id}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-weight: bold;">Customer:</td>
+                              <td style="padding: 4px 0; font-weight: bold; color: #070329;">${payload.customerName || "Customer"}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-weight: bold;">Total Amount:</td>
+                              <td style="padding: 4px 0; font-weight: bold; color: #10b981;">₦${payload.totalAmount.toLocaleString()}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-weight: bold;">Delivery To:</td>
+                              <td style="padding: 4px 0;">${payload.deliveryAddress}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; font-weight: bold;">Payment Mode:</td>
+                              <td style="padding: 4px 0; font-family: monospace;">${payload.paymentMethod}</td>
+                            </tr>
+                          </table>
+                        </div>
+
+                        <p style="font-size: 14px; color: #374151; line-height: 1.6;">Please log in to your Owode Food vendor panel to accept and begin preparing this order.</p>
+
+                        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+                        <div style="text-align: center;">
+                          <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent via Owode Food Core Platform Services</p>
+                        </div>
+                      </div>
+                      `
+                    ).catch(err => console.error("Error sending vendor order notification email:", err));
+                  }
+                }
+              }
             } else if (statusChanged) {
               sendEmailNotification(
                 customerEmail,
