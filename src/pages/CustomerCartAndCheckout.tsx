@@ -338,6 +338,10 @@ export const CustomerCheckout: React.FC = () => {
   
   const [paymentMethod, setPaymentMethod] = useState("Credit Card");
   const [deliveryMode, setDeliveryMode] = useState<"now" | "batch">("now");
+  // Prevents a double-tap/double-click from firing handlePlaceOrder twice,
+  // which would create two genuinely separate order records in the
+  // database -- there was no guard against this at all before.
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<{ date: string; time: string; label: string } | null>(null);
 
   // Interactive Sandbox Funding Process for Checkout page
@@ -421,6 +425,7 @@ export const CustomerCheckout: React.FC = () => {
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingOrder) return; // already submitting -- ignore repeat taps
     if (!deliveryAddress.trim()) {
       setErrorWord("Please state a physical drop-off address.");
 
@@ -517,23 +522,28 @@ export const CustomerCheckout: React.FC = () => {
       }
     }
 
-    const { success, error } = await placeOrder(
-      deliveryAddress.trim(),
-      paymentMethod,
-      deliveryPhone.trim(),
-      paymentMethod === "Local Bank Transfer" ? receiptBase64 : undefined,
-      (deliveryMode === "batch" && selectedBatch) ? { batchDate: selectedBatch.date, batchTime: selectedBatch.time } : undefined
-    );
-    if (success) {
-      setIsOrdered(true);
-      window.scrollTo(0, 0);
-      setTimeout(() => {
-        navigate("/orders");
-      }, 2000);
-    } else {
-      setErrorWord(error || "Could not complete checkout. Please check your network and try again.");
+    setIsSubmittingOrder(true);
+    try {
+      const { success, error } = await placeOrder(
+        deliveryAddress.trim(),
+        paymentMethod,
+        deliveryPhone.trim(),
+        paymentMethod === "Local Bank Transfer" ? receiptBase64 : undefined,
+        (deliveryMode === "batch" && selectedBatch) ? { batchDate: selectedBatch.date, batchTime: selectedBatch.time } : undefined
+      );
+      if (success) {
+        setIsOrdered(true);
+        window.scrollTo(0, 0);
+        setTimeout(() => {
+          navigate("/orders");
+        }, 2000);
+      } else {
+        setErrorWord(error || "Could not complete checkout. Please check your network and try again.");
 
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -1430,14 +1440,18 @@ export const CustomerCheckout: React.FC = () => {
 
           <button
             type="submit"
-            disabled={cartVendor ? !isVendorOpen(cartVendor) : false}
+            disabled={(cartVendor ? !isVendorOpen(cartVendor) : false) || isSubmittingOrder}
             className={`w-full py-4 px-5 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-lg transition font-sans ${
-              cartVendor && !isVendorOpen(cartVendor) 
+              (cartVendor && !isVendorOpen(cartVendor)) || isSubmittingOrder
                 ? "bg-gray-300 cursor-not-allowed opacity-60" 
                 : "bg-[#070329] hover:bg-[#0ea5e9] cursor-pointer"
             }`}
           >
-            {cartVendor && !isVendorOpen(cartVendor) ? "Closed - Cannot Place Order" : "Authorize Purchase & Place Order"}
+            {cartVendor && !isVendorOpen(cartVendor)
+              ? "Closed - Cannot Place Order"
+              : isSubmittingOrder
+              ? "Placing Order..."
+              : "Authorize Purchase & Place Order"}
           </button>
         </div>
 
