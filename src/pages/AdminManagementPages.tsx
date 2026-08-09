@@ -16,13 +16,15 @@ export const AdminOrders: React.FC = () => {
     vatRate,
     acceptDelivery,
     riders,
-    currentUser
+    currentUser,
+    reopenCancelledOrder
   } = useDatabase();
 
   // Tracks which specific order (and which action) is currently mid-flight,
   // so the button can show real feedback instead of appearing to do
   // nothing while the request is in progress.
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
+  const [reopeningOrderId, setReopeningOrderId] = useState<string | null>(null);
 
   const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all" | "cancelled">("all");
   const [ordersPage, setOrdersPage] = useState(1);
@@ -38,6 +40,29 @@ export const AdminOrders: React.FC = () => {
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any | null>(null);
   const [receiptCancelTargetId, setReceiptCancelTargetId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
+  const handleReopenOrder = async (orderId: string) => {
+    const reason = prompt("Reason for reopening this cancelled order (required):");
+    if (!reason || !reason.trim()) {
+      if (reason !== null) window.alert("A reason is required to reopen a cancelled order.");
+      return; // cancelled prompt or empty reason
+    }
+    if (!window.confirm(`Reopen order #${orderId}? It will be restored to Pending and re-enter the normal order pipeline.`)) {
+      return;
+    }
+    setReopeningOrderId(orderId);
+    try {
+      const result = await reopenCancelledOrder(orderId, reason.trim());
+      if (!result?.success) {
+        window.alert(result?.error || "Failed to reopen the order. Please try again.");
+      }
+    } catch (err) {
+      console.error("[handleReopenOrder] Unexpected error while reopening:", err);
+      window.alert("Something went wrong while reopening this order. Please try again.");
+    } finally {
+      setReopeningOrderId(null);
+    }
+  };
 
   const handleVerifyPayment = async (id: string, action: "approve" | "reject") => {
     if (action === "approve") {
@@ -1184,12 +1209,21 @@ export const AdminOrders: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-center">
-                            <button
-                              onClick={() => setSelectedOrder(o)}
-                              className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition mx-auto"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => setSelectedOrder(o)}
+                                className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                              </button>
+                              <button
+                                disabled={reopeningOrderId === o.id}
+                                onClick={() => handleReopenOrder(o.id)}
+                                className="py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-wait text-emerald-700 rounded-lg font-bold border border-emerald-100 cursor-pointer text-[10px] transition"
+                              >
+                                {reopeningOrderId === o.id ? "Working..." : "Reopen"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
