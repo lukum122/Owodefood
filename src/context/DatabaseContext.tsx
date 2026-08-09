@@ -285,11 +285,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [collections, setCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
-    localStorage.setItem("fd_homepage_sections", JSON.stringify(homepageSections));
   }, [homepageSections]);
 
   useEffect(() => {
-    localStorage.setItem("fd_collections", JSON.stringify(collections));
   }, [collections]);
 
   const updateHomepageSections = (sections: HomepageSection[]) => {
@@ -316,7 +314,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   useEffect(() => {
-    localStorage.setItem("fd_hero_banner", JSON.stringify(heroBanner));
   }, [heroBanner]);
 
   const updateHeroBanner = (config: HeroBannerConfig) => {
@@ -330,12 +327,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   useEffect(() => {
-    localStorage.setItem("fd_receipt_pickup_config", JSON.stringify(receiptPickupConfig));
   }, [receiptPickupConfig]);
 
   const updateReceiptPickupConfig = (config: ReceiptPickupConfig) => {
     setReceiptPickupConfig(config);
-    localStorage.setItem("fd_receipt_pickup_config", JSON.stringify(config));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "receiptPickupConfig", value: JSON.stringify(config) });
   };
 
@@ -346,7 +341,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     try {
-      localStorage.setItem("fd_notifications", JSON.stringify(notifications));
     } catch (e) {
       console.error(e);
     }
@@ -358,7 +352,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     try {
-      localStorage.setItem("fd_user_balances", JSON.stringify(userBalances));
       if (userBalances["cust-1"] !== undefined) {
         localStorage.setItem("fd_wallet_balance", String(userBalances["cust-1"]));
         window.dispatchEvent(new Event("wallet-balance-updated"));
@@ -370,7 +363,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     try {
-      localStorage.setItem("fd_wallet_transactions", JSON.stringify(walletTransactions));
     } catch (e) {
       console.error(e);
     }
@@ -504,21 +496,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const newCategory: Category = { ...category, id: `cat-${Date.now()}` };
     const updated = [...categories, newCategory];
     setCategories(updated);
-    localStorage.setItem("fd_product_categories", JSON.stringify(updated));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
   };
 
   const updateProductCategory = (id: string, updates: Partial<Category>) => {
     const updated = categories.map(c => c.id === id ? { ...c, ...updates } : c);
     setCategories(updated);
-    localStorage.setItem("fd_product_categories", JSON.stringify(updated));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
   };
 
   const deleteProductCategory = (id: string) => {
     const updated = categories.filter(c => c.id !== id);
     setCategories(updated);
-    localStorage.setItem("fd_product_categories", JSON.stringify(updated));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "productCategories", value: JSON.stringify(updated) });
   };
 
@@ -801,18 +790,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateAvailableLocations = (locations: string[]) => {
     setAvailableLocations(locations);
-    localStorage.setItem("fd_available_locations", JSON.stringify(locations));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "availableLocations", value: JSON.stringify(locations) });
   };
 
   const updateCoverageGuideText = (text: string) => {
     setCoverageGuideText(text);
-    localStorage.setItem("fd_coverage_guide", text);
   };
 
   const updateExtremeLocationTiers = (tiers: ExtremeLocationTier[]) => {
     setExtremeLocationTiers(tiers);
-    localStorage.setItem("fd_extreme_tiers", JSON.stringify(tiers));
     syncSave("EXTREME_LOCATION_TIERS_BULK", tiers);
   };
 
@@ -832,7 +818,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const updated = [...extremeLocations, newLoc];
     setExtremeLocations(updated);
-    localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
     return { success: true };
   };
 
@@ -844,13 +829,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     const updated = extremeLocations.filter(item => item.id !== id);
     setExtremeLocations(updated);
-    localStorage.setItem("fd_extreme_locations", JSON.stringify(updated));
     return { success: true };
   };
 
   const updateExtremeLocations = (locations: ExtremeLocation[]) => {
     setExtremeLocations(locations);
-    localStorage.setItem("fd_extreme_locations", JSON.stringify(locations));
     syncSave("EXTREME_LOCATIONS_BULK", locations);
   };
 
@@ -865,40 +848,34 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     const updated = [...savedAddresses, newAddress];
     setSavedAddresses(updated);
-    localStorage.setItem("fd_saved_addresses", JSON.stringify(updated));
     syncSave("USER_SAVED_ADDRESSES_BULK", updated);
   };
 
   const removeSavedAddress = (id: string) => {
     const updated = savedAddresses.filter(item => item.id !== id);
     setSavedAddresses(updated);
-    localStorage.setItem("fd_saved_addresses", JSON.stringify(updated));
     syncSave("USER_SAVED_ADDRESS_DELETE", { id });
   };
 
   const updatePaymentGateways = (gateways: PaymentGateway[]) => {
     setPaymentGateways(gateways);
-    localStorage.setItem("fd_payment_gateways", JSON.stringify(gateways));
     syncSave("PAYMENT_GATEWAYS_BULK", gateways);
   };
 
   const updateCategoryServiceFee = (category: string, fee: number) => {
     const updated = { ...categoryServiceFees, [category]: fee };
     setCategoryServiceFees(updated);
-    localStorage.setItem("fd_category_service_fees", JSON.stringify(updated));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "categoryServiceFees", value: JSON.stringify(updated) });
   };
 
   const addVendorCategory = (newCat: VendorCategoryInfo) => {
     const updatedCats = [...vendorCategories, newCat];
     setVendorCategories(updatedCats);
-    localStorage.setItem("fd_vendor_categories", JSON.stringify(updatedCats));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "vendorCategories", value: JSON.stringify(updatedCats) });
 
     if (categoryServiceFees[newCat.id] === undefined) {
       const updatedFees = { ...categoryServiceFees, [newCat.id]: 300 };
       setCategoryServiceFees(updatedFees);
-      localStorage.setItem("fd_category_service_fees", JSON.stringify(updatedFees));
       syncSave("SYSTEM_SETTING_UPSERT", { key: "categoryServiceFees", value: JSON.stringify(updatedFees) });
     }
   };
@@ -906,20 +883,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const removeVendorCategory = (catId: string) => {
     const updatedCats = vendorCategories.filter(c => c.id !== catId);
     setVendorCategories(updatedCats);
-    localStorage.setItem("fd_vendor_categories", JSON.stringify(updatedCats));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "vendorCategories", value: JSON.stringify(updatedCats) });
 
     const updatedFees = { ...categoryServiceFees };
     delete updatedFees[catId];
     setCategoryServiceFees(updatedFees);
-    localStorage.setItem("fd_category_service_fees", JSON.stringify(updatedFees));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "categoryServiceFees", value: JSON.stringify(updatedFees) });
   };
 
   const updateVendorCategory = (catId: string, updatedFields: Partial<Omit<VendorCategoryInfo, "id">>) => {
     const updatedCats = vendorCategories.map(c => c.id === catId ? { ...c, ...updatedFields } : c);
     setVendorCategories(updatedCats);
-    localStorage.setItem("fd_vendor_categories", JSON.stringify(updatedCats));
     syncSave("SYSTEM_SETTING_UPSERT", { key: "vendorCategories", value: JSON.stringify(updatedCats) });
   };
 
@@ -982,7 +956,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateSurgeConfig = (config: Partial<SystemSurgeConfig>) => {
     setSurgeConfig(prev => {
       const updated = { ...prev, ...config };
-      localStorage.setItem("fd_surge_config", JSON.stringify(updated));
       return updated;
     });
   };
@@ -990,7 +963,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateLegalContent = (content: Partial<LegalContent>) => {
     setLegalContent(prev => {
       const updated = { ...prev, ...content };
-      localStorage.setItem("fd_legal_content", JSON.stringify(updated));
       return updated;
     });
   };
@@ -998,7 +970,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateContactInfo = (info: Partial<ContactInfo>) => {
     setContactInfo(prev => {
       const updated = { ...prev, ...info };
-      localStorage.setItem("fd_contact_info", JSON.stringify(updated));
       return updated;
     });
   };
@@ -1239,7 +1210,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     const updated = [...employees, newEmp];
     setEmployees(updated);
-    localStorage.setItem("fd_employees", JSON.stringify(updated));
     syncSave("EMPLOYEES_BULK", updated);
 
     // Also register them in users state so they can log in via quick login!
@@ -1258,7 +1228,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const updateEmployee = (id: string, updatedFields: Partial<Employee>) => {
     const updated = employees.map(emp => emp.id === id ? { ...emp, ...updatedFields } : emp);
     setEmployees(updated);
-    localStorage.setItem("fd_employees", JSON.stringify(updated));
     syncSave("EMPLOYEES_BULK", updated);
 
     // Keep users state synced too
@@ -1275,7 +1244,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const removeEmployee = (id: string) => {
     const updated = employees.filter(emp => emp.id !== id);
     setEmployees(updated);
-    localStorage.setItem("fd_employees", JSON.stringify(updated));
     syncSave("EMPLOYEE_DELETE", { id });
 
     // Also delete from users state
@@ -1338,31 +1306,26 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const persistUsers = (newUsers: User[]) => {
     const checkedUsers = ensureSuperAdminsOnly(newUsers);
     setUsers(checkedUsers);
-    localStorage.setItem("fd_users", JSON.stringify(checkedUsers));
     syncSave("USERS_BULK", checkedUsers);
   };
 
   const persistVendors = (newVendors: Vendor[]) => {
     setVendors(newVendors);
-    localStorage.setItem("fd_vendors", JSON.stringify(newVendors));
     return syncSave("VENDORS_BULK", newVendors);
   };
 
   const persistProducts = (newProducts: Product[]) => {
     setProducts(newProducts);
-    localStorage.setItem("fd_products", JSON.stringify(newProducts));
     syncSave("PRODUCTS_BULK", newProducts);
   };
 
   const persistOrders = (newOrders: Order[]) => {
     setOrders(newOrders);
-    localStorage.setItem("fd_orders", JSON.stringify(newOrders));
     syncSave("ORDERS_BULK", newOrders);
   };
 
   const persistRiders = (newRiders: Rider[]) => {
     setRiders(newRiders);
-    localStorage.setItem("fd_riders", JSON.stringify(newRiders));
     return syncSave("RIDERS_BULK", newRiders);
   };
 
@@ -1640,7 +1603,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Filter out previously rejected vendor profile to allow re-application
     const updatedVendors = vendors.filter(v => v.userId !== currentUser.id || v.status !== "rejected").concat(confirmedVendor);
     setVendors(updatedVendors);
-    localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
 
     addNotification(
       "admin",
@@ -1692,7 +1654,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Filter out previously rejected rider profile to allow re-application
     const updatedRiders = riders.filter(r => r.userId !== currentUser.id || r.status !== "rejected").concat(confirmedRider);
     setRiders(updatedRiders);
-    localStorage.setItem("fd_riders", JSON.stringify(updatedRiders));
 
     addNotification(
       "admin",
@@ -1793,7 +1754,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedUser = result.user ? { ...candidateUser, ...result.user } : candidateUser;
     const updatedUsers = users.map(u => u.id === currentUser.id ? confirmedUser : u);
     setUsers(updatedUsers);
-    localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
     setCurrentUser(confirmedUser);
     localStorage.setItem("fd_session_user", JSON.stringify(confirmedUser));
 
@@ -1829,7 +1789,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedUser = result.user ? { ...candidateUser, ...result.user, pin: newPin } : candidateUser;
     const updatedUsers = users.map(u => u.id === userId ? confirmedUser : u);
     setUsers(updatedUsers);
-    localStorage.setItem("fd_users", JSON.stringify(updatedUsers));
 
     if (currentUser && currentUser.id === userId) {
       setCurrentUser(confirmedUser);
@@ -2147,7 +2106,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // 1. Persist the review locally now that the server has confirmed it.
     const updatedReviews = [newReview, ...reviews];
     setReviews(updatedReviews);
-    localStorage.setItem("fd_reviews", JSON.stringify(updatedReviews));
 
     // 2. Use the vendor's average rating exactly as the server computed and
     // persisted it — the server recalculates this itself as part of saving
@@ -2159,7 +2117,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         v.id === vendorId ? { ...v, rating: result.vendorRating } : v
       );
       setVendors(updatedVendors);
-      localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
     }
 
     return { success: true };
@@ -2422,7 +2379,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
     const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
-    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
 
     // Notify Customer about status change
     if (extra?.rejectionReason) {
@@ -2491,7 +2447,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
     const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
-    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
 
     // Let admin know a corrected receipt is waiting for review again.
     const allAdmins = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
@@ -2525,7 +2480,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedProduct = result.product ? { ...newProduct, ...result.product } : newProduct;
     const newProducts = [...products, confirmedProduct];
     setProducts(newProducts);
-    localStorage.setItem("fd_products", JSON.stringify(newProducts));
 
     return { success: true };
   };
@@ -2541,7 +2495,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedProduct = result.product ? { ...updatedProduct, ...result.product } : updatedProduct;
     const newProducts = products.map(p => p.id === confirmedProduct.id ? confirmedProduct : p);
     setProducts(newProducts);
-    localStorage.setItem("fd_products", JSON.stringify(newProducts));
 
     return { success: true };
   };
@@ -2555,7 +2508,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const newProducts = products.filter(p => p.id !== productId);
     setProducts(newProducts);
-    localStorage.setItem("fd_products", JSON.stringify(newProducts));
 
     return { success: true };
   };
@@ -2574,7 +2526,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedVendor = result.vendor ? { ...currentVendor, ...result.vendor } : candidateVendor;
     const updatedVendors = vendors.map(v => v.id === currentVendor.id ? confirmedVendor : v);
     setVendors(updatedVendors);
-    localStorage.setItem("fd_vendors", JSON.stringify(updatedVendors));
     setCurrentVendor(confirmedVendor);
 
     return { success: true };
@@ -2605,7 +2556,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
     const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
-    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
 
     // Trigger customer notification
     addNotification(
@@ -2656,7 +2606,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
     const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
-    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
 
     if (status === "delivered") {
       // Notify customer
@@ -2718,7 +2667,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : candidateOrder;
     const updatedOrders = orders.map(o => (o.id === orderId ? confirmedOrder : o));
     setOrders(updatedOrders);
-    localStorage.setItem("fd_orders", JSON.stringify(updatedOrders));
 
     return { success: true };
   };
@@ -2737,7 +2685,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const confirmedRider = result.rider ? { ...currentRider, ...result.rider } : candidateRider;
     const updatedRiders = riders.map(r => r.id === currentRider.id ? confirmedRider : r);
     setRiders(updatedRiders);
-    localStorage.setItem("fd_riders", JSON.stringify(updatedRiders));
     setCurrentRider(confirmedRider);
 
     return { success: true };
@@ -2913,7 +2860,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
       const updated = [...employees, newEmp];
       setEmployees(updated);
-      localStorage.setItem("fd_employees", JSON.stringify(updated));
       syncSave("EMPLOYEES_BULK", updated);
     }
 
@@ -3015,7 +2961,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
         const updated = [...employees, newEmp];
         setEmployees(updated);
-        localStorage.setItem("fd_employees", JSON.stringify(updated));
         syncSave("EMPLOYEES_BULK", updated);
       }
     }
@@ -3124,7 +3069,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
       const updated = [...employees, newEmp];
       setEmployees(updated);
-      localStorage.setItem("fd_employees", JSON.stringify(updated));
       syncSave("EMPLOYEES_BULK", updated);
     } else if (employees.some(emp => emp.id === userId)) {
       // Sync or remove
@@ -3132,7 +3076,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Remove employee
         const updated = employees.filter(emp => emp.id !== userId);
         setEmployees(updated);
-        localStorage.setItem("fd_employees", JSON.stringify(updated));
         syncSave("EMPLOYEES_BULK", updated);
       } else {
         // Sync profile fields
@@ -3143,7 +3086,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           phone: fields.phone.trim()
         } : emp);
         setEmployees(updated);
-        localStorage.setItem("fd_employees", JSON.stringify(updated));
         syncSave("EMPLOYEES_BULK", updated);
       }
     }
