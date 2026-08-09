@@ -145,6 +145,7 @@ interface DatabaseContextType {
   // Rider Actions
   acceptDelivery: (orderId: string, riderId: string) => Promise<{ success: boolean; error?: string }>;
   updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  reopenCancelledOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   updateOrderPayoutStatus: (orderId: string, type: "rider" | "vendor", status: "pending" | "paid") => Promise<{ success: boolean; error?: string }>;
   updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
   
@@ -2649,6 +2650,26 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return { success: true };
   };
 
+  const reopenCancelledOrder = async (orderId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) return { success: false, error: "A reason is required to reopen a cancelled order." };
+
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return { success: false, error: "Order not found" };
+    if (orderToUpdate.status !== "cancelled") return { success: false, error: "Only cancelled orders can be reopened." };
+
+    const result = await syncSave("ORDER_REOPEN", { orderId, reason: trimmedReason });
+    if (!result?.success) {
+      console.error(`[reopenCancelledOrder] Failed to reopen order ${orderId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to reopen the order. Please check your connection and try again." };
+    }
+
+    const confirmedOrder = result.order ? { ...orderToUpdate, ...result.order } : { ...orderToUpdate, status: "pending" as OrderStatus };
+    setOrders(orders.map(o => (o.id === orderId ? confirmedOrder : o)));
+
+    return { success: true };
+  };
+
   const updateOrderPayoutStatus = async (orderId: string, type: "rider" | "vendor", status: "pending" | "paid"): Promise<{ success: boolean; error?: string }> => {
     const orderToUpdate = orders.find(o => o.id === orderId);
     if (!orderToUpdate) return { success: false, error: "Order not found" };
@@ -3329,6 +3350,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateVendorProfile,
         acceptDelivery,
         updateDeliveryStatus,
+        reopenCancelledOrder,
         updateOrderPayoutStatus,
         updateRiderProfile,
         toggleVendorStatus,
