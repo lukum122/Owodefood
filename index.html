@@ -6,6 +6,16 @@
     <title>Owode Food - Food Delivery Marketplace</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+
+    <!-- Fonts loaded via preconnect + link instead of a CSS @import --
+         @import is render-blocking and the browser can't even discover
+         the font request until after it's already downloaded and parsed
+         the CSS file containing it. This lets the browser start the
+         connection and the font fetch immediately, in parallel with
+         everything else. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
