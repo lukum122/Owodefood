@@ -19,6 +19,12 @@ export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string 
 export const CustomerOrders: React.FC = () => {
   const { orders, currentUser, currency, resubmitOrderReceipt } = useDatabase();
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  // Tracks which orders just had their receipt successfully resubmitted in
+  // this session, so the UI can show a clear confirmation instead of
+  // silently doing nothing -- and so the "Payment Rejected" block doesn't
+  // keep showing the old rejection message right after a successful fix,
+  // which would read as contradictory.
+  const [justResubmittedIds, setJustResubmittedIds] = useState<Set<string>>(new Set());
 
   // Filter orders where customer matches current logged user
   const customerOrders = orders.filter(o => o.customerId === currentUser?.id);
@@ -117,6 +123,15 @@ export const CustomerOrders: React.FC = () => {
                     </div>
                   </div>
                 ) : currentStep === -2 ? (
+                  justResubmittedIds.has(order.id) ? (
+                    <div className="p-5 border rounded-2xl text-xs flex items-start gap-3 bg-emerald-50 border-emerald-200 text-emerald-900">
+                      <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+                      <div>
+                        <p className="font-bold text-sm text-emerald-700">Receipt Resubmitted Successfully</p>
+                        <p className="opacity-90 mt-1 text-emerald-800">Your replacement receipt has been uploaded and is now awaiting re-review by an administrator. You'll be notified once it's checked.</p>
+                      </div>
+                    </div>
+                  ) : (
                   <div className={`p-5 border rounded-2xl text-xs flex flex-col gap-3 ${order.rejectionReason ? 'bg-red-50 border-red-200 text-red-900' : 'bg-orange-50 border-orange-200 text-orange-900'}`}>
                     <div className="flex items-start gap-3">
                       <ShieldCheck className={`w-5 h-5 shrink-0 ${order.rejectionReason ? 'text-red-600' : 'text-orange-600'}`} />
@@ -147,6 +162,8 @@ export const CustomerOrders: React.FC = () => {
                                 const result = await resubmitOrderReceipt(order.id, compressed);
                                 if (!result?.success) {
                                   window.alert(result?.error || "Failed to upload your receipt. Please try again.");
+                                } else {
+                                  setJustResubmittedIds(prev => new Set(prev).add(order.id));
                                 }
                               } catch (err) {
                                 console.error("[receipt resubmit] Failed to process image:", err);
@@ -164,6 +181,7 @@ export const CustomerOrders: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  )
                 ) : (
                   <div className="p-4 bg-red-50 text-red-600 border border-red-100 rounded-2xl text-xs font-bold flex items-center gap-2">
                     <XCircle className="w-4 h-4" /> This order was cancelled.

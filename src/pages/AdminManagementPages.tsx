@@ -1461,9 +1461,9 @@ export const AdminVendors: React.FC = () => {
             <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
               <span className="animate-pulse">👉</span> Swipe table horizontally to view all fields
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[65vh] border border-gray-100 rounded-2xl">
               <table className="w-full text-left border-collapse min-w-[750px]">
-                <thead>
+                <thead className="sticky top-0 bg-white z-10">
                   <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
                     <th className="py-3 px-4">Merchant Brand</th>
                     <th className="py-3 px-4">Category</th>
