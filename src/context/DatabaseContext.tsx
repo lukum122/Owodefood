@@ -312,7 +312,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     title: "",
     description: "",
     backgroundColor: "#070329",
-    image: "/images/hero.png"
+    image: "/images/hero.jpg"
   });
 
   useEffect(() => {
@@ -1489,7 +1489,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         name: extra?.businessName || `${name}'s Eatery`,
         description: `Freshly prepared ${extra?.cuisine || "delicious"} food.`,
         cuisine: extra?.cuisine || "Continental",
-        image: "/images/burger.png",
+        image: "/images/burger.jpg",
         rating: 5.0,
         address: "Food Street Market, District 1",
         status: "pending", // Admins approve vendors
@@ -1600,7 +1600,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       name: businessName,
       description: `Freshly prepared ${cuisine} food.`,
       cuisine: cuisine,
-      image: "/images/hero.png",
+      image: "/images/hero.jpg",
       rating: 5.0,
       address: "Food Street Market, District 1",
       status: "pending",
@@ -1731,7 +1731,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           name: "Spicy Dynasty Express",
           description: "Stir-fried delicacies, sizzling dim sums, and fiery noodle bowls.",
           cuisine: "Asian",
-          image: "/images/jollof.png",
+          image: "/images/jollof.jpg",
           rating: 4.7,
           address: "88 Wok St, Owode District",
           status: "approved",
@@ -2943,7 +2943,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         description: `Freshly prepared ${extra?.cuisine || "delicious"} food.`,
         cuisine: "N/A", // Deprecated field
         category: extra?.cuisine || "restaurant",
-        image: "/images/chicken.png",
+        image: "/images/chicken.jpg",
         rating: 5.0,
         address: "Food Street Market, District 1",
         status: "approved",
@@ -3000,7 +3000,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Premium platform vendor.",
           cuisine: "N/A", // Deprecated field
           category: "restaurant",
-          image: "/images/pizza.png",
+          image: "/images/pizza.jpg",
           rating: 5.0,
           address: "Kwara Delivery Zone",
           status: "approved",
@@ -3094,7 +3094,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: `Premium platform vendor serving ${extra?.cuisine || "delicious"} food.`,
           cuisine: "N/A", // Deprecated field
           category: extra?.cuisine || "restaurant",
-          image: "/images/burger.png",
+          image: "/images/burger.jpg",
           rating: 5.0,
           address: "Kwara Delivery Zone",
           status: "approved",
