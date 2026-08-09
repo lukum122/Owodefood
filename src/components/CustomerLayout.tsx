@@ -62,6 +62,7 @@ export const CustomerLayout: React.FC = () => {
     getUserWalletBalance,
     switchRole,
     brandLogo,
+    riders,
   } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
@@ -737,13 +738,33 @@ export const CustomerLayout: React.FC = () => {
                       </div>
 
                       {/* Switch Portal Section if they have multiple roles */}
-                      {(currentUser.roles || [currentUser.role]).length > 1 && (
+                      {(() => {
+                        // Don't trust the role flag alone -- verify an
+                        // actual approved record exists for it. Prevents
+                        // a stale/orphaned role (e.g. from a manual data
+                        // edit) from ever leading someone to a portal
+                        // with nothing behind it ("No Store Record
+                        // Assigned").
+                        const allRoles = currentUser.roles || [currentUser.role];
+                        const verifiedRoles = allRoles.filter((role) => {
+                          if (role === "vendor") {
+                            return vendors.some(v => v.userId === currentUser.id && v.status === "approved");
+                          }
+                          if (role === "rider") {
+                            return (riders || []).some(r => r.userId === currentUser.id && r.status === "approved");
+                          }
+                          return true; // customer/admin/employee roles aren't gated by a separate record
+                        });
+
+                        if (verifiedRoles.length <= 1) return null;
+
+                        return (
                         <div className="pt-2 border-t border-gray-50">
                           <span className="block text-[9px] text-gray-400 uppercase tracking-widest font-extrabold mb-1.5 px-2">
                             Switch Portal
                           </span>
                           <div className="space-y-1">
-                            {(currentUser.roles || [currentUser.role]).map((role) => {
+                            {verifiedRoles.map((role) => {
                               // Don't show switch button for active role (which is customer in this customer layout)
                               if (role === "customer") return null;
 
@@ -792,7 +813,8 @@ export const CustomerLayout: React.FC = () => {
                             })}
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Logout Button */}
                       <div className="pt-2 border-t border-gray-50">
