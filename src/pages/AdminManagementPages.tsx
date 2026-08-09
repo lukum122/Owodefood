@@ -45,26 +45,38 @@ export const AdminOrders: React.FC = () => {
         return;
       }
       setVerifyingOrderId(id);
-      const result = await updateVendorOrder(id, "pending", {
-        verifiedBy: currentUser?.id || "admin",
-        verifiedAt: new Date().toISOString(),
-      });
-      setVerifyingOrderId(null);
-      if (!result?.success) {
-        window.alert(result?.error || "Failed to approve the payment. Please try again.");
+      try {
+        const result = await updateVendorOrder(id, "pending", {
+          verifiedBy: currentUser?.id || "admin",
+          verifiedAt: new Date().toISOString(),
+        });
+        if (!result?.success) {
+          window.alert(result?.error || "Failed to approve the payment. Please try again.");
+        }
+      } catch (err) {
+        console.error("[handleVerifyPayment] Unexpected error while approving:", err);
+        window.alert("Something went wrong while approving this payment. Please try again.");
+      } finally {
+        setVerifyingOrderId(null);
       }
     } else {
       const reason = prompt("Enter rejection reason:");
       if (!reason) return; // cancelled prompt
       setVerifyingOrderId(id);
-      const result = await updateVendorOrder(id, "awaiting_payment_verification", {
-        rejectedBy: currentUser?.id || "admin",
-        rejectedAt: new Date().toISOString(),
-        rejectionReason: reason,
-      });
-      setVerifyingOrderId(null);
-      if (!result?.success) {
-        window.alert(result?.error || "Failed to reject the payment. Please try again.");
+      try {
+        const result = await updateVendorOrder(id, "awaiting_payment_verification", {
+          rejectedBy: currentUser?.id || "admin",
+          rejectedAt: new Date().toISOString(),
+          rejectionReason: reason,
+        });
+        if (!result?.success) {
+          window.alert(result?.error || "Failed to reject the payment. Please try again.");
+        }
+      } catch (err) {
+        console.error("[handleVerifyPayment] Unexpected error while rejecting:", err);
+        window.alert("Something went wrong while rejecting this payment. Please try again.");
+      } finally {
+        setVerifyingOrderId(null);
       }
     }
   };
@@ -3454,7 +3466,7 @@ export const AdminSettings: React.FC = () => {
                   setTimeout(() => setSuccessWord(""), 3000);
                 } catch (err) {
                   console.error("[logo upload] Failed to process image:", err);
-                  window.alert("Failed to process that image. Please try a different photo.");
+                  window.alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
                 }
               }}
             />
