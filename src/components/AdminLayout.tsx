@@ -127,7 +127,7 @@ export const AdminLayout: React.FC = () => {
   const currentItem = menuItems.find((m) => location.pathname === m.path || (m.path !== "/admin/dashboard" && location.pathname.startsWith(m.path)));
   const isAllowed = currentItem ? isItemAllowed(currentItem.name) : true;
 
-  const pendingCount = orders.filter(o => o.status === "pending").length;
+  const pendingCount = orders.filter(o => !["delivered", "cancelled"].includes(o.status)).length;
   const pendingVendorsCount = vendors.filter(v => v.status === "pending").length;
   const pendingRidersCount = riders.filter(r => r.status === "pending").length;
 
