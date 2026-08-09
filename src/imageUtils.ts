@@ -11,6 +11,15 @@
  * a compressed JPEG, typically bringing even a 12MP photo down to a few
  * hundred KB -- comfortably under the limit while staying perfectly
  * legible for a receipt or payment screenshot.
+ *
+ * Note: the browser's <img> element (used here to decode the file before
+ * drawing it to a canvas) can only decode formats the browser itself
+ * supports -- JPEG/PNG/WebP/GIF. It generally cannot decode HEIC/HEIF,
+ * which is the *default* photo format on iPhones. A HEIC photo (even one
+ * that arrived via sharing/cloud sync onto a different device) will
+ * silently fail to decode here -- that's the single most common real
+ * cause of a failure in this function, so the error message below calls
+ * it out explicitly instead of just saying "try a different photo."
  */
 export function compressImageToDataUrl(
   file: File,
@@ -18,6 +27,11 @@ export function compressImageToDataUrl(
   quality = 0.7
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    const isLikelyUnsupportedFormat =
+      /\.(heic|heif)$/i.test(file.name) ||
+      file.type === "image/heic" ||
+      file.type === "image/heif";
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
@@ -45,10 +59,18 @@ export function compressImageToDataUrl(
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
-      img.onerror = () => reject(new Error("Could not load the selected image"));
+      img.onerror = () => {
+        if (isLikelyUnsupportedFormat) {
+          reject(new Error(
+            "This looks like a HEIC/iPhone photo format your browser can't read directly. Please take a screenshot of it, or use your phone's share/export option to save it as JPEG first, then upload that instead."
+          ));
+        } else {
+          reject(new Error("Could not load the selected image — it may be in a format your browser can't read. Try a JPEG, PNG, or a screenshot instead."));
+        }
+      };
       img.src = e.target?.result as string;
     };
-    reader.onerror = () => reject(new Error("Could not read the selected file"));
+    reader.onerror = () => reject(new Error("Could not read the selected file. Please try again."));
     reader.readAsDataURL(file);
   });
 }
