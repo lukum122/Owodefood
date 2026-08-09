@@ -39,13 +39,15 @@ export const AdminOrders: React.FC = () => {
   const [searchPaymentStatus, setSearchPaymentStatus] = useState("");
   const [searchDateFrom, setSearchDateFrom] = useState("");
   const [searchDateTo, setSearchDateTo] = useState("");
+  const [searchBatchDate, setSearchBatchDate] = useState("");
+  const [searchBatchTime, setSearchBatchTime] = useState("");
   const [searchPage, setSearchPage] = useState(1);
   const [searchResults, setSearchResults] = useState<Order[]>([]);
   const [searchTotalCount, setSearchTotalCount] = useState(0);
   const [searchTotalPages, setSearchTotalPages] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const isSearchActive = !!(searchText || searchStatus || searchOrderType || searchPaymentStatus || searchDateFrom || searchDateTo);
+  const isSearchActive = !!(searchText || searchStatus || searchOrderType || searchPaymentStatus || searchDateFrom || searchDateTo || searchBatchDate || searchBatchTime);
   const SEARCH_PAGE_SIZE = 25;
 
   useEffect(() => {
@@ -65,6 +67,8 @@ export const AdminOrders: React.FC = () => {
         if (searchPaymentStatus) params.set("paymentStatus", searchPaymentStatus);
         if (searchDateFrom) params.set("dateFrom", searchDateFrom);
         if (searchDateTo) params.set("dateTo", searchDateTo);
+        if (searchBatchDate) params.set("batchDate", searchBatchDate);
+        if (searchBatchTime) params.set("batchTime", searchBatchTime);
         params.set("page", String(searchPage));
         params.set("pageSize", String(SEARCH_PAGE_SIZE));
 
@@ -101,13 +105,13 @@ export const AdminOrders: React.FC = () => {
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchText, searchStatus, searchOrderType, searchPaymentStatus, searchDateFrom, searchDateTo, searchPage]);
+  }, [searchText, searchStatus, searchOrderType, searchPaymentStatus, searchDateFrom, searchDateTo, searchBatchDate, searchBatchTime, searchPage]);
 
   // Reset to page 1 whenever a filter (not the page itself) changes.
   useEffect(() => {
     setSearchPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchText, searchStatus, searchOrderType, searchPaymentStatus, searchDateFrom, searchDateTo]);
+  }, [searchText, searchStatus, searchOrderType, searchPaymentStatus, searchDateFrom, searchDateTo, searchBatchDate, searchBatchTime]);
 
   const clearSearch = () => {
     setSearchText("");
@@ -116,7 +120,17 @@ export const AdminOrders: React.FC = () => {
     setSearchPaymentStatus("");
     setSearchDateFrom("");
     setSearchDateTo("");
+    setSearchBatchDate("");
+    setSearchBatchTime("");
     setSearchPage(1);
+  };
+
+  const viewAllOrdersInBatch = (date: string, time: string) => {
+    setSearchBatchDate(date);
+    setSearchBatchTime(time);
+    setSelectedOrder(null);
+    setSelectedReceiptOrder(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all" | "cancelled">("all");
@@ -340,11 +354,16 @@ export const AdminOrders: React.FC = () => {
                   const batchDateTime = new Date(`${selectedOrder.batchDate}T${selectedOrder.batchTime}:00`);
                   const isReleased = new Date() >= batchDateTime;
                   return (
-                    <span className={`ml-2 text-[10px] uppercase font-mono tracking-widest font-bold px-2.5 py-1 rounded-full border ${
-                      isReleased ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-amber-700 bg-amber-50 border-amber-100"
-                    }`}>
+                    <button
+                      type="button"
+                      onClick={() => viewAllOrdersInBatch(selectedOrder.batchDate!, selectedOrder.batchTime!)}
+                      className={`ml-2 text-[10px] uppercase font-mono tracking-widest font-bold px-2.5 py-1 rounded-full border cursor-pointer hover:opacity-80 transition ${
+                        isReleased ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-amber-700 bg-amber-50 border-amber-100"
+                      }`}
+                      title="View all orders in this batch"
+                    >
                       🕐 Batch {selectedOrder.batchDate} @ {selectedOrder.batchTime} — {isReleased ? "Released" : "Scheduled"}
-                    </span>
+                    </button>
                   );
                 })()}
                 <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2 flex items-center gap-2">
@@ -607,11 +626,16 @@ export const AdminOrders: React.FC = () => {
                   const batchDateTime = new Date(`${selectedReceiptOrder.batchDate}T${selectedReceiptOrder.batchTime}:00`);
                   const isReleased = new Date() >= batchDateTime;
                   return (
-                    <span className={`ml-2 text-[10px] uppercase font-mono tracking-widest font-bold px-2.5 py-1 rounded-full border ${
-                      isReleased ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-amber-700 bg-amber-50 border-amber-100"
-                    }`}>
+                    <button
+                      type="button"
+                      onClick={() => viewAllOrdersInBatch(selectedReceiptOrder.batchDate!, selectedReceiptOrder.batchTime!)}
+                      className={`ml-2 text-[10px] uppercase font-mono tracking-widest font-bold px-2.5 py-1 rounded-full border cursor-pointer hover:opacity-80 transition ${
+                        isReleased ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-amber-700 bg-amber-50 border-amber-100"
+                      }`}
+                      title="View all orders in this batch"
+                    >
                       🕐 Batch {selectedReceiptOrder.batchDate} @ {selectedReceiptOrder.batchTime} — {isReleased ? "Released" : "Scheduled"}
-                    </span>
+                    </button>
                   );
                 })()}
                 <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2 flex items-center gap-2">
@@ -900,6 +924,9 @@ export const AdminOrders: React.FC = () => {
           <div className="flex items-center justify-between pt-1">
             <span className="text-[10px] font-bold text-gray-400">
               {isSearching ? "Searching..." : `${searchTotalCount} matching order${searchTotalCount !== 1 ? "s" : ""}`}
+              {searchBatchDate && searchBatchTime && (
+                <span className="ml-2 text-emerald-600">— Batch: {searchBatchDate} @ {searchBatchTime}</span>
+              )}
             </span>
             <button
               type="button"
