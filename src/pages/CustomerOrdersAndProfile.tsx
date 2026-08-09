@@ -8,12 +8,12 @@ import { compressImageToDataUrl } from "../imageUtils";
 export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string } | null | undefined) => {
   if (user?.profileImage) return user.profileImage;
   if (user?.gender === "male") {
-    return "/images/burger.png";
+    return "/images/burger.jpg";
   }
   if (user?.gender === "female") {
-    return "/images/hero.png";
+    return "/images/hero.jpg";
   }
-  return "/images/jollof.png";
+  return "/images/jollof.jpg";
 };
 
 export const CustomerOrders: React.FC = () => {
@@ -402,7 +402,7 @@ export const CustomerProfile: React.FC = () => {
   const [vCuisine, setVCuisine] = useState("");
   const [vBusinessRegNo, setVBusinessRegNo] = useState("");
   const [vFoodPermitNo, setVFoodPermitNo] = useState("");
-  const [vVerificationDoc, setVVerificationDoc] = useState("/images/chicken.png");
+  const [vVerificationDoc, setVVerificationDoc] = useState("/images/chicken.jpg");
   const [vSuccess, setVSuccess] = useState("");
   const [vError, setVError] = useState("");
 
@@ -410,7 +410,7 @@ export const CustomerProfile: React.FC = () => {
   const [rLicenseNo, setRLicenseNo] = useState("");
   const [rPlateNo, setRPlateNo] = useState("");
   const [rNationalIdNo, setRNationalIdNo] = useState("");
-  const [rVerificationDoc, setRVerificationDoc] = useState("/images/pizza.png");
+  const [rVerificationDoc, setRVerificationDoc] = useState("/images/pizza.jpg");
   const [rSuccess, setRSuccess] = useState("");
   const [rError, setRError] = useState("");
 
@@ -597,8 +597,8 @@ export const CustomerProfile: React.FC = () => {
 
   const handleGenderChange = (newGender: "male" | "female") => {
     setGender(newGender);
-    const maleDefault = "/images/burger.png";
-    const femaleDefault = "/images/hero.png";
+    const maleDefault = "/images/burger.jpg";
+    const femaleDefault = "/images/hero.jpg";
     if (!profileImage || profileImage === maleDefault || profileImage === femaleDefault) {
       setProfileImage("");
     }

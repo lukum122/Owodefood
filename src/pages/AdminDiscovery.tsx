@@ -393,7 +393,7 @@ export const AdminDiscovery: React.FC = () => {
                       type="url"
                       value={localHeroBanner.image}
                       onChange={(e) => setLocalHeroBanner({ ...localHeroBanner, image: e.target.value })}
-                      placeholder="/images/hero.png"
+                      placeholder="/images/hero.jpg"
                       className="w-full text-xs p-2.5 border border-gray-250 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-indigo-100 transition font-mono"
                     />
                   </div>

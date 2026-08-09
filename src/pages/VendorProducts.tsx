@@ -72,7 +72,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setName("");
       setDescription("");
       setPrice("");
-      setImage("/images/pizza.png");
+      setImage("/images/pizza.jpg");
       setCategory("Burgers");
       setIsAvailable(true);
       setAddons([]);
@@ -563,7 +563,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setImage("/images/burger.png");
+                        setImage("/images/burger.jpg");
                       }}
                       className="w-full text-center text-[10px] text-[#0ea5e9] hover:text-blue-900 font-extrabold uppercase tracking-wider transition"
                     >

@@ -46,7 +46,7 @@ export const VendorOnboarding: React.FC = () => {
   const [cuisine, setCuisine] = useState("");
   const [businessRegNo, setBusinessRegNo] = useState("");
   const [foodPermitNo, setFoodPermitNo] = useState("");
-  const [verificationDoc, setVerificationDoc] = useState("/images/chicken.png");
+  const [verificationDoc, setVerificationDoc] = useState("/images/chicken.jpg");
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

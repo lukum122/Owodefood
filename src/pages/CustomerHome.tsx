@@ -893,7 +893,7 @@ export const CustomerHome: React.FC = () => {
                     loading="lazy"
                     onError={(e) => {
                       // Fallback image in case Unsplash fails
-                      e.currentTarget.src = "/images/hero.png";
+                      e.currentTarget.src = "/images/hero.jpg";
                     }}
                   />
                   
