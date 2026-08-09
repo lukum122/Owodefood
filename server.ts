@@ -239,6 +239,145 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
   res.json(result);
 });
 
+// Forgotten PIN reset -- step 1: request a code.
+// Previously this whole flow generated and checked its verification code
+// entirely in the browser, which meant the "proof it's really you" step
+// could be bypassed trivially with dev tools, and separately, the actual
+// PIN change was blocked by the normal auth checks anyway (an
+// unauthenticated person can't update an existing user's data) -- so the
+// flow could not have completed successfully at all as it stood. This
+// generates and stores the code server-side, with an expiry, and the
+// confirm step below is the only thing authorized to change the PIN
+// after checking it. Reuses the existing generic systemSettings
+// key-value table for storage -- no schema change needed.
+app.post("/api/auth/request-pin-reset", authLimiter, async (req, res) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier) {
+      return res.status(400).json({ error: "Missing identifier" });
+    }
+
+    const cleanIdentifier = String(identifier).trim().toLowerCase();
+    const phoneIdentifier = cleanIdentifier.replace(/[\s\-\+\(\)]/g, "");
+
+    const userResult = await db.select().from(users).where(
+      sql`lower(${users.email}) = ${cleanIdentifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${phoneIdentifier}`
+    ).limit(1);
+
+    // Deliberately the same success response whether or not an account
+    // exists -- otherwise this endpoint becomes a way to check which
+    // emails/phones have accounts on the platform just by watching the
+    // response, which is its own real privacy leak.
+    if (userResult.length === 0) {
+      return res.json({ success: true });
+    }
+
+    const user = userResult[0];
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes, matching the existing email copy
+
+    await db.insert(systemSettings).values({
+      key: `pin_reset_${user.id}`,
+      value: JSON.stringify({ code, expiresAt }),
+    }).onConflictDoUpdate({
+      target: systemSettings.key,
+      set: { value: JSON.stringify({ code, expiresAt }) },
+    });
+
+    const result = await sendEmailNotification(
+      user.email,
+      `Owode Food - ${code} is your PIN reset code`,
+      `
+      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food</h2>
+          <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">PIN Reset Request</span>
+        </div>
+        <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello ${user.name || "User"},</p>
+        <p style="font-size: 14px; color: #374151; line-height: 1.6;">Use the following code to reset your security PIN:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <span style="display: inline-block; background-color: #f1f5f9; color: #070329; font-size: 32px; font-weight: 800; padding: 12px 30px; border-radius: 12px; letter-spacing: 8px; font-family: monospace; border: 1px solid #e2e8f0;">${code}</span>
+        </div>
+        <p style="font-size: 12px; color: #64748b; line-height: 1.6; text-align: center;">This code is valid for 10 minutes. If you did not request this, please ignore this email -- your PIN will not change unless this code is entered.</p>
+      </div>
+      `
+    );
+
+    if (!result.success) {
+      console.error(`[SECURE LOG] PIN reset email delivery failed for ${user.email}`);
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("PIN reset request failed:", error);
+    res.status(500).json({ error: "Failed to process the reset request. Please try again." });
+  }
+});
+
+// Forgotten PIN reset -- step 2: verify the code and actually change the
+// PIN. This is the only thing that changes the PIN in this flow -- it
+// intentionally does not go through the normal USER_UPSERT path (which
+// requires being logged in as that user or an admin), since proving
+// knowledge of the emailed code IS the authorization here.
+app.post("/api/auth/confirm-pin-reset", authLimiter, async (req, res) => {
+  try {
+    const { identifier, code, newPin } = req.body;
+    if (!identifier || !code || !newPin) {
+      return res.status(400).json({ error: "Missing identifier, code, or new PIN." });
+    }
+
+    const cleanIdentifier = String(identifier).trim().toLowerCase();
+    const phoneIdentifier = cleanIdentifier.replace(/[\s\-\+\(\)]/g, "");
+
+    const userResult = await db.select().from(users).where(
+      sql`lower(${users.email}) = ${cleanIdentifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${phoneIdentifier}`
+    ).limit(1);
+
+    if (userResult.length === 0) {
+      return res.status(400).json({ error: "Invalid or expired reset code." });
+    }
+    const user = userResult[0];
+
+    const storedRows = await db.select().from(systemSettings).where(eq(systemSettings.key, `pin_reset_${user.id}`)).limit(1);
+    if (storedRows.length === 0) {
+      return res.status(400).json({ error: "Invalid or expired reset code. Please request a new one." });
+    }
+
+    let stored: { code: string; expiresAt: number };
+    try {
+      stored = JSON.parse(storedRows[0].value);
+    } catch {
+      return res.status(400).json({ error: "Invalid or expired reset code. Please request a new one." });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      await db.delete(systemSettings).where(eq(systemSettings.key, `pin_reset_${user.id}`));
+      return res.status(400).json({ error: "This reset code has expired. Please request a new one." });
+    }
+
+    if (String(code).trim() !== stored.code) {
+      return res.status(400).json({ error: "Incorrect verification code. Please check and try again." });
+    }
+
+    const hashedPin = await bcrypt.hash(String(newPin), 10);
+    await db.update(users).set({ pin: hashedPin }).where(eq(users.id, user.id));
+
+    // One-time use -- the code can't be replayed for a second reset.
+    await db.delete(systemSettings).where(eq(systemSettings.key, `pin_reset_${user.id}`));
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role, roles: user.roles, email: user.email },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ success: true, token, user: { ...user, pin: undefined } });
+  } catch (error: any) {
+    console.error("PIN reset confirmation failed:", error);
+    res.status(500).json({ error: "Failed to reset the PIN. Please try again." });
+  }
+});
+
 // Secure User Existence Check
 app.post("/api/auth/check-user", async (req, res) => {
   try {
