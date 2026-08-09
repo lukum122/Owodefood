@@ -145,6 +145,7 @@ interface DatabaseContextType {
   // Rider Actions
   acceptDelivery: (orderId: string, riderId: string) => Promise<{ success: boolean; error?: string }>;
   updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  mergeOrdersIntoContext: (incomingOrders: Order[]) => void;
   reopenCancelledOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   updateOrderPayoutStatus: (orderId: string, type: "rider" | "vendor", status: "pending" | "paid") => Promise<{ success: boolean; error?: string }>;
   updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
@@ -1379,15 +1380,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: identifier, pin })
       });
-      if (!response.ok) throw new Error("Backend login failed");
+
+      // A non-2xx status (like 401 for a wrong PIN) is not necessarily a
+      // failure to reach the server -- the backend often sends a
+      // perfectly well-formed, specific error message alongside it (e.g.
+      // "Invalid email or PIN"). Try to read that real message first;
+      // only fall back to a generic failure if the response genuinely
+      // isn't parseable JSON at all.
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         throw new Error("Invalid response format");
       }
       const data = await response.json();
-      
-      if (!data.success) {
-        return { success: false, error: data.error || "Login failed" };
+
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error || "Login failed. Please check your credentials and try again." };
       }
       
       const user = data.user;
@@ -2650,6 +2657,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return { success: true };
   };
 
+  const mergeOrdersIntoContext = (incomingOrders: Order[]) => {
+    setOrders(prev => {
+      const byId = new Map(prev.map(o => [o.id, o]));
+      for (const incoming of incomingOrders) {
+        byId.set(incoming.id, incoming);
+      }
+      return Array.from(byId.values());
+    });
+  };
+
   const reopenCancelledOrder = async (orderId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedReason = reason.trim();
     if (!trimmedReason) return { success: false, error: "A reason is required to reopen a cancelled order." };
@@ -3350,6 +3367,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateVendorProfile,
         acceptDelivery,
         updateDeliveryStatus,
+        mergeOrdersIntoContext,
         reopenCancelledOrder,
         updateOrderPayoutStatus,
         updateRiderProfile,
