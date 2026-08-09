@@ -942,7 +942,7 @@ export const CustomerVendorMenu: React.FC = () => {
                               setPresetReceipt("");
                             } catch (err) {
                               console.error("[receipt upload] Failed to process image:", err);
-                              window.alert("Failed to process that image. Please try a different photo.");
+                              window.alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
                             }
                           }
                         }}
@@ -1062,7 +1062,7 @@ export const CustomerVendorMenu: React.FC = () => {
                                     setPaymentProofImage(compressed);
                                   } catch (err) {
                                     console.error("[payment proof upload] Failed to process image:", err);
-                                    window.alert("Failed to process that image. Please try a different photo.");
+                                    window.alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
                                   }
                                 }
                               }}

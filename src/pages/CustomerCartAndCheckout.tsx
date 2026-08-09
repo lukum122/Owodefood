@@ -405,7 +405,7 @@ export const CustomerCheckout: React.FC = () => {
         setReceiptBase64(compressed);
       } catch (err) {
         console.error("[receipt upload] Failed to process image:", err);
-        window.alert("Failed to process that image. Please try a different photo.");
+        window.alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
       }
     }
   };
