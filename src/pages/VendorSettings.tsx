@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign, Lock } from "lucide-react";
 import { VendorCategory, DailyHours } from "../types"; // imported DailyHours
+import { compressImageToDataUrl } from "../imageUtils";
 
 export const VendorSettings: React.FC = () => {
   const { currentUser, resetUserPin, currentVendor, updateVendorProfile, vendorCategories, currency, availableLocations = [] } = useDatabase();
@@ -114,33 +115,31 @@ export const VendorSettings: React.FC = () => {
     }
   }, [currentVendor, availableLocations]);
 
-  const handleVendorImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVendorImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setErrorStr("Vendor image is too large. Keeps it under 2MB for storage performance.");
-        return;
+      try {
+        const compressed = await compressImageToDataUrl(file);
+        setImage(compressed);
+        setErrorStr("");
+      } catch (err) {
+        console.error("[vendor logo upload] Failed to process image:", err);
+        setErrorStr(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
     }
   };
 
-  const handleCoverImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setErrorStr("Cover image is too large. Keeps it under 2MB for storage performance.");
-        return;
+      try {
+        const compressed = await compressImageToDataUrl(file);
+        setCoverImage(compressed);
+        setErrorStr("");
+      } catch (err) {
+        console.error("[vendor cover upload] Failed to process image:", err);
+        setErrorStr(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCoverImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
     }
   };
 

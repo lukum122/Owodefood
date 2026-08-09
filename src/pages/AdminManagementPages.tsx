@@ -3,7 +3,7 @@ import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
 import { hasRole } from "../roleHelper";
 import { compressImageToDataUrl } from "../imageUtils";
-import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins } from "lucide-react";
+import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins, ClipboardList } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
 /* 1. MASTER ORDERS AUDITOR SCREEN */
@@ -24,10 +24,10 @@ export const AdminOrders: React.FC = () => {
   // nothing while the request is in progress.
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
 
-  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch">("standard");
+  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all">("standard");
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PAGE_SIZE = 25;
-  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification" | "batch") => {
+  const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification" | "batch" | "all") => {
     setOrderTypeTabRaw(tab);
     setOrdersPage(1); // reset to page 1 whenever the tab changes
   };
@@ -727,7 +727,17 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <Layers className="w-4 h-4" /> Batch Deliveries ({orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled"].includes(o.status)).length})
+          <Layers className="w-4 h-4" /> Batch Deliveries ({orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled", "awaiting_payment_verification"].includes(o.status)).length})
+        </button>
+        <button
+          onClick={() => setOrderTypeTab("all")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "all"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <ClipboardList className="w-4 h-4" /> All Deliveries ({orders.length})
         </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
@@ -976,9 +986,9 @@ export const AdminOrders: React.FC = () => {
               No payments currently awaiting verification.
             </div>
           )
-        ) : (
+        ) : orderTypeTab === "batch" ? (
           (() => {
-            const batchOrders = orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled"].includes(o.status));
+            const batchOrders = orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled", "awaiting_payment_verification"].includes(o.status));
             if (batchOrders.length === 0) {
               return (
                 <div className="text-center py-12 text-gray-400 font-semibold text-xs">
@@ -1015,10 +1025,12 @@ export const AdminOrders: React.FC = () => {
                               <th className="py-3 px-4">Order ID</th>
                               <th className="py-3 px-4">Merchant Node</th>
                               <th className="py-3 px-4">Customer</th>
+                              <th className="py-3 px-4">Payment Method</th>
                               <th className="py-3 px-4">Destination</th>
                               <th className="py-3 px-4 font-mono text-right">Sum</th>
                               <th className="py-3 px-4">Status</th>
                               <th className="py-3 px-4">Assign Rider</th>
+                              <th className="py-3 px-4 text-center">Auditing Operations</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-50 text-xs font-medium">
@@ -1027,10 +1039,13 @@ export const AdminOrders: React.FC = () => {
                                 <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id.slice(0, 8)}</td>
                                 <td className="py-3.5 px-4 font-bold text-gray-800">{o.vendorName}</td>
                                 <td className="py-3.5 px-4 text-gray-600">{o.customerName}</td>
+                                <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
                                 <td className="py-3.5 px-4 text-gray-500 max-w-[180px] truncate" title={o.deliveryAddress}>{o.deliveryAddress}</td>
                                 <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
                                 <td className="py-3.5 px-4">
-                                  <span className="text-[10px] font-bold text-gray-500 capitalize">{o.status.replace(/_/g, " ")}</span>
+                                  <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
+                                    {o.status.replace(/_/g, " ")}
+                                  </span>
                                 </td>
                                 <td className="py-3.5 px-4">
                                   <select
@@ -1051,6 +1066,26 @@ export const AdminOrders: React.FC = () => {
                                     ))}
                                   </select>
                                 </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => setSelectedOrder(o)}
+                                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                                    </button>
+                                    {o.status !== "delivered" && o.status !== "cancelled" ? (
+                                      <button
+                                        onClick={() => handleForceCancel(o.id)}
+                                        className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold border border-red-100 cursor-pointer text-[10px] transition"
+                                      >
+                                        Cancel
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-400 italic font-mono text-[10px] px-2 py-1 bg-gray-50 rounded-lg">Archived</span>
+                                    )}
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1062,6 +1097,87 @@ export const AdminOrders: React.FC = () => {
               </div>
             );
           })()
+        ) : (
+          orders.length > 0 ? (
+            <div>
+              <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1000px]">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Merchant Node</th>
+                      <th className="py-3 px-4">Customer Name</th>
+                      <th className="py-3 px-4">Payment Method</th>
+                      <th className="py-3 px-4 font-mono text-right">Sum</th>
+                      <th className="py-3 px-4">Active Status</th>
+                      <th className="py-3 px-4">Courier Driver</th>
+                      <th className="py-3 px-4 text-center">Auditing Operations</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                    {[...orders].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).map((o) => (
+                      <tr key={o.id} className="hover:bg-gray-50/50 transition">
+                        <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
+                        <td className="py-3.5 px-4">
+                          {o.batchDate && o.batchTime ? (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Batch</span>
+                          ) : o.orderType === "receipt_pickup" ? (
+                            <span className="text-[9px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Pickup</span>
+                          ) : (
+                            <span className="text-[9px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Standard</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
+                        <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
+                        <td className="py-3.5 px-4">
+                          <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
+                            {o.status.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {o.riderId ? (
+                            <span className="text-blue-700 font-bold">🚴 {o.riderName}</span>
+                          ) : (
+                            <span className="text-gray-400 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedOrder(o)}
+                              className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                            </button>
+                            {o.status !== "delivered" && o.status !== "cancelled" ? (
+                              <button
+                                onClick={() => handleForceCancel(o.id)}
+                                className="py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold border border-red-100 cursor-pointer text-[10px] transition"
+                              >
+                                Cancel
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 italic font-mono text-[10px] px-2 py-1 bg-gray-50 rounded-lg">Archived</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+              No orders registered in database.
+            </div>
+          )
         )}
       </div>
 

@@ -9,8 +9,7 @@ export const RiderDashboard: React.FC = () => {
     acceptDelivery, 
     currency,
     riderCommissionType,
-    riderCommissionValue,
-    acceptOrder
+    riderCommissionValue
   } = useDatabase();
 
   if (!currentRider) {
@@ -332,7 +331,7 @@ export const RiderDashboard: React.FC = () => {
                   <button
                     onClick={() => {
                       if (window.confirm("Accept this receipt pickup request?")) {
-                        acceptOrder(job.id);
+                        handleClaimJob(job.id);
                       }
                     }}
                     className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow cursor-pointer transition uppercase"

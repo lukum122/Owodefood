@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { HomepageSection, Collection } from "../types";
 import { Layers, Plus, Trash2, ArrowUp, ArrowDown, Save, CheckCircle2 } from "lucide-react";
+import { compressImageToDataUrl } from "../imageUtils";
 
 export const AdminDiscovery: React.FC = () => {
   const { homepageSections, updateHomepageSections, vendors, vendorCategories, heroBanner, updateHeroBanner } = useDatabase();
@@ -64,36 +65,36 @@ export const AdminDiscovery: React.FC = () => {
     setLocalSections(localSections.filter(sec => sec.id !== id));
   };
 
-  const handleImageUpload = (sectionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (sectionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) {
       alert("Image size should be less than 3MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        setLocalSections(localSections.map(s => s.id === sectionId ? { ...s, bannerImage: ev.target.result as string } : s));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageToDataUrl(file);
+      setLocalSections(localSections.map(s => s.id === sectionId ? { ...s, bannerImage: compressed } : s));
+    } catch (err) {
+      console.error("[banner upload] Failed to process image:", err);
+      alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
+    }
   };
 
-  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) {
       alert("Image size should be less than 3MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        setLocalHeroBanner({ ...localHeroBanner, image: ev.target.result as string });
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageToDataUrl(file);
+      setLocalHeroBanner({ ...localHeroBanner, image: compressed });
+    } catch (err) {
+      console.error("[hero image upload] Failed to process image:", err);
+      alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
+    }
   };
 
   return (

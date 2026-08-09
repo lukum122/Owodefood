@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { Product } from "../types";
 import { Plus, Trash2, Edit3, ArrowLeft, Heart, Sparkles, CheckCircle2, Check, X, Upload, Image } from "lucide-react";
+import { compressImageToDataUrl } from "../imageUtils";
 
 export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ mode = "list" }) => {
   const { id } = useParams<{ id: string }>();
@@ -211,28 +212,18 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   };
 
   // Local device image upload handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 3 * 1024 * 1024) {
-        setUploadError("Image surpasses 3MB limit. Please pick a smaller image.");
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
       setUploadError("");
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          setImage(reader.result);
-        }
-      };
-      reader.onerror = () => {
-        setUploadError("Error reading file.");
-
+      try {
+        const compressed = await compressImageToDataUrl(file);
+        setImage(compressed);
+      } catch (err) {
+        console.error("[product image upload] Failed to process image:", err);
+        setUploadError(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      };
-      reader.readAsDataURL(file);
+      }
     }
   };
 

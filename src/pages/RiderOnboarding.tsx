@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { compressImageToDataUrl } from "../imageUtils";
 import { 
   Bike, 
   ArrowRight, 
@@ -50,21 +51,20 @@ export const RiderOnboarding: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // File upload handler
-  const handleDocChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setErrorMsg("Document size should be less than 2MB.");
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setVerificationDoc(reader.result as string);
+      try {
+        // Higher quality/dimension than the default -- this is an ID
+        // document, it needs to stay legible, not just small.
+        const compressed = await compressImageToDataUrl(file, 1600, 0.85);
+        setVerificationDoc(compressed);
         setErrorMsg("");
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error("[rider doc upload] Failed to process image:", err);
+        setErrorMsg(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
   };
 
