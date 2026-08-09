@@ -1336,10 +1336,10 @@ export const AdminVendors: React.FC = () => {
     setSuccessMsg("");
   };
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     if (!selectedVendor) return;
     const finalAddress = editAddress.trim() + (editZone ? `, ${editZone}` : "");
-    adminUpdateVendor(selectedVendor.id, {
+    const result = await adminUpdateVendor(selectedVendor.id, {
       name: editName,
       category: editCategory as any,
       cuisine: editCuisine,
@@ -1357,6 +1357,11 @@ export const AdminVendors: React.FC = () => {
       closingTime: editClosingTime,
       description: editDescription,
     });
+
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to save changes. Please try again.");
+      return;
+    }
 
     setSuccessMsg("Merchant configurations updated successfully!");
     
@@ -1461,9 +1466,9 @@ export const AdminVendors: React.FC = () => {
             <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
               <span className="animate-pulse">👉</span> Swipe table horizontally to view all fields
             </div>
-            <div className="overflow-auto max-h-[65vh] border border-gray-100 rounded-2xl">
+            <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[750px]">
-                <thead className="sticky top-0 bg-white z-10">
+                <thead>
                   <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase tracking-wide text-[10px]">
                     <th className="py-3 px-4">Merchant Brand</th>
                     <th className="py-3 px-4">Category</th>
