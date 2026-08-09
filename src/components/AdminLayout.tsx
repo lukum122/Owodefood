@@ -133,8 +133,10 @@ export const AdminLayout: React.FC = () => {
 
   const renderSidebarContent = () => (
     <>
-      {/* Brand Banner */}
-      <div className="p-6 border-b border-slate-900 flex items-center justify-between gap-3">
+      {/* Brand Banner - stays fixed at the top, never scrolls, so the
+          close button is always reachable regardless of how tall the
+          menu below grows. */}
+      <div className="p-6 border-b border-slate-900 flex items-center justify-between gap-3 shrink-0">
         <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
           <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-purple-900/30">
             <Shield className="w-4 h-4 text-white fill-white" />
@@ -155,24 +157,30 @@ export const AdminLayout: React.FC = () => {
         </button>
       </div>
 
-      {/* Console operational status */}
-      <div className="px-5 py-3.5 bg-slate-900/40 border-b border-slate-900 text-xs text-left">
-        <div className="flex items-center justify-between mb-1.5 text-gray-400">
-          <span>Overall Health:</span>
-          <span className="text-green-400 font-mono text-[10px] font-bold">100% ONLINE</span>
+      {/* Everything below the brand banner scrolls independently within
+          its own region, so all menu items, Support, and Logout stay
+          reachable by swipe/scroll regardless of viewport height -- and
+          scrolling this region doesn't scroll the page behind it, since
+          it's a separately bounded overflow container, not the page. */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        {/* Console operational status */}
+        <div className="px-5 py-3.5 bg-slate-900/40 border-b border-slate-900 text-xs text-left">
+          <div className="flex items-center justify-between mb-1.5 text-gray-400">
+            <span>Overall Health:</span>
+            <span className="text-green-400 font-mono text-[10px] font-bold">100% ONLINE</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-purple-400" />
+            <span className="text-gray-300 font-medium">Platform HQ Node</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Activity className="w-3.5 h-3.5 text-purple-400" />
-          <span className="text-gray-300 font-medium">Platform HQ Node</span>
-        </div>
-      </div>
 
-      {/* Links */}
-      <nav className="flex-grow p-4 space-y-1.5 focus:outline-none">
-        {allowedMenuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path || (item.path !== "/admin/dashboard" && location.pathname.startsWith(item.path));
-          const isOrders = item.name === "Master Orders";
+        {/* Links */}
+        <nav className="p-4 space-y-1.5 focus:outline-none">
+          {allowedMenuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path || (item.path !== "/admin/dashboard" && location.pathname.startsWith(item.path));
+            const isOrders = item.name === "Master Orders";
           const isVendors = item.name === "Manage Vendors";
           const isRiders = item.name === "Manage Riders";
           
@@ -212,18 +220,19 @@ export const AdminLayout: React.FC = () => {
               </div>
             </Link>
           );
-        })}
-      </nav>
+          })}
+        </nav>
 
-      {/* Bottom Section - Logout */}
-      <div className="p-4 border-t border-slate-900">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 py-2 px-4 rounded-xl text-rose-400 hover:bg-rose-950/20 hover:text-rose-300 transition text-sm font-medium cursor-pointer"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Terminate Session</span>
-        </button>
+        {/* Bottom Section - Logout */}
+        <div className="p-4 border-t border-slate-900">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 py-2 px-4 rounded-xl text-rose-400 hover:bg-rose-950/20 hover:text-rose-300 transition text-sm font-medium cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Terminate Session</span>
+          </button>
+        </div>
       </div>
     </>
   );
