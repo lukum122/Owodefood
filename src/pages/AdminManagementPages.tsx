@@ -24,7 +24,7 @@ export const AdminOrders: React.FC = () => {
   // nothing while the request is in progress.
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
 
-  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all">("standard");
+  const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all">("all");
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PAGE_SIZE = 25;
   const setOrderTypeTab = (tab: "standard" | "receipt_pickup" | "verification" | "batch" | "all") => {
@@ -143,7 +143,7 @@ export const AdminOrders: React.FC = () => {
   // full orders list in context (so approve/reject/payout actions keep
   // working normally), just renders 25 rows at a time instead of
   // potentially hundreds at once.
-  const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification");
+  const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification" && !(o.batchDate && o.batchTime));
   const standardTotalPages = Math.max(1, Math.ceil(standardOrders.length / ORDERS_PAGE_SIZE));
   const standardPageOrders = standardOrders.slice((ordersPage - 1) * ORDERS_PAGE_SIZE, ordersPage * ORDERS_PAGE_SIZE);
 
@@ -690,6 +690,16 @@ export const AdminOrders: React.FC = () => {
       {/* Sub-tabs for standard versus receipt pickup */}
       <div className="flex gap-2 border-b border-gray-100 pb-3 mt-6">
         <button
+          onClick={() => setOrderTypeTab("all")}
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+            orderTypeTab === "all"
+              ? "bg-[#0ea5e9] text-white shadow-sm"
+              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+          }`}
+        >
+          <ClipboardList className="w-4 h-4" /> All Orders ({orders.length})
+        </button>
+        <button
           onClick={() => setOrderTypeTab("standard")}
           className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
             orderTypeTab === "standard"
@@ -697,7 +707,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({orders.filter(o => o.orderType !== "receipt_pickup").length})
+          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({standardOrders.length})
         </button>
         <button
           onClick={() => setOrderTypeTab("receipt_pickup")}
@@ -728,16 +738,6 @@ export const AdminOrders: React.FC = () => {
           }`}
         >
           <Layers className="w-4 h-4" /> Batch Deliveries ({orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled", "awaiting_payment_verification"].includes(o.status)).length})
-        </button>
-        <button
-          onClick={() => setOrderTypeTab("all")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-            orderTypeTab === "all"
-              ? "bg-[#0ea5e9] text-white shadow-sm"
-              : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
-          }`}
-        >
-          <ClipboardList className="w-4 h-4" /> All Deliveries ({orders.length})
         </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
@@ -1139,6 +1139,11 @@ export const AdminOrders: React.FC = () => {
                           <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
                             {o.status.replace(/_/g, " ")}
                           </span>
+                          {o.status === "cancelled" && o.rejectionReason && (
+                            <div className="mt-1 text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1 max-w-[160px] normal-case">
+                              ⚠ Cancelled after payment rejection: {o.rejectionReason}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-4">
                           {o.riderId ? (
