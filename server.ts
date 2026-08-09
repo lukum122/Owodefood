@@ -625,6 +625,8 @@ app.get("/api/admin/orders-search", verifyTokenOptional, async (req: any, res: a
       paymentStatus = "",
       dateFrom = "",
       dateTo = "",
+      batchDate = "",
+      batchTime = "",
       page = "1",
       pageSize = "25",
     } = req.query;
@@ -677,6 +679,17 @@ app.get("/api/admin/orders-search", verifyTokenOptional, async (req: any, res: a
     if (dateTo) {
       // Include the entire end date, not just up to midnight.
       conditions.push(lte(orders.createdAt, String(dateTo) + "T23:59:59.999Z"));
+    }
+
+    // Exact match on a specific batch's identity -- deliberately separate
+    // from the dateFrom/dateTo range above, since a batch's date/time and
+    // an order's createdAt are genuinely different things (someone can
+    // place an order at midnight for a 1pm batch).
+    if (batchDate) {
+      conditions.push(eq(orders.batchDate, String(batchDate)));
+    }
+    if (batchTime) {
+      conditions.push(eq(orders.batchTime, String(batchTime)));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
