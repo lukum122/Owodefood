@@ -825,6 +825,59 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
       }
 
+      case "ORDER_REOPEN": {
+        // Admin-only, matching how every other order-status action in
+        // this app (verify/reject payment, force-cancel) is gated.
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Unauthorized: Only admins can reopen orders." });
+        }
+
+        const reason = String(payload.reason || "").trim();
+        if (!reason) {
+          return res.status(400).json({ error: "A reason is required to reopen a cancelled order." });
+        }
+
+        const orderRows = await db.select().from(orders).where(eq(orders.id, payload.orderId)).limit(1);
+        if (orderRows.length === 0) {
+          return res.status(404).json({ error: "Order not found." });
+        }
+        const existingOrder = orderRows[0];
+        if (existingOrder.status !== "cancelled") {
+          return res.status(400).json({ error: "Only cancelled orders can be reopened." });
+        }
+
+        // Deliberately restores to "pending" regardless of what the order's
+        // status was before cancellation -- letting it flow through the
+        // normal pipeline again from the start, rather than guessing at an
+        // ambiguous prior in-progress state. This update ONLY touches
+        // status -- it never touches riderPayoutStatus, vendorPayoutStatus,
+        // or anything wallet/payment-related, so a payout that was already
+        // released (or a payment that was already processed) before
+        // cancellation can never be duplicated by reopening.
+        const newStatus = "pending";
+        await db.update(orders).set({ status: newStatus }).where(eq(orders.id, payload.orderId));
+
+        // Immutable audit trail entry. There is deliberately no endpoint
+        // anywhere that edits or deletes rows in this table -- "immutable"
+        // means no such code path exists, not just a permission check.
+        await db.insert(auditLogs).values({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          userId: reqUser.id,
+          action: "ORDER_REOPENED",
+          resource: payload.orderId,
+          details: JSON.stringify({
+            previousStatus: "cancelled",
+            newStatus,
+            reason,
+            timestamp: new Date().toISOString(),
+          }),
+          createdAt: new Date().toISOString(),
+        });
+
+        responseExtra.order = { ...existingOrder, status: newStatus };
+        break;
+      }
+
       case "USERS_BULK":
         for (const u of payload) {
           await db.insert(users).values({
