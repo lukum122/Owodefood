@@ -2294,13 +2294,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           "wallet"
         );
       } else {
-        addNotification(
-          "admin-1",
+        const allAdmins = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
+        allAdmins.forEach(admin => addNotification(
+          admin.id,
           "Pending Wallet Funding Request ⏳",
           `User ${userName} submitted a wallet funding request of ${currency}${amount.toLocaleString()} via Bank Transfer. Reference: ${newTx.reference}. Approval required!`,
           "wallet",
           txId
-        );
+        ));
         addNotification(
           "admin",
           "New Funding Request 💰",
@@ -2437,13 +2438,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // Notify Admin about status change
-    addNotification(
-      "admin-1",
+    const allAdminsForStatus = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
+    allAdminsForStatus.forEach(admin => addNotification(
+      admin.id,
       `Order #${orderId} Updated`,
       `Order #${orderId} status has been updated to ${status} by ${orderToUpdate.vendorName}.`,
       "order",
       orderId
-    );
+    ));
 
     return { success: true };
   };
@@ -2599,13 +2601,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // Notify Admin
-    addNotification(
-      "admin-1",
+    const allAdminsForAssignment = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
+    allAdminsForAssignment.forEach(admin => addNotification(
+      admin.id,
       "Rider Assigned to Order",
       `Rider ${rider.name} has accepted delivery for order #${orderId}.`,
       "delivery",
       orderId
-    );
+    ));
 
     return { success: true };
   };
@@ -2648,13 +2651,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         );
       }
       // Notify Admin
-      addNotification(
-        "admin-1",
+      const allAdminsForCompletion = users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin"));
+      allAdminsForCompletion.forEach(admin => addNotification(
+        admin.id,
         "Order Completed",
         `Order #${orderId} from ${orderToUpdate.vendorName} has been successfully delivered by ${orderToUpdate.riderName || 'Rider'}.`,
         "delivery",
         orderId
-      );
+      ));
     } else {
       // General status update
       addNotification(
