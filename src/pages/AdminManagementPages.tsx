@@ -217,6 +217,17 @@ export const AdminOrders: React.FC = () => {
             <div className="flex items-start justify-between gap-4 border-b border-gray-50 pb-4">
               <div>
                 <span className="text-[10px] uppercase font-mono tracking-widest text-purple-600 font-bold bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">Order Audit Details</span>
+                {selectedOrder.batchDate && selectedOrder.batchTime && (() => {
+                  const batchDateTime = new Date(`${selectedOrder.batchDate}T${selectedOrder.batchTime}:00`);
+                  const isReleased = new Date() >= batchDateTime;
+                  return (
+                    <span className={`ml-2 text-[10px] uppercase font-mono tracking-widest font-bold px-2.5 py-1 rounded-full border ${
+                      isReleased ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-amber-700 bg-amber-50 border-amber-100"
+                    }`}>
+                      🕐 Batch {selectedOrder.batchDate} @ {selectedOrder.batchTime} — {isReleased ? "Released" : "Scheduled"}
+                    </span>
+                  );
+                })()}
                 <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2 flex items-center gap-2">
                   Order ID: <span className="font-mono text-gray-800">#{selectedOrder.id}</span>
                 </h3>
@@ -473,6 +484,17 @@ export const AdminOrders: React.FC = () => {
             <div className="flex items-start justify-between gap-4 border-b border-gray-50 pb-4">
               <div>
                 <span className="text-[10px] uppercase font-mono tracking-widest text-[#0ea5e9] font-bold bg-sky-50 px-2.5 py-1 rounded-full border border-sky-100">Receipt Pickup & Delivery Ticket</span>
+                {selectedReceiptOrder.batchDate && selectedReceiptOrder.batchTime && (() => {
+                  const batchDateTime = new Date(`${selectedReceiptOrder.batchDate}T${selectedReceiptOrder.batchTime}:00`);
+                  const isReleased = new Date() >= batchDateTime;
+                  return (
+                    <span className={`ml-2 text-[10px] uppercase font-mono tracking-widest font-bold px-2.5 py-1 rounded-full border ${
+                      isReleased ? "text-emerald-700 bg-emerald-50 border-emerald-100" : "text-amber-700 bg-amber-50 border-amber-100"
+                    }`}>
+                      🕐 Batch {selectedReceiptOrder.batchDate} @ {selectedReceiptOrder.batchTime} — {isReleased ? "Released" : "Scheduled"}
+                    </span>
+                  );
+                })()}
                 <h3 className="text-lg font-black text-[#070329] tracking-tight mt-2 flex items-center gap-2">
                   Pickup ID: <span className="font-mono text-gray-800">#{selectedReceiptOrder.id}</span>
                 </h3>
