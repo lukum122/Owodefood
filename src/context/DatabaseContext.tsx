@@ -152,7 +152,7 @@ interface DatabaseContextType {
   toggleVendorStatus: (vendorId: string, status: Vendor["status"], reason?: string) => Promise<void>;
   toggleRiderStatus: (riderId: string, status: Rider["status"], reason?: string) => Promise<void>;
   deleteUser: (userId: string) => void;
-  adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => void;
+  adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => Promise<{ success: boolean; error?: string }>;
   adminCreateOrder: (order: Order) => void;
   adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => { success: boolean; error?: string };
   adminUpdateUser: (userId: string, fields: { name: string; email: string; phone: string; role: UserRole; pin?: string; roles?: UserRole[] }, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
@@ -2806,8 +2806,29 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     persistRiders(riders.filter(r => r.userId !== userId));
   };
 
-  const adminUpdateVendor = (vendorId: string, updatedFields: Partial<Vendor>) => {
-    persistVendors(vendors.map(v => v.id === vendorId ? { ...v, ...updatedFields } : v));
+  const adminUpdateVendor = async (vendorId: string, updatedFields: Partial<Vendor>): Promise<{ success: boolean; error?: string }> => {
+    const existingVendor = vendors.find(v => v.id === vendorId);
+    if (!existingVendor) return { success: false, error: "Vendor not found" };
+
+    // Single-record update only -- this used to go through persistVendors,
+    // which sends the admin's ENTIRE local vendor list via bulk replace.
+    // If that local list was even slightly stale (another admin suspended
+    // a vendor moments ago, for instance), saving an unrelated edit here
+    // would silently overwrite every other vendor's status with whatever
+    // stale copy this browser was holding -- which is exactly how a
+    // just-suspended vendor could end up looking "approved" again with no
+    // one having touched it. Same fix pattern already used for delivery
+    // zones earlier this session.
+    const candidateVendor = { ...existingVendor, ...updatedFields };
+    const result = await syncSave("VENDOR_UPSERT", candidateVendor);
+    if (!result?.success) {
+      console.error("[adminUpdateVendor] Failed to update vendor:", result?.error);
+      return { success: false, error: result?.error || "Failed to save changes. Please check your connection and try again." };
+    }
+
+    const confirmedVendor = result.vendor ? { ...existingVendor, ...result.vendor } : candidateVendor;
+    setVendors(vendors.map(v => v.id === vendorId ? confirmedVendor : v));
+    return { success: true };
   };
 
   const adminCreateOrder = (order: Order) => {
