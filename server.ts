@@ -25,7 +25,7 @@ import {
   auditLogs,
   payoutLogs,
 } from "./src/db/schema.ts";
-import { eq, sql, inArray, count, sum, and, or } from "drizzle-orm";
+import { eq, sql, inArray, count, sum, and, or, ilike, gte, lte, desc } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
 import http from "http";
@@ -453,6 +453,116 @@ app.post("/api/auth/register", async (req, res) => {
 // database (COUNT/SUM) instead of requiring the client to download every
 // order, user, vendor, and rider just to display a handful of numbers.
 // Admin-only, since these are platform-wide figures.
+// Server-side order search + filtering + pagination for Master Orders.
+// Admin-only. Combines free-text search (order ID, customer name/phone,
+// vendor, rider -- there's no dedicated "payment reference" field on
+// orders, so a reference search matches against the order ID, the
+// closest real equivalent) with Status, Order Type, Payment Status, and
+// Date filters, all applied together server-side, with real pagination
+// rather than the client sorting through everything already loaded.
+app.get("/api/admin/orders-search", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const {
+      search = "",
+      status = "",
+      orderType = "",
+      paymentStatus = "",
+      dateFrom = "",
+      dateTo = "",
+      page = "1",
+      pageSize = "25",
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10) || 25));
+
+    const conditions: any[] = [];
+
+    const searchTerm = String(search).trim();
+    if (searchTerm) {
+      const like = `%${searchTerm}%`;
+      conditions.push(or(
+        ilike(orders.id, like),
+        ilike(orders.customerName, like),
+        ilike(orders.customerPhone, like),
+        ilike(orders.vendorName, like),
+        ilike(orders.riderName, like)
+      ));
+    }
+
+    if (status) {
+      conditions.push(eq(orders.status, String(status)));
+    }
+
+    if (orderType === "batch") {
+      conditions.push(sql`${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL`);
+    } else if (orderType === "receipt_pickup") {
+      conditions.push(eq(orders.orderType, "receipt_pickup"));
+    } else if (orderType === "standard") {
+      conditions.push(sql`${orders.orderType} != 'receipt_pickup' AND (${orders.batchDate} IS NULL OR ${orders.batchTime} IS NULL)`);
+    }
+
+    // "Payment Status" is derived from existing fields -- there's no
+    // single dedicated column for it, since verification only applies to
+    // bank-transfer orders in the first place.
+    if (paymentStatus === "verified") {
+      conditions.push(sql`${orders.verifiedBy} IS NOT NULL`);
+    } else if (paymentStatus === "rejected") {
+      conditions.push(sql`${orders.rejectedBy} IS NOT NULL AND ${orders.verifiedBy} IS NULL`);
+    } else if (paymentStatus === "awaiting_verification") {
+      conditions.push(eq(orders.status, "awaiting_payment_verification"));
+    } else if (paymentStatus === "not_applicable") {
+      conditions.push(sql`${orders.verifiedBy} IS NULL AND ${orders.rejectedBy} IS NULL AND ${orders.status} != 'awaiting_payment_verification'`);
+    }
+
+    if (dateFrom) {
+      conditions.push(gte(orders.createdAt, String(dateFrom)));
+    }
+    if (dateTo) {
+      // Include the entire end date, not just up to midnight.
+      conditions.push(lte(orders.createdAt, String(dateTo) + "T23:59:59.999Z"));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalResult, matchingOrders] = await Promise.all([
+      db.select({ value: count() }).from(orders).where(whereClause),
+      db.select().from(orders).where(whereClause).orderBy(desc(orders.createdAt)).limit(pageSizeNum).offset((pageNum - 1) * pageSizeNum),
+    ]);
+
+    const totalCount = Number(totalResult[0]?.value || 0);
+
+    // Attach items for just this page's orders -- not the whole dataset.
+    let itemsByOrder: Record<string, any[]> = {};
+    if (matchingOrders.length > 0) {
+      const orderIds = matchingOrders.map(o => o.id);
+      const items = await db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds));
+      for (const item of items) {
+        if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+        itemsByOrder[item.orderId].push(item);
+      }
+    }
+
+    res.json({
+      orders: matchingOrders.map(o => ({ ...o, items: itemsByOrder[o.id] || [] })),
+      totalCount,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSizeNum)),
+    });
+  } catch (error: any) {
+    console.error("Order search failed:", error);
+    res.status(500).json({ error: "Failed to search orders." });
+  }
+});
+
 app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
