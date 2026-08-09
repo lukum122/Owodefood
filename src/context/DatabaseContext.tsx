@@ -3223,7 +3223,44 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         alert(`New Delivery Job Available! Order ID: ${data.orderId}`);
       });
 
-      socketRef.current.on("sync_update", () => {
+      socketRef.current.on("sync_update", (data: { type?: string; payload?: any }) => {
+        const { type, payload } = data || {};
+
+        // Previously ANY sync_update -- regardless of type -- triggered a
+        // full reload of the entire dataset for every connected client.
+        // Since admins are always notified of every order/personal change
+        // platform-wide, this meant an admin session was doing a complete
+        // re-fetch on essentially every single order update anywhere. The
+        // server now sends the actual confirmed record alongside the
+        // type, so the most frequent mutation types can just be merged in
+        // directly instead. Anything not explicitly handled below falls
+        // back to the original full-reload behavior -- safer to
+        // over-fetch for an uncommon type than risk silently missing an
+        // update.
+        if (payload && payload.id) {
+          switch (type) {
+            case "ORDER_UPSERT":
+            case "ORDER_REOPEN":
+              mergeOrdersIntoContext([payload]);
+              return;
+            case "VENDOR_UPSERT":
+              setVendors(prev => {
+                const exists = prev.some(v => v.id === payload.id);
+                return exists ? prev.map(v => (v.id === payload.id ? { ...v, ...payload } : v)) : [...prev, payload];
+              });
+              return;
+            case "PRODUCT_UPSERT":
+              setProducts(prev => {
+                const exists = prev.some(p => p.id === payload.id);
+                return exists ? prev.map(p => (p.id === payload.id ? { ...p, ...payload } : p)) : [...prev, payload];
+              });
+              return;
+            case "PRODUCT_DELETE":
+              setProducts(prev => prev.filter(p => p.id !== payload.id));
+              return;
+          }
+        }
+
         window.dispatchEvent(new Event("sync_update_event"));
       });
 
