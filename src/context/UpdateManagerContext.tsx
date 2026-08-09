@@ -114,21 +114,18 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => clearInterval(interval);
   }, [serverVersion, setNeedRefresh]);
 
-  // Cross-tab synchronization
-  useEffect(() => {
-    const channel = new BroadcastChannel("app-update-channel");
-    channel.onmessage = (event) => {
-      if (event.data === "APP_UPDATING") {
-        window.location.reload();
-      }
-    };
-    return () => channel.close();
-  }, []);
+  // Cross-tab automatic reload was removed here -- it previously force-
+  // reloaded every other open tab the instant any one tab's "Update Now"
+  // was clicked, which meant a person with multiple tabs open (customer +
+  // admin + vendor, for instance) would see a tab reload with no visible
+  // prompt and no action taken in that specific tab -- indistinguishable
+  // from an unexplained automatic reload. Removed for consistency with
+  // the same "never reload without an explicit action in that tab" rule
+  // already applied to the idle-reload behavior. Each tab now just
+  // detects and offers the update independently through its own normal
+  // polling.
 
   const triggerUpdate = useCallback(() => {
-    const channel = new BroadcastChannel("app-update-channel");
-    channel.postMessage("APP_UPDATING");
-    channel.close();
     updateServiceWorker(true);
   }, [updateServiceWorker]);
 
