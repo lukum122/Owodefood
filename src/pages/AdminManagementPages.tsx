@@ -940,10 +940,13 @@ export const AdminOrders: React.FC = () => {
       </div>
 
       {/* Sub-tabs for standard versus receipt pickup */}
-      <div className="flex gap-2 border-b border-gray-100 pb-3 mt-6">
+      <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-2 mt-6 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+        <span className="animate-pulse">👉</span> Swipe tabs horizontally to see more
+      </div>
+      <div className="flex gap-2 border-b border-gray-100 pb-3 mt-2 md:mt-6 overflow-x-auto">
         <button
           onClick={() => setOrderTypeTab("all")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
             orderTypeTab === "all"
               ? "bg-[#0ea5e9] text-white shadow-sm"
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
@@ -953,7 +956,7 @@ export const AdminOrders: React.FC = () => {
         </button>
         <button
           onClick={() => setOrderTypeTab("standard")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
             orderTypeTab === "standard"
               ? "bg-[#0ea5e9] text-white shadow-sm"
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
@@ -963,7 +966,7 @@ export const AdminOrders: React.FC = () => {
         </button>
         <button
           onClick={() => setOrderTypeTab("receipt_pickup")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
             orderTypeTab === "receipt_pickup"
               ? "bg-[#0ea5e9] text-white shadow-sm"
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
@@ -973,7 +976,7 @@ export const AdminOrders: React.FC = () => {
         </button>
         <button
           onClick={() => setOrderTypeTab("verification")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
             orderTypeTab === "verification"
               ? "bg-[#0ea5e9] text-white shadow-sm"
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
@@ -983,7 +986,7 @@ export const AdminOrders: React.FC = () => {
         </button>
         <button
           onClick={() => setOrderTypeTab("batch")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
             orderTypeTab === "batch"
               ? "bg-[#0ea5e9] text-white shadow-sm"
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
@@ -993,7 +996,7 @@ export const AdminOrders: React.FC = () => {
         </button>
         <button
           onClick={() => setOrderTypeTab("cancelled")}
-          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+          className={`py-2 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0 ${
             orderTypeTab === "cancelled"
               ? "bg-[#0ea5e9] text-white shadow-sm"
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
