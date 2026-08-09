@@ -528,7 +528,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           headers["Authorization"] = `Bearer ${token}`;
           headers["X-Auth-Token"] = token;
         }
-        const res = await fetch("/api/sync/load", { headers });
+        // Previously this had no timeout at all -- a hung or very slow
+        // request meant the loading spinner could sit indefinitely with
+        // no feedback and no way to recover short of manually reloading.
+        // This caps it at 20 seconds and fails into the existing
+        // error/retry banner instead.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        let res: Response;
+        try {
+          res = await fetch("/api/sync/load", { headers, signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
         if (!res.ok) throw new Error("Backend load failed");
         const data = await res.json();
 

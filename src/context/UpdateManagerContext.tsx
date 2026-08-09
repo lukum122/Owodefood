@@ -41,7 +41,6 @@ const DISMISS_COOLDOWN_MS = 30 * 60 * 1000;
 export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [criticalOperationsCount, setCriticalOperationsCount] = useState(0);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
-  const [lastActivityTime, setLastActivityTime] = useState<number>(Date.now());
   const [serverVersion, setServerVersion] = useState<string | null>(null);
 
   const appMountTimeRef = useRef<number>(Date.now());
@@ -115,17 +114,6 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => clearInterval(interval);
   }, [serverVersion, setNeedRefresh]);
 
-  // Track user activity
-  useEffect(() => {
-    const handleActivity = () => setLastActivityTime(Date.now());
-    const events = ["mousemove", "keydown", "touchstart", "click", "scroll"];
-
-    events.forEach(event => window.addEventListener(event, handleActivity));
-    return () => {
-      events.forEach(event => window.removeEventListener(event, handleActivity));
-    };
-  }, []);
-
   // Cross-tab synchronization
   useEffect(() => {
     const channel = new BroadcastChannel("app-update-channel");
@@ -143,20 +131,6 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     channel.close();
     updateServiceWorker(true);
   }, [updateServiceWorker]);
-
-  // Automatic Idle Reload
-  useEffect(() => {
-    if (isUpdateAvailable && !isBannerDismissed && criticalOperationsCount === 0) {
-      const interval = setInterval(() => {
-        const timeSinceLastActivity = Date.now() - lastActivityTime;
-        // 30 seconds idle timeout as requested
-        if (timeSinceLastActivity >= 30000) {
-          triggerUpdate();
-        }
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [isUpdateAvailable, isBannerDismissed, criticalOperationsCount, lastActivityTime, triggerUpdate]);
 
   const startCriticalOperation = useCallback(() => {
     setCriticalOperationsCount(prev => prev + 1);
