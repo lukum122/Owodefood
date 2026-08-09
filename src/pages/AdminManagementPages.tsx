@@ -17,7 +17,8 @@ export const AdminOrders: React.FC = () => {
     acceptDelivery,
     riders,
     currentUser,
-    reopenCancelledOrder
+    reopenCancelledOrder,
+    mergeOrdersIntoContext
   } = useDatabase();
 
   // Tracks which specific order (and which action) is currently mid-flight,
@@ -25,6 +26,98 @@ export const AdminOrders: React.FC = () => {
   // nothing while the request is in progress.
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
   const [reopeningOrderId, setReopeningOrderId] = useState<string | null>(null);
+
+  // Server-side search & filtering -- separate from the tab-based views
+  // above, this is a dedicated search mode across ALL orders. Results get
+  // merged into the shared orders array (via mergeOrdersIntoContext)
+  // rather than replacing it, so every existing action (approve/reject,
+  // assign rider, cancel, mark payout) keeps working correctly on
+  // whatever the search turns up.
+  const [searchText, setSearchText] = useState("");
+  const [searchStatus, setSearchStatus] = useState("");
+  const [searchOrderType, setSearchOrderType] = useState("");
+  const [searchPaymentStatus, setSearchPaymentStatus] = useState("");
+  const [searchDateFrom, setSearchDateFrom] = useState("");
+  const [searchDateTo, setSearchDateTo] = useState("");
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchResults, setSearchResults] = useState<Order[]>([]);
+  const [searchTotalCount, setSearchTotalCount] = useState(0);
+  const [searchTotalPages, setSearchTotalPages] = useState(1);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const isSearchActive = !!(searchText || searchStatus || searchOrderType || searchPaymentStatus || searchDateFrom || searchDateTo);
+  const SEARCH_PAGE_SIZE = 25;
+
+  useEffect(() => {
+    if (!isSearchActive) {
+      setSearchResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    const runSearch = async () => {
+      setIsSearching(true);
+      setSearchError("");
+      try {
+        const params = new URLSearchParams();
+        if (searchText) params.set("search", searchText);
+        if (searchStatus) params.set("status", searchStatus);
+        if (searchOrderType) params.set("orderType", searchOrderType);
+        if (searchPaymentStatus) params.set("paymentStatus", searchPaymentStatus);
+        if (searchDateFrom) params.set("dateFrom", searchDateFrom);
+        if (searchDateTo) params.set("dateTo", searchDateTo);
+        params.set("page", String(searchPage));
+        params.set("pageSize", String(SEARCH_PAGE_SIZE));
+
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-search?${params.toString()}`, { headers, signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) {
+          setSearchError(data.error || "Failed to search orders.");
+          return;
+        }
+        setSearchResults(data.orders || []);
+        setSearchTotalCount(data.totalCount || 0);
+        setSearchTotalPages(data.totalPages || 1);
+        mergeOrdersIntoContext(data.orders || []);
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.error("[order search] Failed:", err);
+          setSearchError("Failed to search orders. Please check your connection.");
+        }
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    // Debounce so every keystroke doesn't fire a request.
+    const timeout = setTimeout(runSearch, 400);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText, searchStatus, searchOrderType, searchPaymentStatus, searchDateFrom, searchDateTo, searchPage]);
+
+  // Reset to page 1 whenever a filter (not the page itself) changes.
+  useEffect(() => {
+    setSearchPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText, searchStatus, searchOrderType, searchPaymentStatus, searchDateFrom, searchDateTo]);
+
+  const clearSearch = () => {
+    setSearchText("");
+    setSearchStatus("");
+    setSearchOrderType("");
+    setSearchPaymentStatus("");
+    setSearchDateFrom("");
+    setSearchDateTo("");
+    setSearchPage(1);
+  };
 
   const [orderTypeTab, setOrderTypeTabRaw] = useState<"standard" | "receipt_pickup" | "verification" | "batch" | "all" | "cancelled">("all");
   const [ordersPage, setOrdersPage] = useState(1);
@@ -735,6 +828,90 @@ export const AdminOrders: React.FC = () => {
         <p className="text-xs text-gray-400 mt-1 max-w-lg">Supervise real-time transactions, manage receipt pickups, track courier driver assignments, and enforce emergency cancellations.</p>
       </div>
 
+      {/* Search & Filter Bar -- searches across ALL orders server-side,
+          combined with the filters below. Active whenever any field here
+          is filled in, taking over the view below in place of the tabs. */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-3">
+        <div className="relative">
+          <Eye className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search by Order ID, customer name/phone, vendor, or rider..."
+            className="w-full pl-10 pr-4 py-2.5 text-xs border border-gray-150 rounded-xl bg-gray-50/50 outline-none focus:border-sky-300 transition"
+          />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <select
+            value={searchStatus}
+            onChange={(e) => setSearchStatus(e.target.value)}
+            className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+          >
+            <option value="">Any Status</option>
+            <option value="pending">Pending</option>
+            <option value="accepted">Accepted</option>
+            <option value="preparing">Preparing</option>
+            <option value="ready">Ready</option>
+            <option value="out_for_delivery">Out for Delivery</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="awaiting_payment_verification">Awaiting Payment Verification</option>
+          </select>
+          <select
+            value={searchOrderType}
+            onChange={(e) => setSearchOrderType(e.target.value)}
+            className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+          >
+            <option value="">Any Order Type</option>
+            <option value="standard">Standard</option>
+            <option value="receipt_pickup">Receipt Pickup</option>
+            <option value="batch">Batch</option>
+          </select>
+          <select
+            value={searchPaymentStatus}
+            onChange={(e) => setSearchPaymentStatus(e.target.value)}
+            className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none"
+          >
+            <option value="">Any Payment Status</option>
+            <option value="verified">Verified</option>
+            <option value="rejected">Rejected</option>
+            <option value="awaiting_verification">Awaiting Verification</option>
+            <option value="not_applicable">Not Applicable</option>
+          </select>
+          <div className="flex gap-1.5">
+            <input
+              type="date"
+              value={searchDateFrom}
+              onChange={(e) => setSearchDateFrom(e.target.value)}
+              title="From date"
+              className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none flex-1 min-w-0"
+            />
+            <input
+              type="date"
+              value={searchDateTo}
+              onChange={(e) => setSearchDateTo(e.target.value)}
+              title="To date"
+              className="text-xs p-2.5 border border-gray-150 rounded-xl bg-gray-50/50 outline-none flex-1 min-w-0"
+            />
+          </div>
+        </div>
+        {isSearchActive && (
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[10px] font-bold text-gray-400">
+              {isSearching ? "Searching..." : `${searchTotalCount} matching order${searchTotalCount !== 1 ? "s" : ""}`}
+            </span>
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="text-[10px] font-bold text-sky-600 hover:text-sky-800 cursor-pointer"
+            >
+              Clear search & filters
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Sub-tabs for standard versus receipt pickup */}
       <div className="flex gap-2 border-b border-gray-100 pb-3 mt-6">
         <button
@@ -799,7 +976,103 @@ export const AdminOrders: React.FC = () => {
         </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
-        {orderTypeTab === "standard" ? (
+        {isSearchActive ? (
+          searchError ? (
+            <div className="text-center py-12 text-rose-500 font-semibold text-xs">
+              {searchError}
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs">
+              {isSearching ? "Searching..." : "No orders match your search and filters."}
+            </div>
+          ) : (
+            <div>
+              <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
+                <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[1000px]">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Merchant Node</th>
+                      <th className="py-3 px-4">Customer</th>
+                      <th className="py-3 px-4">Payment Method</th>
+                      <th className="py-3 px-4 font-mono text-right">Sum</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Courier Driver</th>
+                      <th className="py-3 px-4 text-center">Auditing Operations</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs font-medium">
+                    {searchResults.map((o) => (
+                      <tr key={o.id} className="hover:bg-gray-50/50">
+                        <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id}</td>
+                        <td className="py-3.5 px-4">
+                          {o.batchDate && o.batchTime ? (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Batch</span>
+                          ) : o.orderType === "receipt_pickup" ? (
+                            <span className="text-[9px] bg-sky-100 text-sky-800 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Pickup</span>
+                          ) : (
+                            <span className="text-[9px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-black tracking-widest uppercase font-mono">Standard</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod?.replace(/_/g, " ")}</td>
+                        <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
+                        <td className="py-3.5 px-4">
+                          <span className={`py-1 px-2.5 rounded-md border text-[10px] font-bold capitalize ${getBadgeStyle(o.status)}`}>
+                            {o.status.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {o.riderId ? (
+                            <span className="text-blue-700 font-bold">🚴 {o.riderName}</span>
+                          ) : (
+                            <span className="text-gray-400 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            onClick={() => setSelectedOrder(o)}
+                            className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-bold border border-gray-250 cursor-pointer text-[10px] flex items-center gap-1.5 shadow-xs transition mx-auto"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-gray-500" /> Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {searchTotalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-400">
+                    Page {searchPage} of {searchTotalPages} ({searchTotalCount} total matching orders)
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={searchPage <= 1}
+                      onClick={() => setSearchPage(p => Math.max(1, p - 1))}
+                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      disabled={searchPage >= searchTotalPages}
+                      onClick={() => setSearchPage(p => Math.min(searchTotalPages, p + 1))}
+                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        ) : orderTypeTab === "standard" ? (
           standardOrders.length > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
