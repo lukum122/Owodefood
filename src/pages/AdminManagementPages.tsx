@@ -262,7 +262,7 @@ export const AdminOrders: React.FC = () => {
   // working normally), just renders 25 rows at a time instead of
   // potentially hundreds at once.
   const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification" && o.status !== "cancelled" && !(o.batchDate && o.batchTime));
-  const receiptPickupOrders = orders.filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled");
+  const receiptPickupOrders = orders.filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled" && o.status !== "awaiting_payment_verification");
   const standardTotalPages = Math.max(1, Math.ceil(standardOrders.length / ORDERS_PAGE_SIZE));
   const standardPageOrders = standardOrders.slice((ordersPage - 1) * ORDERS_PAGE_SIZE, ordersPage * ORDERS_PAGE_SIZE);
 
