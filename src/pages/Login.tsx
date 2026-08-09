@@ -201,40 +201,31 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         return;
       }
 
-      const checkRes = await checkUser(identifier);
-      if (!checkRes.exists || !checkRes.user) {
-        setError("No account found with this email or phone number.");
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-      
-      const foundUser = checkRes.user;
-
-      const code = Math.floor(1000 + Math.random() * 9000).toString();
-      setGeneratedResetCode(code);
-      setFoundUserForReset(foundUser);
+      setFoundUserForReset({ email: identifier }); // kept only to prefill the login email field after success
       setForgotPinStep("verify");
-      setSuccess("Sending 4-digit verification code to your email and phone...");
+      setSuccess("Sending verification code...");
 
       try {
-        const response = await fetch("/api/email/send-pin", {
+        const response = await fetch("/api/auth/request-pin-reset", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            toEmail: foundUser.email,
-            name: foundUser.name,
-            pin: code
-          })
+          body: JSON.stringify({ identifier })
         });
         const resJson = await response.json();
-        if (resJson.success) {
-          setSuccess(`A 4-digit verification code has been sent to your email (${foundUser.email}) and phone!`);
+        if (response.ok && resJson.success) {
+          // Deliberately doesn't confirm whether an account exists --
+          // showing a different message for "not found" here would let
+          // anyone check which emails/phones have accounts just by
+          // watching this response.
+          setSuccess(`If an account exists for ${identifier}, a 4-digit verification code has been sent to it.`);
         } else {
-          setError(`Failed to send PIN: ${resJson.error || "SMTP error"}. Please check your connection or contact support.`);
+          setError(resJson.error || "Failed to send the reset code. Please try again later.");
+          setForgotPinStep("request");
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } catch (err: any) {
         setError("Network error connecting to the server. Please try again later.");
+        setForgotPinStep("request");
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else if (forgotPinStep === "verify") {
@@ -245,15 +236,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         return;
       }
 
-      if (resetCodeInput !== generatedResetCode) {
-        setError("Incorrect verification code. Please check and try again.");
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-
+      // The code itself is verified server-side at the final step, along
+      // with the new PIN, together -- this screen just moves forward so
+      // the person can enter their new PIN next. Entering a wrong code
+      // here won't be caught until the real, secure check at submission.
       setForgotPinStep("new_pin");
-      setSuccess("Verification successful! Please define your new 4-digit security PIN.");
+      setSuccess("Please define your new 4-digit security PIN.");
     } else if (forgotPinStep === "new_pin") {
       if (newPin.length < 4) {
         setError("Please enter a complete 4-digit security PIN.");
@@ -276,42 +264,46 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         return;
       }
 
-      if (!foundUserForReset) {
-        setError("Session expired. Please try again.");
+      const identifier = forgotEmailOrPhone.trim().toLowerCase();
 
+      try {
+        const response = await fetch("/api/auth/confirm-pin-reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier, code: resetCodeInput, newPin })
+        });
+        const resJson = await response.json();
+        if (!response.ok || !resJson.success) {
+          setError(resJson.error || "Failed to reset your PIN. Please check your connection and try again.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        setSuccess("Your security PIN has been successfully reset! Redirecting to login...");
+
+        setTimeout(() => {
+          setEmail(resJson.user.email);
+
+          setLoginPin("");
+          setForgotPinStep(null);
+          setLoginPinStep(true);
+          setShowForgotPinLink(false);
+          setSuccess("Success! Access granted...");
+          finalizeLogin(resJson.user, resJson.token, selectedRole);
+          const defaultRedirects: Record<UserRole, string> = {
+            customer: "/",
+            vendor: "/vendor/dashboard",
+            rider: "/rider/dashboard",
+            admin: "/admin/dashboard",
+            employee: "/admin/dashboard",
+            super_admin: "/admin/dashboard",
+          };
+          navigate(defaultRedirects[selectedRole] || "/");
+        }, 1500);
+      } catch (err: any) {
+        setError("Network error connecting to the server. Please try again later.");
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        setForgotPinStep("request");
-        return;
       }
-
-      const result = await resetUserPin(foundUserForReset.id, newPin);
-      if (!result?.success) {
-        setError(result?.error || "Failed to reset your PIN. Please check your connection and try again.");
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-
-      setSuccess("Your security PIN has been successfully reset! Redirecting to login...");
-      
-      setTimeout(async () => {
-        setEmail(foundUserForReset.email);
-
-        setLoginPin("");
-        setForgotPinStep(null);
-        setLoginPinStep(true);
-        setShowForgotPinLink(false);
-        setSuccess("Success! Access granted...");
-        await login(foundUserForReset.email, newPin, selectedRole);
-        const defaultRedirects: Record<UserRole, string> = {
-          customer: "/",
-          vendor: "/vendor/dashboard",
-          rider: "/rider/dashboard",
-          admin: "/admin/dashboard",
-          employee: "/admin/dashboard",
-          super_admin: "/admin/dashboard",
-        };
-        navigate(defaultRedirects[selectedRole] || "/");
-      }, 1500);
     }
   };
 
