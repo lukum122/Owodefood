@@ -741,7 +741,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     };
 
-    const interval = setInterval(checkForUpdates, 15000);
+    const interval = setInterval(checkForUpdates, 60000);
 
     return () => {
       clearInterval(interval);
@@ -3261,6 +3261,47 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               return;
             case "PRODUCT_DELETE":
               setProducts(prev => prev.filter(p => p.id !== payload.id));
+              return;
+            case "USER_UPSERT":
+              setUsers(prev => {
+                const exists = prev.some(u => u.id === payload.id);
+                return exists ? prev.map(u => (u.id === payload.id ? { ...u, ...payload } : u)) : [...prev, payload];
+              });
+              // Keep the active session in sync if it's this same user's
+              // own record being updated (e.g. an admin editing them).
+              setCurrentUser(prev => (prev && prev.id === payload.id ? { ...prev, ...payload } : prev));
+              return;
+            case "RIDER_UPSERT":
+              setRiders(prev => {
+                const exists = prev.some(r => r.id === payload.id);
+                return exists ? prev.map(r => (r.id === payload.id ? { ...r, ...payload } : r)) : [...prev, payload];
+              });
+              return;
+            case "REVIEW_UPSERT":
+              setReviews(prev => {
+                const exists = prev.some(r => r.id === payload.id);
+                return exists ? prev.map(r => (r.id === payload.id ? { ...r, ...payload } : r)) : [...prev, payload];
+              });
+              return;
+            case "NOTIFICATION_CREATE":
+              // Only relevant to merge in if it's actually for the person
+              // currently using this browser -- the server-side room
+              // routing already limits who receives this broadcast, but
+              // double-checking here avoids polluting someone else's
+              // notification list in the (currently only admin-inclusive)
+              // room case.
+              if (payload.userId === currentUser?.id) {
+                setNotifications(prev => (prev.some(n => n.id === payload.id) ? prev : [payload, ...prev]));
+              }
+              return;
+            case "USER_SAVED_ADDRESS_UPSERT":
+              setSavedAddresses(prev => {
+                const exists = prev.some(a => a.id === payload.id);
+                return exists ? prev.map(a => (a.id === payload.id ? { ...a, ...payload } : a)) : [...prev, payload];
+              });
+              return;
+            case "USER_SAVED_ADDRESS_DELETE":
+              setSavedAddresses(prev => prev.filter(a => a.id !== payload.id));
               return;
           }
         }
