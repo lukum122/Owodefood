@@ -2356,7 +2356,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       // missing fields the server itself computed (like a recalculated
       // rating). Falls back to payload for types with no confirmed
       // record captured above.
-      const confirmedData = responseExtra.order || responseExtra.vendor || responseExtra.product || payload;
+      const confirmedData = responseExtra.order || responseExtra.vendor || responseExtra.product || responseExtra.user || responseExtra.rider || payload;
       io.emit("sync_update", { type, payload: confirmedData, version: newVersion });
     } else {
       // Everything else here is personal/operational data — a single
@@ -2367,7 +2367,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       // still sees the change within ~15s via the regular lightweight
       // version-check poll, so nothing is silently missed — it's just
       // not instantly pushed to strangers it has nothing to do with.
-      const confirmedData = responseExtra.order || responseExtra.vendor || responseExtra.product || payload;
+      const confirmedData = responseExtra.order || responseExtra.vendor || responseExtra.product || responseExtra.user || responseExtra.rider || payload;
       const notifyRooms = new Set<string>(["admin"]);
       if (payload?.id) notifyRooms.add(payload.id);
       if (payload?.customerId) notifyRooms.add(payload.customerId);
