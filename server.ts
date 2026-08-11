@@ -2638,7 +2638,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     res.json({ success: true, ...responseExtra });
   } catch (error) {
     console.error("Cloud SQL sync save failed:", error);
-    res.status(500).json({ error: "Failed to sync updates to Cloud SQL database." });
+    const detail = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: `Failed to sync updates to Cloud SQL database. Detail: ${detail}` });
   }
 });
 
