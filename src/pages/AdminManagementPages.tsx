@@ -3174,7 +3174,7 @@ export const AdminCustomers: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleSaveEditUser = (e: React.FormEvent) => {
+  const handleSaveEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setEditFormError("");
 
@@ -3198,7 +3198,7 @@ export const AdminCustomers: React.FC = () => {
       primaryRole = "admin";
     }
 
-    const result = adminUpdateUser(editingUserId!, {
+    const result = await adminUpdateUser(editingUserId!, {
       name: editName.trim(),
       email: editEmail.trim().toLowerCase(),
       phone: editPhone.trim(),
@@ -3224,7 +3224,7 @@ export const AdminCustomers: React.FC = () => {
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
     setFormSuccess("");
@@ -3254,7 +3254,7 @@ export const AdminCustomers: React.FC = () => {
 
     const primaryRole = newRoles.includes(newRole) ? newRole : newRoles[0];
 
-    const result = adminCreateUser(
+    const result = await adminCreateUser(
       newName.trim(),
       newEmail.trim(),
       newPhone.trim(),
