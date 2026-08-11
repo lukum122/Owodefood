@@ -2982,10 +2982,20 @@ export const AdminCustomers: React.FC = () => {
     setDeleteTargetId(id);
   };
 
-  const handleConfirmDelete = () => {
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const handleConfirmDelete = async () => {
     if (deleteTargetId) {
-      deleteUser(deleteTargetId);
-      setDeleteTargetId(null);
+      setIsDeletingUser(true);
+      try {
+        const result = await deleteUser(deleteTargetId);
+        if (!result?.success) {
+          window.alert(result?.error || "Failed to delete this user. Please try again.");
+          return;
+        }
+        setDeleteTargetId(null);
+      } finally {
+        setIsDeletingUser(false);
+      }
     }
   };
 
@@ -3055,15 +3065,17 @@ export const AdminCustomers: React.FC = () => {
             <div className="flex gap-3 justify-end pt-2">
               <button 
                 onClick={() => setDeleteTargetId(null)}
-                className="px-4 py-2 bg-gray-50 text-gray-500 border border-gray-100 rounded-xl text-xs font-bold hover:bg-gray-100 transition cursor-pointer"
+                disabled={isDeletingUser}
+                className="px-4 py-2 bg-gray-50 text-gray-500 border border-gray-100 rounded-xl text-xs font-bold hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 No, Back
               </button>
               <button 
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
+                disabled={isDeletingUser}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-wait text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
               >
-                Yes, Expel User
+                {isDeletingUser ? "Working..." : "Yes, Expel User"}
               </button>
             </div>
           </div>
