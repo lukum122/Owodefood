@@ -162,6 +162,31 @@ export const AdminOrders: React.FC = () => {
     setOrderTypeTabRaw(tab);
     setOrdersPage(1); // reset to page 1 whenever the tab changes
   };
+
+  // Decoupled tab counts -- accurate regardless of how much data has
+  // actually been fetched/loaded, since these come from a dedicated
+  // server-side count rather than the length of a client-side array.
+  const [tabCounts, setTabCounts] = useState<{ all: number; standard: number; receiptPickup: number; paymentVerification: number; batchActive: number; cancelled: number } | null>(null);
+  useEffect(() => {
+    const fetchTabCounts = async () => {
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch("/api/admin/orders-tab-counts", { headers });
+        const data = await res.json();
+        if (res.ok) setTabCounts(data);
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch tab counts:", err);
+      }
+    };
+    fetchTabCounts();
+    const interval = setInterval(fetchTabCounts, 60000);
+    return () => clearInterval(interval);
+  }, []);
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -991,7 +1016,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <ClipboardList className="w-4 h-4" /> All Orders ({orders.length})
+          <ClipboardList className="w-4 h-4" /> All Orders ({tabCounts?.all ?? orders.length})
         </button>
         <button
           onClick={() => setOrderTypeTab("standard")}
@@ -1001,7 +1026,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({standardOrders.length})
+          <UtensilsCrossed className="w-4 h-4" /> Standard Food Orders ({tabCounts?.standard ?? standardOrders.length})
         </button>
         <button
           onClick={() => setOrderTypeTab("receipt_pickup")}
@@ -1011,7 +1036,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <Truck className="w-4 h-4" /> Receipt Pickups ({receiptPickupOrders.length})
+          <Truck className="w-4 h-4" /> Receipt Pickups ({tabCounts?.receiptPickup ?? receiptPickupOrders.length})
         </button>
         <button
           onClick={() => setOrderTypeTab("verification")}
@@ -1021,7 +1046,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <ShieldAlert className="w-4 h-4" /> Payment Verification ({orders.filter(o => o.status === "awaiting_payment_verification").length})
+          <ShieldAlert className="w-4 h-4" /> Payment Verification ({tabCounts?.paymentVerification ?? orders.filter(o => o.status === "awaiting_payment_verification").length})
         </button>
         <button
           onClick={() => setOrderTypeTab("batch")}
@@ -1031,7 +1056,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <Layers className="w-4 h-4" /> Batch Deliveries ({orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled", "awaiting_payment_verification"].includes(o.status)).length})
+          <Layers className="w-4 h-4" /> Batch Deliveries ({tabCounts?.batchActive ?? orders.filter(o => o.batchDate && o.batchTime && !["delivered", "cancelled", "awaiting_payment_verification"].includes(o.status)).length})
         </button>
         <button
           onClick={() => setOrderTypeTab("cancelled")}
@@ -1041,7 +1066,7 @@ export const AdminOrders: React.FC = () => {
               : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
           }`}
         >
-          <XCircle className="w-4 h-4" /> Cancelled Orders ({orders.filter(o => o.status === "cancelled").length})
+          <XCircle className="w-4 h-4" /> Cancelled Orders ({tabCounts?.cancelled ?? orders.filter(o => o.status === "cancelled").length})
         </button>
       </div>
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm overflow-hidden">
