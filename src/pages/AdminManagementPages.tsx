@@ -163,9 +163,6 @@ export const AdminOrders: React.FC = () => {
     setOrdersPage(1); // reset to page 1 whenever the tab changes
   };
 
-  // Decoupled tab counts -- accurate regardless of how much data has
-  // actually been fetched/loaded, since these come from a dedicated
-  // server-side count rather than the length of a client-side array.
   const [tabCounts, setTabCounts] = useState<{ all: number; standard: number; receiptPickup: number; paymentVerification: number; batchActive: number; cancelled: number } | null>(null);
   useEffect(() => {
     const fetchTabCounts = async () => {
@@ -323,9 +320,58 @@ export const AdminOrders: React.FC = () => {
   // working normally), just renders 25 rows at a time instead of
   // potentially hundreds at once.
   const standardOrders = orders.filter(o => o.orderType !== "receipt_pickup" && o.status !== "awaiting_payment_verification" && o.status !== "cancelled" && !(o.batchDate && o.batchTime && o.status !== "delivered"));
+
+  // Real server-side pagination for the Standard tab -- fetches only the
+  // current page's orders instead of relying on the full dataset already
+  // being loaded. Merges into the shared orders context (not replacing
+  // it) so every existing mutation (accept/reject/assign rider/cancel)
+  // keeps working correctly -- those all look the order up from that
+  // shared array by ID and would otherwise fail with "Order not found"
+  // for anything not already there. Order IDs are tracked separately so
+  // the page's row order stays stable even as merged data updates.
+  const [standardPageOrderIds, setStandardPageOrderIds] = useState<string[]>([]);
+  const [standardTabTotalCount, setStandardTabTotalCount] = useState(0);
+  const [standardTabTotalPages, setStandardTabTotalPages] = useState(1);
+  const [isLoadingStandardTab, setIsLoadingStandardTab] = useState(false);
+  useEffect(() => {
+    if (orderTypeTab !== "standard") return;
+    let cancelled = false;
+    (async () => {
+      setIsLoadingStandardTab(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-by-tab?tab=standard&page=${ordersPage}&pageSize=${ORDERS_PAGE_SIZE}`, { headers });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok) {
+          mergeOrdersIntoContext(data.orders || []);
+          setStandardPageOrderIds((data.orders || []).map((o: any) => o.id));
+          setStandardTabTotalCount(data.totalCount || 0);
+          setStandardTabTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch standard tab page:", err);
+      } finally {
+        if (!cancelled) setIsLoadingStandardTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeTab, ordersPage]);
+
+  // Derived from the current shared orders array so a mutation (status
+  // change, etc.) is reflected immediately, while staying limited to
+  // exactly this page's rows in the correct, fetched order.
+  const standardPageOrders = standardPageOrderIds
+    .map(id => orders.find(o => o.id === id))
+    .filter((o): o is Order => !!o);
+  const standardTotalPages = standardTabTotalPages;
   const receiptPickupOrders = orders.filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled" && o.status !== "awaiting_payment_verification" && !(o.batchDate && o.batchTime && o.status !== "delivered"));
-  const standardTotalPages = Math.max(1, Math.ceil(standardOrders.length / ORDERS_PAGE_SIZE));
-  const standardPageOrders = standardOrders.slice((ordersPage - 1) * ORDERS_PAGE_SIZE, ordersPage * ORDERS_PAGE_SIZE);
 
   return (
     <div className="space-y-6 font-sans text-xs">
@@ -1167,7 +1213,11 @@ export const AdminOrders: React.FC = () => {
             </div>
           )
         ) : orderTypeTab === "standard" ? (
-          standardOrders.length > 0 ? (
+          isLoadingStandardTab && standardPageOrders.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs animate-pulse">
+              Loading standard orders...
+            </div>
+          ) : standardTabTotalCount > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
                 <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
@@ -1244,7 +1294,7 @@ export const AdminOrders: React.FC = () => {
               {standardTotalPages > 1 && (
                 <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
                   <span className="text-[10px] font-bold text-gray-400">
-                    Page {ordersPage} of {standardTotalPages} ({standardOrders.length} total orders)
+                    Page {ordersPage} of {standardTotalPages} ({standardTabTotalCount} total orders)
                   </span>
                   <div className="flex gap-2">
                     <button
