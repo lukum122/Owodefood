@@ -793,13 +793,23 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setCurrentUser(updatedUser);
       localStorage.setItem("fd_session_user", JSON.stringify(updatedUser));
       
-      // Keep the users list in sync as well
+      // Keep the users list in sync as well -- this only ever needs to
+      // update this one user's own entry, using data already confirmed
+      // from the server (latestDbUser), so a full bulk replace (and the
+      // remote sync that came with it) was never actually necessary
+      // here. Previously this ran on every 60s update check for every
+      // logged-in person and replaced the ENTIRE local users list with
+      // whatever was in memory at that moment -- if that happened to be
+      // incomplete (now common, since different pages load different
+      // partial slices independently), every other user would silently
+      // vanish from the UI until the next full reload brought them back.
       if (latestDbUser) {
         const updatedDbUser = { ...latestDbUser, roles: updatedRoles };
-        const updatedUsersList = users.map(u => u.id === currentUser.id ? updatedDbUser : u);
-        // Only trigger users list persist if it actually changed
         if (JSON.stringify(latestDbUser.roles) !== JSON.stringify(updatedRoles)) {
-          persistUsers(updatedUsersList);
+          setUsers(prev => {
+            const exists = prev.some(u => u.id === updatedDbUser.id);
+            return exists ? prev.map(u => (u.id === updatedDbUser.id ? updatedDbUser : u)) : [...prev, updatedDbUser];
+          });
         }
       }
     }
