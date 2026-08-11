@@ -1164,7 +1164,17 @@ export const AdminOrders: React.FC = () => {
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
                     {standardPageOrders.map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50 transition">
-                        <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">
+                          {o.id}
+                          {o.batchDate && o.batchTime && (
+                            <span
+                              title={`Originally a batch order: ${o.batchDate} @ ${o.batchTime}`}
+                              className="ml-1.5 text-[8px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black tracking-widest uppercase font-mono align-middle"
+                            >
+                              Batch
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
                         <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
                         <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
@@ -1258,7 +1268,17 @@ export const AdminOrders: React.FC = () => {
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
                     {receiptPickupOrders.map((rp: any) => (
                       <tr key={rp.id} className="hover:bg-gray-50/50 transition">
-                        <td className="py-3.5 px-4 font-mono font-bold text-sky-950">#{rp.id}</td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-sky-950">
+                          #{rp.id}
+                          {rp.batchDate && rp.batchTime && (
+                            <span
+                              title={`Originally a batch order: ${rp.batchDate} @ ${rp.batchTime}`}
+                              className="ml-1.5 text-[8px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black tracking-widest uppercase font-mono align-middle"
+                            >
+                              Batch
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{rp.vendorName}</td>
                         <td className="py-3.5 px-4 text-gray-700">{rp.customerName}</td>
                         <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">
