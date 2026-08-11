@@ -1793,8 +1793,12 @@ export const AdminOrders: React.FC = () => {
             );
           })()
         ) : orderTypeTab === "cancelled" ? (
-          (() => {
-            const cancelledOrders = orders.filter(o => o.status === "cancelled");
+          isLoadingCancelledTab && cancelledPageOrders.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs animate-pulse">
+              Loading cancelled orders...
+            </div>
+          ) : (() => {
+            const cancelledOrders = cancelledPageOrders;
             if (cancelledOrders.length === 0) {
               return (
                 <div className="text-center py-12 text-gray-400 font-semibold text-xs">
@@ -1867,11 +1871,38 @@ export const AdminOrders: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                {cancelledTabTotalPages > 1 && (
+                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
+                    <span className="text-[10px] font-bold text-gray-400">
+                      Page {cancelledPage} of {cancelledTabTotalPages} ({cancelledTabTotalCount} total cancelled orders)
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={cancelledPage <= 1}
+                        onClick={() => setCancelledPage(p => Math.max(1, p - 1))}
+                        className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        disabled={cancelledPage >= cancelledTabTotalPages}
+                        onClick={() => setCancelledPage(p => Math.min(cancelledTabTotalPages, p + 1))}
+                        className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()
         ) : (
-          orders.length > 0 ? (
+          isLoadingAllTab && allPageOrders.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 font-semibold text-xs animate-pulse">
+              Loading all orders...
+            </div>
+          ) : allTabTotalCount > 0 ? (
             <div>
               <div className="md:hidden text-[11px] text-gray-500 font-medium text-center mb-3.5 flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 border border-gray-100 rounded-xl">
                 <span className="animate-pulse">👉</span> Swipe table horizontally to audit records
@@ -1892,7 +1923,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
-                    {[...orders].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).map((o) => (
+                    {allPageOrders.map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-3.5 px-4 font-mono font-bold text-[#070329]">{o.id}</td>
                         <td className="py-3.5 px-4">
@@ -1950,6 +1981,29 @@ export const AdminOrders: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              {allTabTotalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 mt-2 border-t border-gray-100">
+                  <span className="text-[10px] font-bold text-gray-400">
+                    Page {allTabPage} of {allTabTotalPages} ({allTabTotalCount} total orders)
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={allTabPage <= 1}
+                      onClick={() => setAllTabPage(p => Math.max(1, p - 1))}
+                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      disabled={allTabPage >= allTabTotalPages}
+                      onClick={() => setAllTabPage(p => Math.min(allTabTotalPages, p + 1))}
+                      className="py-1.5 px-3 bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-bold border border-gray-150 rounded-lg text-[10px] transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-12 text-gray-400 font-semibold text-xs">
