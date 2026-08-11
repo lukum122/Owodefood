@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { 
@@ -29,7 +29,6 @@ export const AdminLayout: React.FC = () => {
   const { 
     currentUser, 
     logout, 
-    orders,
     vendors = [],
     riders = [],
     notifications = [],
@@ -43,6 +42,35 @@ export const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showNotifPopover, setShowNotifPopover] = useState(false);
+
+  // The badge used to be computed from the full orders array, which
+  // meant this sidebar (rendered on every single admin page) depended
+  // on orders being fully loaded just to show one number. Now fetched
+  // directly as a lightweight aggregate count, matching the same
+  // pattern already used for the dashboard's own stats.
+  const [pendingCount, setPendingCount] = useState(0);
+  useEffect(() => {
+    const fetchBadgeCount = async () => {
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch("/api/admin/dashboard-stats", { headers });
+        const data = await res.json();
+        if (res.ok && typeof data.pendingActionCount === "number") {
+          setPendingCount(data.pendingActionCount);
+        }
+      } catch (err) {
+        console.error("[AdminLayout] Failed to fetch badge count:", err);
+      }
+    };
+    fetchBadgeCount();
+    const interval = setInterval(fetchBadgeCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -127,7 +155,6 @@ export const AdminLayout: React.FC = () => {
   const currentItem = menuItems.find((m) => location.pathname === m.path || (m.path !== "/admin/dashboard" && location.pathname.startsWith(m.path)));
   const isAllowed = currentItem ? isItemAllowed(currentItem.name) : true;
 
-  const pendingCount = orders.filter(o => !["delivered", "cancelled"].includes(o.status)).length;
   const pendingVendorsCount = vendors.filter(v => v.status === "pending").length;
   const pendingRidersCount = riders.filter(r => r.status === "pending").length;
 
