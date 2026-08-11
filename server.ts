@@ -2452,6 +2452,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         await db.delete(addresses).where(eq(addresses.userId, payload.id));
         await db.delete(userSavedAddresses).where(eq(userSavedAddresses.userId, payload.id));
         await db.delete(walletTransactions).where(eq(walletTransactions.userId, payload.id));
+        await db.delete(reviews).where(eq(reviews.customerId, payload.id));
 
         await db.update(vendors).set({ status: "suspended" }).where(eq(vendors.userId, payload.id));
         await db.update(riders).set({ status: "suspended" }).where(eq(riders.userId, payload.id));
