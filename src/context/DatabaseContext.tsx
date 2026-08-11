@@ -159,8 +159,8 @@ interface DatabaseContextType {
   deleteUser: (userId: string) => Promise<{ success: boolean; error?: string }>;
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => Promise<{ success: boolean; error?: string }>;
   adminCreateOrder: (order: Order) => void;
-  adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => { success: boolean; error?: string };
-  adminUpdateUser: (userId: string, fields: { name: string; email: string; phone: string; role: UserRole; pin?: string; roles?: UserRole[] }, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => { success: boolean; error?: string };
+  adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => Promise<{ success: boolean; error?: string }>;
+  adminUpdateUser: (userId: string, fields: { name: string; email: string; phone: string; role: UserRole; pin?: string; roles?: UserRole[] }, extra?: { businessName?: string; cuisine?: string; vehicleType?: string }) => Promise<{ success: boolean; error?: string }>;
   adminUpdateUserRole: (userId: string, role: UserRole) => void;
 
   // Coverage Guide & Extreme Locations & Saved Addresses (Kwara coverage expansion)
@@ -2988,16 +2988,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     persistOrders([order, ...orders]);
   };
 
-  const adminCreateUser = (
+  const adminCreateUser = async (
     name: string,
     email: string,
     phone: string,
     role: UserRole,
     extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }
-  ) => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const cleansedEmail = email.trim().toLowerCase();
-    const exists = users.some(u => u.email.toLowerCase() === cleansedEmail);
-    if (exists) {
+    // Checks the server, not the local users array -- that array can be
+    // incomplete depending on which pages have loaded their own data, so
+    // relying on it here could let a genuine duplicate slip through
+    // undetected if the admin's session happened to be missing that
+    // particular user at the moment of the check.
+    const checkResult = await checkUser(cleansedEmail);
+    if (checkResult?.exists) {
       return { success: false, error: "An account with this email already exists." };
     }
 
@@ -3138,14 +3143,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const adminUpdateUser = (
+  const adminUpdateUser = async (
     userId: string,
     fields: { name: string; email: string; phone: string; role: UserRole; pin?: string; roles?: UserRole[] },
     extra?: { businessName?: string; cuisine?: string; vehicleType?: Rider["vehicleType"] }
-  ) => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const cleansedEmail = fields.email.trim().toLowerCase();
-    const otherExists = users.some(u => u.id !== userId && u.email.toLowerCase() === cleansedEmail);
-    if (otherExists) {
+    // Server-side check, same reasoning as adminCreateUser -- the local
+    // users array can be incomplete, which could let a genuine duplicate
+    // slip through undetected.
+    const checkResult = await checkUser(cleansedEmail);
+    if (checkResult?.exists && checkResult.user?.id !== userId) {
       return { success: false, error: "An account with this email already exists." };
     }
 
