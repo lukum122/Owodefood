@@ -962,30 +962,24 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
     let allAppNotifications: any[] = [];
 
     if (isAdmin) {
-      // Admins get everything — these 8 queries are independent of each
-      // other too, so they also run concurrently.
+      // Users, orders, and order-items used to be bundled into this bulk
+      // load for every admin session regardless of which page they were
+      // on -- meaning the whole app waited on every order and user ever
+      // created just to render anything at all. Each now has its own
+      // dedicated, on-demand endpoint (/api/admin/orders-full,
+      // /api/admin/users-full, /api/admin/orders-delivered), fetched only
+      // when the specific page that needs it is actually opened, and
+      // every dependent surface (Master Orders, Manage Users, Manage
+      // Vendors, Manage Riders, Payout Approvals, the sidebar badge) has
+      // already been wired up to fetch its own copy independently and
+      // verified working before this line changed.
       [
-        allUsers,
-        allOrders,
-        allOrderItems,
         allRiders,
         allSavedAddresses,
         allEmployees,
         allWalletTransactions,
         allAppNotifications,
       ] = await Promise.all([
-        db.select({
-          id: users.id,
-          email: users.email,
-          name: users.name,
-          phone: users.phone,
-          role: users.role,
-          gender: users.gender,
-          createdAt: users.createdAt,
-          roles: users.roles,
-        }).from(users),
-        db.select().from(orders),
-        db.select().from(orderItems),
         db.select().from(riders),
         db.select().from(userSavedAddresses),
         db.select().from(employees),
