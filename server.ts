@@ -2300,9 +2300,26 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         await db.delete(employees).where(eq(employees.id, payload.id));
         break;
 
-      case "USER_DELETE":
+      case "USER_DELETE": {
+        // This had no authorization check at all -- any logged-in user
+        // could previously call this directly and delete any other
+        // account, including an admin's.
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only admins can delete user accounts." });
+        }
+
+        // If this user owns a vendor or rider profile, suspend it rather
+        // than deleting it -- actually deleting the vendor/rider row
+        // would leave every existing order that references it pointing
+        // at a record that no longer exists. Suspending preserves order
+        // history integrity while still making it clear the account is
+        // no longer active.
+        await db.update(vendors).set({ status: "suspended" }).where(eq(vendors.userId, payload.id));
+        await db.update(riders).set({ status: "suspended" }).where(eq(riders.userId, payload.id));
+
         await db.delete(users).where(eq(users.id, payload.id));
         break;
+      }
 
       case "SYSTEM_SETTING_UPSERT":
         await db.insert(systemSettings).values({
