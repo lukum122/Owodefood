@@ -789,6 +789,85 @@ app.get("/api/admin/orders-tab-counts", verifyTokenOptional, async (req: any, re
   }
 });
 
+// Master Orders tab content, paginated -- returns one page of a specific
+// tab's rows, using the exact same filter logic as orders-tab-counts
+// above (kept in sync deliberately, since a mismatch between the count
+// shown and the rows returned would be confusing). Separate from the
+// general orders-search endpoint so nothing about that already-working
+// free-text search feature is touched by this.
+app.get("/api/admin/orders-by-tab", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const { tab = "all", page = "1", pageSize = "25" } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10) || 25));
+
+    let whereClause: any = undefined;
+    switch (tab) {
+      case "standard":
+        whereClause = sql`${orders.orderType} != 'receipt_pickup'
+          AND ${orders.status} != 'awaiting_payment_verification'
+          AND ${orders.status} != 'cancelled'
+          AND NOT (${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL AND ${orders.status} != 'delivered')`;
+        break;
+      case "receipt_pickup":
+        whereClause = sql`${orders.orderType} = 'receipt_pickup'
+          AND ${orders.status} != 'cancelled'
+          AND ${orders.status} != 'awaiting_payment_verification'
+          AND NOT (${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL AND ${orders.status} != 'delivered')`;
+        break;
+      case "payment_verification":
+        whereClause = eq(orders.status, "awaiting_payment_verification");
+        break;
+      case "batch_active":
+        whereClause = sql`${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL
+          AND ${orders.status} NOT IN ('delivered', 'cancelled', 'awaiting_payment_verification')`;
+        break;
+      case "cancelled":
+        whereClause = eq(orders.status, "cancelled");
+        break;
+      case "all":
+      default:
+        whereClause = undefined;
+        break;
+    }
+
+    const [totalResult, matchingOrders] = await Promise.all([
+      db.select({ value: count() }).from(orders).where(whereClause),
+      db.select().from(orders).where(whereClause).orderBy(desc(orders.createdAt)).limit(pageSizeNum).offset((pageNum - 1) * pageSizeNum),
+    ]);
+
+    const totalCount = Number(totalResult[0]?.value || 0);
+
+    let itemsByOrder: Record<string, any[]> = {};
+    if (matchingOrders.length > 0) {
+      const orderIds = matchingOrders.map(o => o.id);
+      const items = await db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds));
+      for (const item of items) {
+        if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+        itemsByOrder[item.orderId].push(item);
+      }
+    }
+
+    res.json({
+      orders: matchingOrders.map(o => ({ ...o, items: itemsByOrder[o.id] || [] })),
+      totalCount,
+      page: pageNum,
+      pageSize: pageSizeNum,
+      totalPages: Math.max(1, Math.ceil(totalCount / pageSizeNum)),
+    });
+  } catch (error: any) {
+    console.error("Failed to load order tab page:", error);
+    res.status(500).json({ error: "Failed to load orders." });
+  }
+});
+
 app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
