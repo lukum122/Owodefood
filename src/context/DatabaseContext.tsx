@@ -1239,8 +1239,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setEmployees(updated);
     syncSave("EMPLOYEES_BULK", updated);
 
-    // Also register them in users state so they can log in via quick login!
-    const updatedUsers = [...users, {
+    const newEmpUser = {
       id: newEmp.id,
       email: newEmp.email,
       name: newEmp.name,
@@ -1248,8 +1247,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       role: "employee" as UserRole,
       roles: ["customer", "employee" as UserRole],
       createdAt: newEmp.createdAt
-    }];
-    persistUsers(updatedUsers);
+    };
+    syncSave("USER_UPSERT", newEmpUser);
+    setUsers(prev => [...prev, newEmpUser as User]);
   };
 
   const updateEmployee = (id: string, updatedFields: Partial<Employee>) => {
@@ -1257,15 +1257,18 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setEmployees(updated);
     syncSave("EMPLOYEES_BULK", updated);
 
-    // Keep users state synced too
-    const updatedUsers = users.map(u => u.id === id ? { 
-      ...u, 
-      name: updatedFields.name || u.name, 
-      email: updatedFields.email || u.email,
-      phone: updatedFields.phone || u.phone,
-      role: (updatedFields.status === "inactive" ? "customer" : "employee") as UserRole // switch to customer if inactive
-    } : u);
-    persistUsers(updatedUsers);
+    const existingUser = users.find(u => u.id === id);
+    if (existingUser) {
+      const updatedEmpUser = {
+        ...existingUser,
+        name: updatedFields.name || existingUser.name,
+        email: updatedFields.email || existingUser.email,
+        phone: updatedFields.phone || existingUser.phone,
+        role: (updatedFields.status === "inactive" ? "customer" : "employee") as UserRole
+      };
+      syncSave("USER_UPSERT", updatedEmpUser);
+      setUsers(prev => prev.map(u => (u.id === id ? updatedEmpUser : u)));
+    }
   };
 
   const removeEmployee = (id: string) => {
@@ -1273,9 +1276,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setEmployees(updated);
     syncSave("EMPLOYEE_DELETE", { id });
 
-    // Also delete from users state
-    const updatedUsers = users.filter(u => u.id !== id);
-    persistUsers(updatedUsers);
+    syncSave("USER_DELETE", { id });
+    setUsers(prev => prev.filter(u => u.id !== id));
   };
 
   // Cloud SQL Sync helper
@@ -1330,12 +1332,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // Update localStorage whenever values change and sync to Cloud SQL
-  const persistUsers = (newUsers: User[]) => {
-    const checkedUsers = ensureSuperAdminsOnly(newUsers);
-    setUsers(checkedUsers);
-    syncSave("USERS_BULK", checkedUsers);
-  };
-
   const persistVendors = (newVendors: Vendor[]) => {
     setVendors(newVendors);
     return syncSave("VENDORS_BULK", newVendors);
@@ -1491,8 +1487,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       pin: extra?.pin || undefined
     };
 
-    const updatedUsers = [...users, newUser];
-    persistUsers(updatedUsers);
+    syncSave("USER_UPSERT", newUser);
+    setUsers(prev => [...prev, newUser]);
 
     // If role is vendor, register a vendor profile as well
     if (role === "vendor") {
@@ -1714,7 +1710,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         roles: role === "customer" ? ["customer"] : ["customer", role],
         createdAt: new Date().toISOString()
       };
-      persistUsers([...users, targetUser]);
+      syncSave("USER_UPSERT", targetUser);
+      setUsers(prev => [...prev, targetUser as User]);
     } else {
       // Ensure roles is initialized with at least customer and their current role
       const currentRoles = targetUser.roles || [targetUser.role];
@@ -1728,7 +1725,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...targetUser,
         roles: currentRoles
       };
-      persistUsers(users.map(u => u.id === targetUser?.id ? targetUser! : u));
+      const confirmedTargetUser = targetUser;
+      syncSave("USER_UPSERT", confirmedTargetUser);
+      setUsers(prev => prev.map(u => (u.id === confirmedTargetUser.id ? confirmedTargetUser : u)));
     }
 
     setCurrentUser(targetUser);
@@ -2867,21 +2866,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (status === "approved") {
       const vendorObj = vendors.find(v => v.id === vendorId);
       if (vendorObj && vendorObj.userId) {
-        const updatedUsers = users.map(u => {
-          if (u.id === vendorObj.userId) {
-            const currentRoles = u.roles || [u.role];
-            const updatedRoles = currentRoles.includes("vendor") ? currentRoles : [...currentRoles, "vendor" as UserRole];
-            const updatedUser = { ...u, roles: updatedRoles };
-            if (currentUser && currentUser.id === u.id) {
-              const updatedSession = { ...currentUser, roles: updatedRoles };
-              setCurrentUser(updatedSession);
-              localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
-            }
-            return updatedUser;
+        const existingUser = users.find(u => u.id === vendorObj.userId);
+        if (existingUser) {
+          const currentRoles = existingUser.roles || [existingUser.role];
+          const updatedRoles = currentRoles.includes("vendor") ? currentRoles : [...currentRoles, "vendor" as UserRole];
+          const updatedUser = { ...existingUser, roles: updatedRoles };
+          if (currentUser && currentUser.id === existingUser.id) {
+            const updatedSession = { ...currentUser, roles: updatedRoles };
+            setCurrentUser(updatedSession);
+            localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
           }
-          return u;
-        });
-        persistUsers(updatedUsers);
+          syncSave("USER_UPSERT", updatedUser);
+          setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
+        }
 
         addNotification(
           vendorObj.userId,
@@ -2916,21 +2913,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (status === "approved") {
       const riderObj = riders.find(r => r.id === riderId);
       if (riderObj && riderObj.userId) {
-        const updatedUsers = users.map(u => {
-          if (u.id === riderObj.userId) {
-            const currentRoles = u.roles || [u.role];
-            const updatedRoles = currentRoles.includes("rider") ? currentRoles : [...currentRoles, "rider" as UserRole];
-            const updatedUser = { ...u, roles: updatedRoles };
-            if (currentUser && currentUser.id === u.id) {
-              const updatedSession = { ...currentUser, roles: updatedRoles };
-              setCurrentUser(updatedSession);
-              localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
-            }
-            return updatedUser;
+        const existingUser = users.find(u => u.id === riderObj.userId);
+        if (existingUser) {
+          const currentRoles = existingUser.roles || [existingUser.role];
+          const updatedRoles = currentRoles.includes("rider") ? currentRoles : [...currentRoles, "rider" as UserRole];
+          const updatedUser = { ...existingUser, roles: updatedRoles };
+          if (currentUser && currentUser.id === existingUser.id) {
+            const updatedSession = { ...currentUser, roles: updatedRoles };
+            setCurrentUser(updatedSession);
+            localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
           }
-          return u;
-        });
-        persistUsers(updatedUsers);
+          syncSave("USER_UPSERT", updatedUser);
+          setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
+        }
 
         addNotification(
           riderObj.userId,
@@ -3022,8 +3017,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString()
     };
 
-    const updatedUsers = [...users, newUser];
-    persistUsers(updatedUsers);
+    syncSave("USER_UPSERT", newUser);
+    setUsers(prev => [...prev, newUser]);
 
     // If roles list includes employee, register an employee profile as well
     if (userRoles.includes("employee")) {
@@ -3082,23 +3077,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const adminUpdateUserRole = (userId: string, role: UserRole) => {
-    const updatedUsers = users.map(u => {
-      if (u.id === userId) {
-        const currentRoles = u.roles || [u.role];
-        const updatedRoles = currentRoles.includes(role) ? currentRoles : [...currentRoles, role];
-        const updatedUser = { ...u, role, roles: updatedRoles };
-        if (currentUser && currentUser.id === userId) {
-          const updatedSession = { ...currentUser, role, roles: updatedRoles };
-          setCurrentUser(updatedSession);
-          localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
-        }
-        return updatedUser;
-      }
-      return u;
-    });
-    persistUsers(updatedUsers);
+    const existingUser = users.find(u => u.id === userId);
+    if (!existingUser) return;
 
-    const targetUser = users.find(u => u.id === userId);
+    const currentRoles = existingUser.roles || [existingUser.role];
+    const updatedRoles = currentRoles.includes(role) ? currentRoles : [...currentRoles, role];
+    const updatedUser = { ...existingUser, role, roles: updatedRoles };
+    if (currentUser && currentUser.id === userId) {
+      const updatedSession = { ...currentUser, role, roles: updatedRoles };
+      setCurrentUser(updatedSession);
+      localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+    }
+    syncSave("USER_UPSERT", updatedUser);
+    setUsers(prev => prev.map(u => (u.id === userId ? updatedUser : u)));
+
+    const targetUser = updatedUser;
     if (targetUser) {
       if (role === "vendor" && !vendors.some(v => v.userId === userId)) {
         const newVendor: Vendor = {
@@ -3156,35 +3149,35 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return { success: false, error: "An account with this email already exists." };
     }
 
-    const updatedUsers = users.map(u => {
-      if (u.id === userId) {
-        const updatedRoles = fields.roles || u.roles || [fields.role];
-        if (!updatedRoles.includes("customer")) {
-          updatedRoles.unshift("customer");
-        }
-        const activeRole = updatedRoles.includes(fields.role) ? fields.role : (updatedRoles[updatedRoles.length - 1] || "customer");
-        const updatedUser = {
-          ...u,
-          name: fields.name.trim(),
-          email: cleansedEmail,
-          phone: fields.phone.trim(),
-          role: activeRole,
-          roles: updatedRoles,
-          pin: fields.pin !== undefined ? fields.pin : u.pin
-        };
-        if (currentUser && currentUser.id === userId) {
-          const keepCurrentRole = updatedRoles.includes(currentUser.role);
-          const newSessionRole = keepCurrentRole ? currentUser.role : activeRole;
-          const updatedSession = { ...currentUser, ...updatedUser, role: newSessionRole };
-          setCurrentUser(updatedSession);
-          localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
-        }
-        return updatedUser;
-      }
-      return u;
-    });
+    const existingUser = users.find(u => u.id === userId);
+    if (!existingUser) {
+      return { success: false, error: "User not found" };
+    }
 
-    persistUsers(updatedUsers);
+    const updatedRoles = fields.roles || existingUser.roles || [fields.role];
+    if (!updatedRoles.includes("customer")) {
+      updatedRoles.unshift("customer");
+    }
+    const activeRole = updatedRoles.includes(fields.role) ? fields.role : (updatedRoles[updatedRoles.length - 1] || "customer");
+    const updatedUser = {
+      ...existingUser,
+      name: fields.name.trim(),
+      email: cleansedEmail,
+      phone: fields.phone.trim(),
+      role: activeRole,
+      roles: updatedRoles,
+      pin: fields.pin !== undefined ? fields.pin : existingUser.pin
+    };
+    if (currentUser && currentUser.id === userId) {
+      const keepCurrentRole = updatedRoles.includes(currentUser.role);
+      const newSessionRole = keepCurrentRole ? currentUser.role : activeRole;
+      const updatedSession = { ...currentUser, ...updatedUser, role: newSessionRole };
+      setCurrentUser(updatedSession);
+      localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
+    }
+
+    syncSave("USER_UPSERT", updatedUser);
+    setUsers(prev => prev.map(u => (u.id === userId ? updatedUser : u)));
 
     const targetRoles = fields.roles || [fields.role];
     if (!targetRoles.includes("customer")) {
