@@ -146,6 +146,9 @@ interface DatabaseContextType {
   acceptDelivery: (orderId: string, riderId: string) => Promise<{ success: boolean; error?: string }>;
   updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
   mergeOrdersIntoContext: (incomingOrders: Order[]) => void;
+  fetchFullOrders: () => Promise<{ success: boolean; error?: string }>;
+  fetchDeliveredOrders: () => Promise<{ success: boolean; error?: string }>;
+  fetchFullUsers: () => Promise<{ success: boolean; error?: string }>;
   reopenCancelledOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   updateOrderPayoutStatus: (orderId: string, type: "rider" | "vendor", status: "pending" | "paid") => Promise<{ success: boolean; error?: string }>;
   updateRiderProfile: (profile: Partial<Rider>) => Promise<{ success: boolean; error?: string }>;
@@ -2683,6 +2686,82 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
+  const mergeUsersIntoContext = (incomingUsers: User[]) => {
+    setUsers(prev => {
+      const byId = new Map(prev.map(u => [u.id, u]));
+      for (const incoming of incomingUsers) {
+        byId.set(incoming.id, incoming);
+      }
+      return Array.from(byId.values());
+    });
+  };
+
+  /**
+   * On-demand fetches for admin pages that need the full orders/users
+   * dataset -- these used to be bundled into every single app load
+   * regardless of which page someone was on. Each of these is called
+   * only when the specific page that needs it actually mounts, and
+   * merges the result into the shared context rather than replacing it,
+   * so nothing that already reads from `orders`/`users` elsewhere loses
+   * data it was already relying on.
+   */
+  const fetchFullOrders = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = localStorage.getItem("fd_jwt_token");
+      const headers: any = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
+      const res = await fetch("/api/admin/orders-full", { headers });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Failed to load orders." };
+      mergeOrdersIntoContext(data.orders || []);
+      return { success: true };
+    } catch (err) {
+      console.error("[fetchFullOrders] Failed:", err);
+      return { success: false, error: "Failed to load orders. Please check your connection." };
+    }
+  };
+
+  const fetchDeliveredOrders = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = localStorage.getItem("fd_jwt_token");
+      const headers: any = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
+      const res = await fetch("/api/admin/orders-delivered", { headers });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Failed to load orders." };
+      mergeOrdersIntoContext(data.orders || []);
+      return { success: true };
+    } catch (err) {
+      console.error("[fetchDeliveredOrders] Failed:", err);
+      return { success: false, error: "Failed to load orders. Please check your connection." };
+    }
+  };
+
+  const fetchFullUsers = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = localStorage.getItem("fd_jwt_token");
+      const headers: any = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
+      const res = await fetch("/api/admin/users-full", { headers });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Failed to load users." };
+      mergeUsersIntoContext(data.users || []);
+      return { success: true };
+    } catch (err) {
+      console.error("[fetchFullUsers] Failed:", err);
+      return { success: false, error: "Failed to load users. Please check your connection." };
+    }
+  };
+
   const reopenCancelledOrder = async (orderId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedReason = reason.trim();
     if (!trimmedReason) return { success: false, error: "A reason is required to reopen a cancelled order." };
@@ -3462,6 +3541,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         acceptDelivery,
         updateDeliveryStatus,
         mergeOrdersIntoContext,
+        fetchFullOrders,
+        fetchDeliveredOrders,
+        fetchFullUsers,
         reopenCancelledOrder,
         updateOrderPayoutStatus,
         updateRiderProfile,
