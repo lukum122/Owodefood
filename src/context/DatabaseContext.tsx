@@ -156,7 +156,7 @@ interface DatabaseContextType {
   // Admin Actions
   toggleVendorStatus: (vendorId: string, status: Vendor["status"], reason?: string) => Promise<void>;
   toggleRiderStatus: (riderId: string, status: Rider["status"], reason?: string) => Promise<void>;
-  deleteUser: (userId: string) => void;
+  deleteUser: (userId: string) => Promise<{ success: boolean; error?: string }>;
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => Promise<{ success: boolean; error?: string }>;
   adminCreateOrder: (order: Order) => void;
   adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => { success: boolean; error?: string };
@@ -2932,11 +2932,26 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const deleteUser = (userId: string) => {
-    persistUsers(users.filter(u => u.id !== userId));
-    // Also remove related assets
-    persistVendors(vendors.filter(v => v.userId !== userId));
-    persistRiders(riders.filter(r => r.userId !== userId));
+  const deleteUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    // Previously this called persistUsers/persistVendors/persistRiders,
+    // which all use bulk-replace (upsert only, never delete rows absent
+    // from the payload) -- meaning nothing was actually removed from the
+    // database. The user/vendor/rider would reappear on the next reload.
+    // A real USER_DELETE endpoint already existed server-side; this just
+    // wasn't using it.
+    const result = await syncSave("USER_DELETE", { id: userId });
+    if (!result?.success) {
+      console.error(`[deleteUser] Failed to delete user ${userId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to delete this user. Please try again." };
+    }
+
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    // Matches the backend's suspend-rather-than-delete behavior for any
+    // vendor/rider record the deleted user owned.
+    setVendors(prev => prev.map(v => (v.userId === userId ? { ...v, status: "suspended" } : v)));
+    setRiders(prev => prev.map(r => (r.userId === userId ? { ...r, status: "suspended" } : r)));
+
+    return { success: true };
   };
 
   const adminUpdateVendor = async (vendorId: string, updatedFields: Partial<Vendor>): Promise<{ success: boolean; error?: string }> => {
