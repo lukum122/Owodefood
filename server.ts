@@ -13,6 +13,7 @@ import {
   orderItems,
   riders,
   paymentGateways,
+  addresses,
   userSavedAddresses,
   extremeLocationTiers,
   extremeLocations,
@@ -2439,19 +2440,19 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "USER_DELETE": {
-        // This had no authorization check at all -- any logged-in user
-        // could previously call this directly and delete any other
-        // account, including an admin's.
         if (!isAdmin) {
           return res.status(403).json({ error: "Forbidden: Only admins can delete user accounts." });
         }
 
-        // If this user owns a vendor or rider profile, suspend it rather
-        // than deleting it -- actually deleting the vendor/rider row
-        // would leave every existing order that references it pointing
-        // at a record that no longer exists. Suspending preserves order
-        // history integrity while still making it clear the account is
-        // no longer active.
+        const customerOrderCount = await db.select({ value: count() }).from(orders).where(eq(orders.customerId, payload.id));
+        if (Number(customerOrderCount[0]?.value || 0) > 0) {
+          return res.status(400).json({ error: "This user has order history and cannot be permanently deleted, since that would break existing order records. Suspend their vendor/rider access instead if you need to restrict them." });
+        }
+
+        await db.delete(addresses).where(eq(addresses.userId, payload.id));
+        await db.delete(userSavedAddresses).where(eq(userSavedAddresses.userId, payload.id));
+        await db.delete(walletTransactions).where(eq(walletTransactions.userId, payload.id));
+
         await db.update(vendors).set({ status: "suspended" }).where(eq(vendors.userId, payload.id));
         await db.update(riders).set({ status: "suspended" }).where(eq(riders.userId, payload.id));
 
