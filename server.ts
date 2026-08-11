@@ -730,6 +730,65 @@ app.get("/api/admin/orders-search", verifyTokenOptional, async (req: any, res: a
 // into every /api/sync/load call regardless of which page someone is
 // on. This is the piece that was previously making the whole app wait
 // on every order ever created just to render anything at all.
+// Master Orders tab counts -- decoupled from whatever's actually loaded
+// client-side, so the badges stay accurate regardless of dataset size.
+// Each query mirrors that specific tab's exact client-side filter logic.
+app.get("/api/admin/orders-tab-counts", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const [
+      allResult,
+      standardResult,
+      receiptPickupResult,
+      verificationResult,
+      batchActiveResult,
+      cancelledResult,
+    ] = await Promise.all([
+      db.select({ value: count() }).from(orders),
+      // Matches standardOrders: not receipt_pickup, not awaiting
+      // verification, not cancelled, and not an active (undelivered)
+      // batch order -- delivered batch orders count as standard.
+      db.select({ value: count() }).from(orders).where(
+        sql`${orders.orderType} != 'receipt_pickup'
+          AND ${orders.status} != 'awaiting_payment_verification'
+          AND ${orders.status} != 'cancelled'
+          AND NOT (${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL AND ${orders.status} != 'delivered')`
+      ),
+      // Matches receiptPickupOrders: same active-batch exclusion applies.
+      db.select({ value: count() }).from(orders).where(
+        sql`${orders.orderType} = 'receipt_pickup'
+          AND ${orders.status} != 'cancelled'
+          AND ${orders.status} != 'awaiting_payment_verification'
+          AND NOT (${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL AND ${orders.status} != 'delivered')`
+      ),
+      db.select({ value: count() }).from(orders).where(eq(orders.status, "awaiting_payment_verification")),
+      db.select({ value: count() }).from(orders).where(
+        sql`${orders.batchDate} IS NOT NULL AND ${orders.batchTime} IS NOT NULL
+          AND ${orders.status} NOT IN ('delivered', 'cancelled', 'awaiting_payment_verification')`
+      ),
+      db.select({ value: count() }).from(orders).where(eq(orders.status, "cancelled")),
+    ]);
+
+    res.json({
+      all: Number(allResult[0]?.value || 0),
+      standard: Number(standardResult[0]?.value || 0),
+      receiptPickup: Number(receiptPickupResult[0]?.value || 0),
+      paymentVerification: Number(verificationResult[0]?.value || 0),
+      batchActive: Number(batchActiveResult[0]?.value || 0),
+      cancelled: Number(cancelledResult[0]?.value || 0),
+    });
+  } catch (error: any) {
+    console.error("Failed to load order tab counts:", error);
+    res.status(500).json({ error: "Failed to load order counts." });
+  }
+});
+
 app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
