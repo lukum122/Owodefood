@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { AppNotification, User } from "../types";
 import { hasRole } from "../roleHelper";
@@ -24,8 +24,12 @@ export const AdminNotifications: React.FC = () => {
     users, 
     notifications = [], 
     addNotification, 
-    deleteNotification
+    deleteNotification,
+    fetchFullUsers
   } = useDatabase();
+  useEffect(() => {
+    fetchFullUsers();
+  }, []);
 
   // Selected state
   const [targetType, setTargetType] = useState<"all" | "role" | "individual">("all");

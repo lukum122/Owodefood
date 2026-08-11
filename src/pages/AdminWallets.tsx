@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { WalletTransaction, User } from "../types";
 import { hasRole } from "../roleHelper";
@@ -17,7 +17,11 @@ export const AdminWallets: React.FC = () => {
     updateWalletFundingModes,
     approveWalletFunding,
     declineWalletFunding,
+    fetchFullUsers,
   } = useDatabase();
+  useEffect(() => {
+    fetchFullUsers();
+  }, []);
 
   const handleToggleGateway = (gateway: "bank_transfer" | "monnify" | "paystack") => {
     const nextBank = gateway === "bank_transfer" ? !walletFundingBankTransferEnabled : walletFundingBankTransferEnabled;

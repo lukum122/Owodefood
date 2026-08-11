@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Product, Vendor, Addon, Order, User, OrderStatus } from "../types";
 import { hasRole } from "../roleHelper";
@@ -42,8 +42,12 @@ export const AdminPOS: React.FC = () => {
     calculateServiceFee,
     currency,
     vatEnabled,
-    vatRate
+    vatRate,
+    fetchFullUsers
   } = useDatabase();
+  useEffect(() => {
+    fetchFullUsers();
+  }, []);
 
   // POS State
   const [cart, setCart] = useState<PosCartItem[]>([]);
