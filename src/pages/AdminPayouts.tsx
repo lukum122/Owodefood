@@ -1,13 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, Eye, CheckCircle, Clock } from "lucide-react";
 import { useDatabase } from "../context/DatabaseContext";
 import { Order } from "../types";
 
 export const AdminPayouts: React.FC = () => {
-  const { orders, updateOrderPayoutStatus, currency } = useDatabase();
+  const { orders, updateOrderPayoutStatus, currency, fetchDeliveredOrders } = useDatabase();
   const [activeTab, setActiveTab] = useState<"rider" | "vendor">("rider");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [ordersLoadError, setOrdersLoadError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIsLoadingOrders(true);
+      setOrdersLoadError("");
+      const result = await fetchDeliveredOrders();
+      if (!cancelled && !result?.success) {
+        setOrdersLoadError(result?.error || "Failed to load orders.");
+      }
+      if (!cancelled) setIsLoadingOrders(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePay = async (orderId: string, type: "rider" | "vendor") => {
     if (window.confirm(`Mark this ${type} payout as PAID?`)) {
@@ -46,6 +62,23 @@ export const AdminPayouts: React.FC = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {isLoadingOrders && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center text-xs font-bold text-gray-400 animate-pulse">
+          Loading orders...
+        </div>
+      )}
+      {ordersLoadError && !isLoadingOrders && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center text-xs font-bold text-red-600 flex flex-col items-center gap-2">
+          {ordersLoadError}
+          <button
+            onClick={() => window.location.reload()}
+            className="text-[10px] underline text-red-700 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

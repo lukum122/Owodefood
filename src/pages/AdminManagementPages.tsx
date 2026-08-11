@@ -18,8 +18,30 @@ export const AdminOrders: React.FC = () => {
     riders,
     currentUser,
     reopenCancelledOrder,
-    mergeOrdersIntoContext
+    mergeOrdersIntoContext,
+    fetchFullOrders
   } = useDatabase();
+
+  // Orders used to be bundled into every single app load regardless of
+  // which page someone was on. Now fetched only here, when this
+  // specific page is actually opened, and merged into the shared
+  // context rather than replacing it.
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [ordersLoadError, setOrdersLoadError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIsLoadingOrders(true);
+      setOrdersLoadError("");
+      const result = await fetchFullOrders();
+      if (!cancelled && !result?.success) {
+        setOrdersLoadError(result?.error || "Failed to load orders.");
+      }
+      if (!cancelled) setIsLoadingOrders(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Tracks which specific order (and which action) is currently mid-flight,
   // so the button can show real feedback instead of appearing to do
@@ -852,6 +874,23 @@ export const AdminOrders: React.FC = () => {
         <p className="text-xs text-gray-400 mt-1 max-w-lg">Supervise real-time transactions, manage receipt pickups, track courier driver assignments, and enforce emergency cancellations.</p>
       </div>
 
+      {isLoadingOrders && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center text-xs font-bold text-gray-400 animate-pulse">
+          Loading orders...
+        </div>
+      )}
+      {ordersLoadError && !isLoadingOrders && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center text-xs font-bold text-red-600 flex flex-col items-center gap-2">
+          {ordersLoadError}
+          <button
+            onClick={() => window.location.reload()}
+            className="text-[10px] underline text-red-700 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Search & Filter Bar -- searches across ALL orders server-side,
           combined with the filters below. Active whenever any field here
           is filled in, taking over the view below in place of the tabs. */}
@@ -1676,8 +1715,18 @@ export const AdminOrders: React.FC = () => {
 
 /* 2. MERCHANT LICENSE MANAGER SCREEN */
 export const AdminVendors: React.FC = () => {
-  const { vendors, users, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [] } = useDatabase();
+  const { vendors, users, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [], fetchFullUsers } = useDatabase();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await fetchFullUsers();
+      if (!cancelled) setIsLoadingUsers(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Filtering, search, and sort state for the vendor list
   const [searchTerm, setSearchTerm] = useState("");
@@ -2396,8 +2445,11 @@ export const AdminVendors: React.FC = () => {
 
 /* 3. COURIER FLEETS SCREEN */
 export const AdminRiders: React.FC = () => {
-  const { riders, users, toggleRiderStatus } = useDatabase();
+  const { riders, users, toggleRiderStatus, fetchFullUsers } = useDatabase();
   const [selectedRider, setSelectedRider] = useState<Rider | null>(null);
+  useEffect(() => {
+    fetchFullUsers();
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected" | "suspended">("all");
@@ -2738,8 +2790,24 @@ export const AdminRiders: React.FC = () => {
 
 /* 4. CUSTOMERS DIRECTORY SCREEN */
 export const AdminCustomers: React.FC = () => {
-  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin, vendorCategories, vendors } = useDatabase();
+  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin, vendorCategories, vendors, fetchFullUsers } = useDatabase();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [usersLoadError, setUsersLoadError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIsLoadingUsers(true);
+      setUsersLoadError("");
+      const result = await fetchFullUsers();
+      if (!cancelled && !result?.success) {
+        setUsersLoadError(result?.error || "Failed to load users.");
+      }
+      if (!cancelled) setIsLoadingUsers(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // Filtering & search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -2955,6 +3023,23 @@ export const AdminCustomers: React.FC = () => {
   return (
     <div className="space-y-8 font-sans text-xs">
       
+      {isLoadingUsers && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center text-xs font-bold text-gray-400 animate-pulse">
+          Loading users...
+        </div>
+      )}
+      {usersLoadError && !isLoadingUsers && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-6 text-center text-xs font-bold text-red-600 flex flex-col items-center gap-2">
+          {usersLoadError}
+          <button
+            onClick={() => window.location.reload()}
+            className="text-[10px] underline text-red-700 cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* State-driven delete user confirmation modal */}
       {deleteTargetId && (
         <div className="fixed inset-0 bg-[#070329]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
