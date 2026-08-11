@@ -725,6 +725,89 @@ app.get("/api/admin/orders-search", verifyTokenOptional, async (req: any, res: a
   }
 });
 
+// Full orders dataset -- used by Master Orders and Payout Approvals,
+// fetched only when those specific pages are opened rather than bundled
+// into every /api/sync/load call regardless of which page someone is
+// on. This is the piece that was previously making the whole app wait
+// on every order ever created just to render anything at all.
+app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const [allOrders, allOrderItems] = await Promise.all([
+      db.select().from(orders),
+      db.select().from(orderItems),
+    ]);
+
+    const itemsByOrder: Record<string, any[]> = {};
+    for (const item of allOrderItems) {
+      if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+      itemsByOrder[item.orderId].push(item);
+    }
+
+    res.json({ orders: allOrders.map(o => ({ ...o, items: itemsByOrder[o.id] || [] })) });
+  } catch (error: any) {
+    console.error("Failed to load full orders dataset:", error);
+    res.status(500).json({ error: "Failed to load orders." });
+  }
+});
+
+// Full users dataset -- used by Manage Users, Manage Vendors, and Manage
+// Riders (the latter two need it to show each vendor/rider's owning
+// account's contact details). PIN deliberately excluded, matching the
+// existing admin bulk-user query pattern.
+app.get("/api/admin/users-full", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const allUsers = await db.select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      phone: users.phone,
+      role: users.role,
+      gender: users.gender,
+      createdAt: users.createdAt,
+      roles: users.roles,
+    }).from(users);
+
+    res.json({ users: allUsers });
+  } catch (error: any) {
+    console.error("Failed to load full users dataset:", error);
+    res.status(500).json({ error: "Failed to load users." });
+  }
+});
+
+// Delivered orders only -- for Payout Approvals specifically, which only
+// ever needs completed orders to calculate what's owed. A meaningfully
+// smaller, more targeted fetch than the full orders dataset above.
+app.get("/api/admin/orders-delivered", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const deliveredOrders = await db.select().from(orders).where(eq(orders.status, "delivered"));
+    res.json({ orders: deliveredOrders });
+  } catch (error: any) {
+    console.error("Failed to load delivered orders:", error);
+    res.status(500).json({ error: "Failed to load orders." });
+  }
+});
+
 app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
@@ -739,6 +822,7 @@ app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res:
     const [
       totalOrdersResult,
       activeDeliveriesResult,
+      pendingActionResult,
       deliveredOrdersFees,
       totalCustomersResult,
       vendorStatusCounts,
@@ -748,6 +832,13 @@ app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res:
       db.select({ value: count() }).from(orders),
       db.select({ value: count() }).from(orders).where(
         inArray(orders.status, ["accepted", "preparing", "ready", "out_for_delivery"])
+      ),
+      // Matches the sidebar badge's definition exactly: anything not yet
+      // delivered or cancelled still needs attention -- broader than
+      // activeDeliveriesResult above, which is specifically "actively
+      // being fulfilled" (excludes pending/awaiting-verification).
+      db.select({ value: count() }).from(orders).where(
+        sql`${orders.status} NOT IN ('delivered', 'cancelled')`
       ),
       // Only the two columns actually needed for the GMV + rider-commission
       // calculation, only for delivered orders — not the full 27-column
@@ -803,6 +894,7 @@ app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res:
     res.json({
       totalOrdersCount: Number(totalOrdersResult[0]?.value || 0),
       activeDeliveriesCount: Number(activeDeliveriesResult[0]?.value || 0),
+      pendingActionCount: Number(pendingActionResult[0]?.value || 0),
       totalCustomersCount: Number(totalCustomersResult[0]?.value || 0),
       gmv,
       commission,
