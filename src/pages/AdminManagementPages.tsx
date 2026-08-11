@@ -373,6 +373,206 @@ export const AdminOrders: React.FC = () => {
   const standardTotalPages = standardTabTotalPages;
   const receiptPickupOrders = orders.filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled" && o.status !== "awaiting_payment_verification" && !(o.batchDate && o.batchTime && o.status !== "delivered"));
 
+  const [receiptPickupPageOrderIds, setReceiptPickupPageOrderIds] = useState<string[]>([]);
+  const [receiptPickupTabTotalCount, setReceiptPickupTabTotalCount] = useState(0);
+  const [receiptPickupTabTotalPages, setReceiptPickupTabTotalPages] = useState(1);
+  const [isLoadingReceiptPickupTab, setIsLoadingReceiptPickupTab] = useState(false);
+  const [receiptPickupPage, setReceiptPickupPage] = useState(1);
+  useEffect(() => {
+    if (orderTypeTab !== "receipt_pickup") return;
+    let cancelled = false;
+    (async () => {
+      setIsLoadingReceiptPickupTab(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-by-tab?tab=receipt_pickup&page=${receiptPickupPage}&pageSize=${ORDERS_PAGE_SIZE}`, { headers });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok) {
+          mergeOrdersIntoContext(data.orders || []);
+          setReceiptPickupPageOrderIds((data.orders || []).map((o: any) => o.id));
+          setReceiptPickupTabTotalCount(data.totalCount || 0);
+          setReceiptPickupTabTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch receipt pickup tab page:", err);
+      } finally {
+        if (!cancelled) setIsLoadingReceiptPickupTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeTab, receiptPickupPage]);
+
+  const receiptPickupPageOrders = receiptPickupPageOrderIds
+    .map(id => orders.find(o => o.id === id))
+    .filter((o): o is Order => !!o);
+
+  const [verificationPageOrderIds, setVerificationPageOrderIds] = useState<string[]>([]);
+  const [verificationTabTotalCount, setVerificationTabTotalCount] = useState(0);
+  const [verificationTabTotalPages, setVerificationTabTotalPages] = useState(1);
+  const [isLoadingVerificationTab, setIsLoadingVerificationTab] = useState(false);
+  const [verificationPage, setVerificationPage] = useState(1);
+  useEffect(() => {
+    if (orderTypeTab !== "verification") return;
+    let cancelled = false;
+    (async () => {
+      setIsLoadingVerificationTab(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-by-tab?tab=payment_verification&page=${verificationPage}&pageSize=${ORDERS_PAGE_SIZE}`, { headers });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok) {
+          mergeOrdersIntoContext(data.orders || []);
+          setVerificationPageOrderIds((data.orders || []).map((o: any) => o.id));
+          setVerificationTabTotalCount(data.totalCount || 0);
+          setVerificationTabTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch verification tab page:", err);
+      } finally {
+        if (!cancelled) setIsLoadingVerificationTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeTab, verificationPage]);
+
+  const verificationPageOrders = verificationPageOrderIds
+    .map(id => orders.find(o => o.id === id))
+    .filter((o): o is Order => !!o);
+
+  const [batchPageOrderIds, setBatchPageOrderIds] = useState<string[]>([]);
+  const [batchTabTotalCount, setBatchTabTotalCount] = useState(0);
+  const [batchTabTotalPages, setBatchTabTotalPages] = useState(1);
+  const [isLoadingBatchTab, setIsLoadingBatchTab] = useState(false);
+  const [batchPage, setBatchPage] = useState(1);
+  useEffect(() => {
+    if (orderTypeTab !== "batch") return;
+    let cancelled = false;
+    (async () => {
+      setIsLoadingBatchTab(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-by-tab?tab=batch_active&page=${batchPage}&pageSize=${ORDERS_PAGE_SIZE}`, { headers });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok) {
+          mergeOrdersIntoContext(data.orders || []);
+          setBatchPageOrderIds((data.orders || []).map((o: any) => o.id));
+          setBatchTabTotalCount(data.totalCount || 0);
+          setBatchTabTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch batch tab page:", err);
+      } finally {
+        if (!cancelled) setIsLoadingBatchTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeTab, batchPage]);
+
+  const batchPageOrders = batchPageOrderIds
+    .map(id => orders.find(o => o.id === id))
+    .filter((o): o is Order => !!o);
+
+  const [cancelledPageOrderIds, setCancelledPageOrderIds] = useState<string[]>([]);
+  const [cancelledTabTotalCount, setCancelledTabTotalCount] = useState(0);
+  const [cancelledTabTotalPages, setCancelledTabTotalPages] = useState(1);
+  const [isLoadingCancelledTab, setIsLoadingCancelledTab] = useState(false);
+  const [cancelledPage, setCancelledPage] = useState(1);
+  useEffect(() => {
+    if (orderTypeTab !== "cancelled") return;
+    let cancelled = false;
+    (async () => {
+      setIsLoadingCancelledTab(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-by-tab?tab=cancelled&page=${cancelledPage}&pageSize=${ORDERS_PAGE_SIZE}`, { headers });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok) {
+          mergeOrdersIntoContext(data.orders || []);
+          setCancelledPageOrderIds((data.orders || []).map((o: any) => o.id));
+          setCancelledTabTotalCount(data.totalCount || 0);
+          setCancelledTabTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch cancelled tab page:", err);
+      } finally {
+        if (!cancelled) setIsLoadingCancelledTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeTab, cancelledPage]);
+
+  const cancelledPageOrders = cancelledPageOrderIds
+    .map(id => orders.find(o => o.id === id))
+    .filter((o): o is Order => !!o);
+
+  const [allPageOrderIds, setAllPageOrderIds] = useState<string[]>([]);
+  const [allTabTotalCount, setAllTabTotalCount] = useState(0);
+  const [allTabTotalPages, setAllTabTotalPages] = useState(1);
+  const [isLoadingAllTab, setIsLoadingAllTab] = useState(false);
+  const [allTabPage, setAllTabPage] = useState(1);
+  useEffect(() => {
+    if (orderTypeTab !== "all") return;
+    let cancelled = false;
+    (async () => {
+      setIsLoadingAllTab(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token");
+        const headers: any = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+          headers["X-Auth-Token"] = token;
+        }
+        const res = await fetch(`/api/admin/orders-by-tab?tab=all&page=${allTabPage}&pageSize=${ORDERS_PAGE_SIZE}`, { headers });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok) {
+          mergeOrdersIntoContext(data.orders || []);
+          setAllPageOrderIds((data.orders || []).map((o: any) => o.id));
+          setAllTabTotalCount(data.totalCount || 0);
+          setAllTabTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        console.error("[AdminOrders] Failed to fetch all-orders tab page:", err);
+      } finally {
+        if (!cancelled) setIsLoadingAllTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderTypeTab, allTabPage]);
+
+  const allPageOrders = allPageOrderIds
+    .map(id => orders.find(o => o.id === id))
+    .filter((o): o is Order => !!o);
+
   return (
     <div className="space-y-6 font-sans text-xs">
       
