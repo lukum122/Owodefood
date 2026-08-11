@@ -108,6 +108,18 @@ export const CustomerVendorMenu: React.FC = () => {
     );
   }
 
+  if (vendorObj.status === "suspended") {
+    return (
+      <div className="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm">
+        <p className="text-sm font-bold text-[#070329]">This Restaurant Is Currently Unavailable</p>
+        <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">{vendorObj.name} isn't accepting orders right now. Please check back later or explore other options.</p>
+        <Link to="/" className="text-[#0ea5e9] font-bold text-xs hover:underline mt-4 inline-block">
+          Return to Marketplace
+        </Link>
+      </div>
+    );
+  }
+
   // Get products only belonging to this specific vendor
   const vendorProducts = products.filter(p => p.vendorId === vendorObj.id);
 
