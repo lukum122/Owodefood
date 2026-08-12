@@ -214,7 +214,7 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
 
   const result = await sendEmailNotification(
     toEmail,
-    `Owode Food - ${pin} is your secure login verification PIN`,
+    `Owode Food - Your Secure Login Verification Code`,
     `
     <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
       <div style="text-align: center; margin-bottom: 24px;">
@@ -297,7 +297,7 @@ app.post("/api/auth/request-pin-reset", authLimiter, async (req, res) => {
 
     const result = await sendEmailNotification(
       user.email,
-      `Owode Food - ${code} is your PIN reset code`,
+      `Owode Food - Your PIN Reset Code`,
       `
       <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
         <div style="text-align: center; margin-bottom: 24px;">
@@ -459,6 +459,10 @@ app.post("/api/auth/login", async (req, res) => {
 
     if (!pinValid) {
       return res.status(401).json({ error: "Invalid email or PIN" });
+    }
+
+    if (user.isSuspended) {
+      return res.status(403).json({ error: user.suspendedReason ? `Your account has been suspended: ${user.suspendedReason}` : "Your account has been suspended. Please contact support." });
     }
 
     const token = jwt.sign(
@@ -2446,7 +2450,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 
         const customerOrderCount = await db.select({ value: count() }).from(orders).where(eq(orders.customerId, payload.id));
         if (Number(customerOrderCount[0]?.value || 0) > 0) {
-          return res.status(400).json({ error: "This user has order history and cannot be permanently deleted, since that would break existing order records. Suspend their vendor/rider access instead if you need to restrict them." });
+          return res.status(400).json({ error: "This user has order history and cannot be permanently deleted, since that would break existing order records. Suspend their account instead if you need to restrict them." });
         }
 
         // A vendor/rider profile still references this user's ID
@@ -2470,6 +2474,28 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         await db.delete(reviews).where(eq(reviews.customerId, payload.id));
 
         await db.delete(users).where(eq(users.id, payload.id));
+        break;
+      }
+
+      case "USER_SUSPEND": {
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only admins can suspend user accounts." });
+        }
+        const reason = String(payload.reason || "").trim();
+        if (!reason) {
+          return res.status(400).json({ error: "A reason is required to suspend an account." });
+        }
+        await db.update(users).set({ isSuspended: true, suspendedReason: reason }).where(eq(users.id, payload.id));
+        responseExtra.user = { id: payload.id, isSuspended: true, suspendedReason: reason };
+        break;
+      }
+
+      case "USER_REINSTATE": {
+        if (!isAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only admins can reinstate user accounts." });
+        }
+        await db.update(users).set({ isSuspended: false, suspendedReason: null }).where(eq(users.id, payload.id));
+        responseExtra.user = { id: payload.id, isSuspended: false, suspendedReason: null };
         break;
       }
 
