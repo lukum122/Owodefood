@@ -10,6 +10,8 @@ export const users = pgTable("users", {
   createdAt: text("created_at").notNull(),
   pin: text("pin"),
   roles: jsonb("roles"),
+  isSuspended: boolean("is_suspended").notNull().default(false),
+  suspendedReason: text("suspended_reason"),
 });
 
 export const vendors = pgTable("vendors", {
