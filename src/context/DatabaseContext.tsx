@@ -157,6 +157,8 @@ interface DatabaseContextType {
   toggleVendorStatus: (vendorId: string, status: Vendor["status"], reason?: string) => Promise<void>;
   toggleRiderStatus: (riderId: string, status: Rider["status"], reason?: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<{ success: boolean; error?: string }>;
+  suspendUser: (userId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
+  reinstateUser: (userId: string) => Promise<{ success: boolean; error?: string }>;
   adminUpdateVendor: (vendorId: string, updatedFields: Partial<Vendor>) => Promise<{ success: boolean; error?: string }>;
   adminCreateOrder: (order: Order) => void;
   adminCreateUser: (name: string, email: string, phone: string, role: UserRole, extra?: { businessName?: string; cuisine?: string; vehicleType?: string; pin?: string; roles?: UserRole[] }) => Promise<{ success: boolean; error?: string }>;
@@ -2972,6 +2974,31 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return { success: true };
   };
 
+  const suspendUser = async (userId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) return { success: false, error: "A reason is required to suspend an account." };
+
+    const result = await syncSave("USER_SUSPEND", { id: userId, reason: trimmedReason });
+    if (!result?.success) {
+      console.error(`[suspendUser] Failed to suspend user ${userId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to suspend this account. Please try again." };
+    }
+
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, isSuspended: true, suspendedReason: trimmedReason } : u)));
+    return { success: true };
+  };
+
+  const reinstateUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await syncSave("USER_REINSTATE", { id: userId });
+    if (!result?.success) {
+      console.error(`[reinstateUser] Failed to reinstate user ${userId}:`, result?.error);
+      return { success: false, error: result?.error || "Failed to reinstate this account. Please try again." };
+    }
+
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, isSuspended: false, suspendedReason: undefined } : u)));
+    return { success: true };
+  };
+
   const adminUpdateVendor = async (vendorId: string, updatedFields: Partial<Vendor>): Promise<{ success: boolean; error?: string }> => {
     const existingVendor = vendors.find(v => v.id === vendorId);
     if (!existingVendor) return { success: false, error: "Vendor not found" };
@@ -3589,6 +3616,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         toggleVendorStatus,
         toggleRiderStatus,
         deleteUser,
+        suspendUser,
+        reinstateUser,
         adminUpdateVendor,
         adminCreateOrder,
         adminCreateUser,
