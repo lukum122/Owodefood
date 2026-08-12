@@ -2449,13 +2449,25 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           return res.status(400).json({ error: "This user has order history and cannot be permanently deleted, since that would break existing order records. Suspend their vendor/rider access instead if you need to restrict them." });
         }
 
+        // A vendor/rider profile still references this user's ID
+        // regardless of its status -- suspending it changes the status
+        // column, not the userId foreign key, so it was never actually
+        // going to satisfy this constraint. Block clearly here instead,
+        // the same way order history is blocked above, rather than
+        // attempting an update that doesn't address the real issue.
+        const ownedVendor = await db.select().from(vendors).where(eq(vendors.userId, payload.id)).limit(1);
+        if (ownedVendor.length > 0) {
+          return res.status(400).json({ error: "This user owns a vendor profile and cannot be permanently deleted, since that would break existing vendor and order records. Suspend their vendor access instead to restrict them." });
+        }
+        const ownedRider = await db.select().from(riders).where(eq(riders.userId, payload.id)).limit(1);
+        if (ownedRider.length > 0) {
+          return res.status(400).json({ error: "This user owns a rider profile and cannot be permanently deleted, since that would break existing rider and delivery records. Suspend their rider access instead to restrict them." });
+        }
+
         await db.delete(addresses).where(eq(addresses.userId, payload.id));
         await db.delete(userSavedAddresses).where(eq(userSavedAddresses.userId, payload.id));
         await db.delete(walletTransactions).where(eq(walletTransactions.userId, payload.id));
         await db.delete(reviews).where(eq(reviews.customerId, payload.id));
-
-        await db.update(vendors).set({ status: "suspended" }).where(eq(vendors.userId, payload.id));
-        await db.update(riders).set({ status: "suspended" }).where(eq(riders.userId, payload.id));
 
         await db.delete(users).where(eq(users.id, payload.id));
         break;
