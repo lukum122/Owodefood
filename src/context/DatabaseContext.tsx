@@ -1320,7 +1320,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
         console.error(`[syncSave] "${type}" failed with status ${res.status}: ${errText}`);
-        return { success: false, error: `Sync failed (${res.status})` };
+        // The server sends a real, specific reason for most failures
+        // (e.g. "This user has order history and cannot be permanently
+        // deleted...") -- previously this was logged to the console but
+        // then discarded here in favor of a generic "Sync failed (400)",
+        // meaning every caller across the whole app that surfaces
+        // result.error to the person using it was showing that generic
+        // message instead of the actual, specific reason.
+        let specificError = "";
+        try {
+          const parsed = JSON.parse(errText);
+          if (parsed?.error) specificError = parsed.error;
+        } catch {
+          // Not JSON -- fall through to the generic message below.
+        }
+        return { success: false, error: specificError || `Sync failed (${res.status})` };
       }
 
       const data = await res.json().catch(() => ({}));
