@@ -2965,10 +2965,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setUsers(prev => prev.filter(u => u.id !== userId));
-    // Matches the backend's suspend-rather-than-delete behavior for any
-    // vendor/rider record the deleted user owned.
-    setVendors(prev => prev.map(v => (v.userId === userId ? { ...v, status: "suspended" } : v)));
-    setRiders(prev => prev.map(r => (r.userId === userId ? { ...r, status: "suspended" } : r)));
+    // If this succeeded, the server has already confirmed this user
+    // owned no vendor/rider profile (that's blocked with a clear error
+    // instead) -- nothing else needs updating locally.
 
     return { success: true };
   };
