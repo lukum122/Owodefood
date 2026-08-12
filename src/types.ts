@@ -22,6 +22,8 @@ export interface User {
   pin?: string;
   profileImage?: string;
   roles?: UserRole[];
+  isSuspended?: boolean;
+  suspendedReason?: string;
 }
 
 export type VendorStatus = "pending" | "approved" | "suspended" | "rejected";
