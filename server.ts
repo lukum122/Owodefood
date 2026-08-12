@@ -1935,6 +1935,45 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           },
         });
 
+        if (statusChanged && payload.status === "cancelled") {
+          await db.insert(auditLogs).values({
+            id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            userId: reqUser?.id || "system",
+            action: "ORDER_CANCELLED",
+            resource: payload.id,
+            details: JSON.stringify({
+              previousStatus: oldStatus,
+              vendorName: payload.vendorName,
+              customerName: payload.customerName,
+              rejectionReason: payload.rejectionReason || null,
+            }),
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        // Payment rejection collects a reason but doesn't change the
+        // order's status (it stays awaiting_payment_verification), so it
+        // was never caught by the cancellation logging above. Detected
+        // by a genuinely new rejection reason appearing that wasn't
+        // there before, so this only logs once per actual rejection, not
+        // on every later, unrelated update to an order that happened to
+        // be rejected at some point.
+        const previousRejectionReason = isNew ? null : existingOrder[0]?.rejectionReason;
+        if (payload.rejectionReason && payload.rejectionReason !== previousRejectionReason) {
+          await db.insert(auditLogs).values({
+            id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            userId: reqUser?.id || "system",
+            action: "PAYMENT_REJECTED",
+            resource: payload.id,
+            details: JSON.stringify({
+              reason: payload.rejectionReason,
+              vendorName: payload.vendorName,
+              customerName: payload.customerName,
+            }),
+            createdAt: new Date().toISOString(),
+          });
+        }
+
         if (payload.items && Array.isArray(payload.items)) {
           for (const item of payload.items) {
             await db.insert(orderItems).values({
@@ -2514,6 +2553,15 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         await db.update(users).set({ isSuspended: true, suspendedReason: reason }).where(eq(users.id, payload.id));
         responseExtra.user = { id: payload.id, isSuspended: true, suspendedReason: reason };
+
+        await db.insert(auditLogs).values({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          userId: reqUser.id,
+          action: "USER_SUSPENDED",
+          resource: payload.id,
+          details: JSON.stringify({ reason }),
+          createdAt: new Date().toISOString(),
+        });
         break;
       }
 
@@ -2523,6 +2571,15 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         }
         await db.update(users).set({ isSuspended: false, suspendedReason: null }).where(eq(users.id, payload.id));
         responseExtra.user = { id: payload.id, isSuspended: false, suspendedReason: null };
+
+        await db.insert(auditLogs).values({
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          userId: reqUser.id,
+          action: "USER_REINSTATED",
+          resource: payload.id,
+          details: null,
+          createdAt: new Date().toISOString(),
+        });
         break;
       }
 
