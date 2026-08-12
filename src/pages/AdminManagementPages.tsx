@@ -3100,7 +3100,7 @@ export const AdminRiders: React.FC = () => {
 
 /* 4. CUSTOMERS DIRECTORY SCREEN */
 export const AdminCustomers: React.FC = () => {
-  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin, vendorCategories, vendors, fetchFullUsers } = useDatabase();
+  const { users, deleteUser, adminCreateUser, adminUpdateUser, adminUpdateUserRole, resetUserPin, vendorCategories, vendors, fetchFullUsers, suspendUser, reinstateUser } = useDatabase();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [usersLoadError, setUsersLoadError] = useState("");
@@ -3290,6 +3290,31 @@ export const AdminCustomers: React.FC = () => {
 
   const handleDeleteModel = (id: string) => {
     setDeleteTargetId(id);
+  };
+
+  const [togglingSuspendId, setTogglingSuspendId] = useState<string | null>(null);
+  const handleToggleSuspend = async (user: User) => {
+    setTogglingSuspendId(user.id);
+    try {
+      if (user.isSuspended) {
+        const result = await reinstateUser(user.id);
+        if (!result?.success) {
+          window.alert(result?.error || "Failed to reinstate this account. Please try again.");
+        }
+      } else {
+        const reason = prompt(`Reason for suspending ${user.name}'s account (required):`);
+        if (!reason || !reason.trim()) {
+          if (reason !== null) window.alert("A reason is required to suspend an account.");
+          return;
+        }
+        const result = await suspendUser(user.id, reason.trim());
+        if (!result?.success) {
+          window.alert(result?.error || "Failed to suspend this account. Please try again.");
+        }
+      }
+    } finally {
+      setTogglingSuspendId(null);
+    }
   };
 
   const [isDeletingUser, setIsDeletingUser] = useState(false);
@@ -3920,6 +3945,7 @@ export const AdminCustomers: React.FC = () => {
                     <th className="py-3 px-4 text-center">Security PIN</th>
                     <th className="py-3 px-4">Registration Date</th>
                     <th className="py-3 px-4 text-center">Manage Account</th>
+                    <th className="py-3 px-4 text-center">Suspend</th>
                     <th className="py-3 px-4 text-center">Delete</th>
                   </tr>
                 </thead>
@@ -3969,6 +3995,20 @@ export const AdminCustomers: React.FC = () => {
                           className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold rounded-xl border border-purple-150 cursor-pointer transition text-[10px] inline-flex items-center gap-1 hover:scale-105 active:scale-95"
                         >
                           ⚙️ Edit Account
+                        </button>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          onClick={() => handleToggleSuspend(c)}
+                          disabled={togglingSuspendId === c.id}
+                          title={c.isSuspended ? `Suspended: ${c.suspendedReason || "No reason given"}` : "Suspend this account, restricting login"}
+                          className={`px-3 py-1.5 font-extrabold rounded-xl border cursor-pointer transition text-[10px] inline-flex items-center gap-1 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-wait ${
+                            c.isSuspended
+                              ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-150"
+                              : "bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-150"
+                          }`}
+                        >
+                          {togglingSuspendId === c.id ? "Working..." : c.isSuspended ? "🔓 Reinstate" : "🔒 Suspend"}
                         </button>
                       </td>
                       <td className="py-3.5 px-4 text-center">
