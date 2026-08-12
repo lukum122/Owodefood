@@ -2638,7 +2638,21 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
     res.json({ success: true, ...responseExtra });
   } catch (error) {
     console.error("Cloud SQL sync save failed:", error);
-    const detail = error instanceof Error ? error.message : String(error);
+
+    // Drizzle typically wraps the real underlying postgres.js error in
+    // .cause -- that's where the actually useful diagnostic fields live
+    // (the specific error code, which table/constraint is involved),
+    // not in the top-level .message, which usually just shows the query
+    // text itself without explaining why it failed.
+    const pgError: any = (error as any)?.cause || error;
+    const parts: string[] = [];
+    if (error instanceof Error) parts.push(error.message);
+    if (pgError?.code) parts.push(`code: ${pgError.code}`);
+    if (pgError?.detail) parts.push(`pg_detail: ${pgError.detail}`);
+    if (pgError?.constraint_name || pgError?.constraint) parts.push(`constraint: ${pgError.constraint_name || pgError.constraint}`);
+    if (pgError?.table_name || pgError?.table) parts.push(`table: ${pgError.table_name || pgError.table}`);
+    const detail = parts.length > 0 ? parts.join(" | ") : String(error);
+
     res.status(500).json({ error: `Failed to sync updates to Cloud SQL database. Detail: ${detail}` });
   }
 });
