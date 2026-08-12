@@ -185,6 +185,26 @@ async function sendEmailNotification(to: string, subject: string, htmlContent: s
   }
 }
 
+// Every email template previously used a plain emoji for its header,
+// even though an actual uploaded brand logo has been available since
+// earlier this session -- it just was never plumbed through to the
+// backend's email-sending code, only used on the frontend. This fetches
+// whatever logo has been uploaded and returns ready-to-use header HTML;
+// falls back to the given emoji if no logo has been set, so every email
+// still looks reasonable with zero configuration.
+async function getEmailHeaderHtml(fallbackEmoji: string): Promise<string> {
+  try {
+    const logoRow = await db.select().from(systemSettings).where(eq(systemSettings.key, "brandLogo")).limit(1);
+    const logoDataUrl = logoRow[0]?.value;
+    if (logoDataUrl) {
+      return `<img src="${logoDataUrl}" alt="Owode Food" style="max-width: 120px; max-height: 60px; object-fit: contain;" />`;
+    }
+  } catch (err) {
+    console.error("[getEmailHeaderHtml] Failed to fetch brand logo, using fallback:", err);
+  }
+  return `<span style="font-size: 32px;">${fallbackEmoji}</span>`;
+}
+
 const APP_VERSION = process.env.APP_VERSION || Date.now().toString();
 
 // App Version Endpoint
@@ -212,13 +232,14 @@ app.post("/api/email/send-pin", authLimiter, async (req, res) => {
     return res.status(400).json({ error: "Missing recipient email address ('toEmail') or PIN code ('pin')" });
   }
 
+  const headerHtml = await getEmailHeaderHtml("🔐");
   const result = await sendEmailNotification(
     toEmail,
     `Owode Food - Your Secure Login Verification Code`,
     `
     <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
       <div style="text-align: center; margin-bottom: 24px;">
-        <span style="font-size: 32px;">≡ƒìö</span>
+        ${headerHtml}
         <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food</h2>
         <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Secure Account Verification</span>
       </div>
@@ -295,12 +316,14 @@ app.post("/api/auth/request-pin-reset", authLimiter, async (req, res) => {
       set: { value: JSON.stringify({ code, expiresAt }) },
     });
 
+    const headerHtml = await getEmailHeaderHtml("🔑");
     const result = await sendEmailNotification(
       user.email,
       `Owode Food - Your PIN Reset Code`,
       `
       <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
         <div style="text-align: center; margin-bottom: 24px;">
+          ${headerHtml}
           <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food</h2>
           <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">PIN Reset Request</span>
         </div>
@@ -1456,13 +1479,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         });
 
         if (isNew && payload.email) {
+          const headerHtml = await getEmailHeaderHtml("🎉");
           sendEmailNotification(
             payload.email,
-            `Welcome to Owode Food, ${payload.name}! ≡ƒîƒ`,
+            `Welcome to Owode Food, ${payload.name}! 🎉`,
             `
             <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
               <div style="text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 32px;">≡ƒîƒ</span>
+                ${headerHtml}
                 <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Welcome to Owode Food!</h2>
                 <span style="font-size: 10px; color: #10b981; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Account Successfully Registered</span>
               </div>
@@ -1936,13 +1960,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             const customerEmail = customerRecords[0].email;
             
             if (isNew) {
+              const headerHtml = await getEmailHeaderHtml("🍲");
               sendEmailNotification(
                 customerEmail,
-                `Order Placed Successfully! #${payload.id.substring(0, 8)} ≡ƒ¢ì∩╕Å`,
+                `Order Placed Successfully! #${payload.id.substring(0, 8)} 🍲`,
                 `
                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                   <div style="text-align: center; margin-bottom: 24px;">
-                    <span style="font-size: 32px;">≡ƒ¢ì∩╕Å</span>
+                    ${headerHtml}
                     <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Order Placed Successfully!</h2>
                     <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Awaiting Vendor Acceptance</span>
                   </div>
@@ -1994,13 +2019,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                 if (vendorRecord.length > 0 && vendorRecord[0].userId) {
                   const vendorUserRecords = await db.select().from(users).where(eq(users.id, vendorRecord[0].userId)).limit(1);
                   if (vendorUserRecords.length > 0 && vendorUserRecords[0].email) {
+                    const headerHtml = await getEmailHeaderHtml("🔔");
                     sendEmailNotification(
                       vendorUserRecords[0].email,
                       `New Order Received! #${payload.id.substring(0, 8)} 🔔`,
                       `
                       <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                         <div style="text-align: center; margin-bottom: 24px;">
-                          <span style="font-size: 32px;">🔔</span>
+                          ${headerHtml}
                           <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">New Order Received!</h2>
                           <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Action Required</span>
                         </div>
@@ -2046,13 +2072,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                 }
               }
             } else if (statusChanged) {
+              const headerHtml = await getEmailHeaderHtml("⚡");
               sendEmailNotification(
                 customerEmail,
-                `Order #${payload.id.substring(0, 8)} Status Update: ${payload.status.toUpperCase()} ΓÜí`,
+                `Order #${payload.id.substring(0, 8)} Status Update: ${payload.status.toUpperCase()} ⚡`,
                 `
                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                   <div style="text-align: center; margin-bottom: 24px;">
-                    <span style="font-size: 32px;">ΓÜí</span>
+                    ${headerHtml}
                     <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Order Status Update!</h2>
                     <span style="font-size: 10px; color: #0ea5e9; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; background-color: #f0f9ff; padding: 4px 12px; border-radius: 20px;">${payload.status}</span>
                   </div>
