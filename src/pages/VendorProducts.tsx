@@ -46,6 +46,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   
   const [errorStr, setErrorStr] = useState("");
   const [successStr, setSuccessStr] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   if (!currentVendor) {
@@ -281,6 +282,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return; // guards against a fast double-click firing this twice
     setErrorStr("");
     setSuccessStr("");
 
@@ -310,6 +312,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       parsedMaxAddons = val;
     }
 
+    setIsSubmitting(true);
+
     if (mode === "new") {
       const result = await addProduct({
         vendorId: currentVendor.id,
@@ -325,9 +329,12 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       });
       if (!result?.success) {
         setErrorStr(result?.error || "Failed to add the product. Please check your connection and try again.");
+        setIsSubmitting(false);
         return;
       }
       setSuccessStr("Fabulous! Your new culinary item was successfully minted in the system.");
+      // isSubmitting intentionally left true here — the button stays disabled/labeled
+      // "Saving..." until navigation away happens, so a second click can't sneak in.
       setTimeout(() => navigate("/vendor/products"), 1200);
     } else if (mode === "edit" && editingProduct) {
       const result = await updateProduct({
@@ -344,10 +351,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       });
       if (!result?.success) {
         setErrorStr(result?.error || "Failed to save the product. Please check your connection and try again.");
+        setIsSubmitting(false);
         return;
       }
       setSuccessStr("Success! Product details were hot-swapped and saved.");
       setTimeout(() => navigate("/vendor/products"), 1200);
+    } else {
+      // Neither branch matched (shouldn't normally happen) — don't leave the button stuck disabled.
+      setIsSubmitting(false);
     }
   };
 
@@ -967,9 +978,10 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
               </button>
               <button
                 type="submit"
-                className="py-2.5 px-5 bg-[#070329] hover:bg-opacity-95 text-white text-xs font-extrabold rounded-xl shadow transition cursor-pointer"
+                disabled={isSubmitting}
+                className={`py-2.5 px-5 bg-[#070329] hover:bg-opacity-95 text-white text-xs font-extrabold rounded-xl shadow transition ${isSubmitting ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
               >
-                Commit Menu Settings
+                {isSubmitting ? "Saving…" : "Commit Menu Settings"}
               </button>
             </div>
 
