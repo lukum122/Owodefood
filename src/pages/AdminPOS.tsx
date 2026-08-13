@@ -764,14 +764,22 @@ export const AdminPOS: React.FC = () => {
             .reduce((sum, sel) => sum + sel.quantity, 0);
         };
 
+        // "Max Choices Allowed" governs how many DIFFERENT addon options can be picked
+        // from a group (not total item count). "Max Qty Per Addon" separately governs how
+        // many of each chosen option they get. Counted independently on purpose.
+        const getGroupDistinctSelectionCount = (groupId: string) => {
+          return (Object.values(posAddonSelections) as any[])
+            .filter(sel => sel.groupId === groupId && sel.quantity > 0).length;
+        };
+
         const isGroupValid = (group: any) => {
-          const count = getGroupSelectionCount(group.id);
+          const distinctCount = getGroupDistinctSelectionCount(group.id);
           if (group.isRequired) {
             const min = group.minSelections ?? 1;
-            if (count < min) return false;
+            if (distinctCount < min) return false;
           }
           if (group.maxSelections !== undefined && group.maxSelections > 0) {
-            if (count > group.maxSelections) return false;
+            if (distinctCount > group.maxSelections) return false;
           }
           return true;
         };
@@ -805,7 +813,7 @@ export const AdminPOS: React.FC = () => {
 
               <div className="space-y-6 overflow-y-auto flex-grow pr-1 py-1">
                 {addonGroups.map((group: any) => {
-                  const groupTotalSelected = getGroupSelectionCount(group.id);
+                  const groupDistinctSelected = getGroupDistinctSelectionCount(group.id);
                   const isSingleSelect = group.maxSelections === 1;
 
                   return (
@@ -817,7 +825,7 @@ export const AdminPOS: React.FC = () => {
                             {group.isRequired ? (
                               <b className="text-amber-600">Required (Choose {group.minSelections ?? 1})</b>
                             ) : (
-                              <span>Optional {group.maxSelections ? `(Choose up to ${group.maxSelections})` : ""}</span>
+                              <span>Optional {group.maxSelections ? `(Choose up to ${group.maxSelections} option${group.maxSelections === 1 ? "" : "s"})` : ""}</span>
                             )}
                           </span>
                         </div>
@@ -835,14 +843,15 @@ export const AdminPOS: React.FC = () => {
                           const isSelected = quantity > 0;
 
                           const maxGroupSelections = group.maxSelections;
-                          const groupLimitReached = maxGroupSelections !== undefined && maxGroupSelections > 0 && groupTotalSelected >= maxGroupSelections;
+                          const groupLimitReached = maxGroupSelections !== undefined && maxGroupSelections > 0 && groupDistinctSelected >= maxGroupSelections;
                           const isAddonDisabled = !isSelected && groupLimitReached && !isSingleSelect;
 
                           const handleIncrement = (e: React.MouseEvent) => {
                             e.stopPropagation();
-                            if (maxGroupSelections !== undefined && maxGroupSelections > 0 && groupTotalSelected >= maxGroupSelections) {
-                              return;
-                            }
+                            // Max Choices only limits which/how many DIFFERENT addons can be picked
+                            // (enforced in handleToggle via isAddonDisabled). Increasing the quantity
+                            // of an addon already selected is governed only by its own Max Qty Per
+                            // Addon limit, independent of the group's distinct-choice cap.
                             const maxPerAddon = group.maxQuantityPerAddon || 99;
                             if (quantity >= maxPerAddon) return;
 

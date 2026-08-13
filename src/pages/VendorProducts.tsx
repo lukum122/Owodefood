@@ -788,6 +788,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                         min="1"
                         className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 font-mono"
                       />
+                      <p className="text-[9px] text-gray-400 font-medium leading-snug">Number of DIFFERENT options a customer can pick from this group.</p>
                     </div>
 
                     <div className="space-y-1.5">
@@ -801,6 +802,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                         min="1"
                         className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white disabled:bg-gray-100/60 disabled:text-gray-400 outline-none focus:ring-2 focus:ring-blue-100 font-mono"
                       />
+                      <p className="text-[9px] text-gray-400 font-medium leading-snug">How many of EACH chosen option a customer can get — independent of Max Choices above.</p>
                     </div>
                   </div>
 
