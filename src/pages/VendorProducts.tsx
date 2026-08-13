@@ -17,7 +17,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [image, setImage] = useState("");
-  const [category, setCategory] = useState("Burgers");
+  const [category, setCategory] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
   const [addons, setAddons] = useState<{ id: string; name: string; price: number; }[]>([]);
   const [maxAddons, setMaxAddons] = useState("");
@@ -73,13 +73,27 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setDescription("");
       setPrice("");
       setImage("/images/pizza.jpg");
-      setCategory("Burgers");
+      setCategory("");
       setIsAvailable(true);
       setAddons([]);
       setMaxAddons("");
       setAddonGroups([]);
     }
   }, [mode, id, editingProduct]);
+
+  // Default a NEW product's category to the first real category once the list loads.
+  // Never invents a fake category name — if no real categories exist yet, this stays
+  // empty and the vendor must be prompted to create one first.
+  useEffect(() => {
+    if (mode === "new" && !category && filteredCategories.length > 0) {
+      setCategory(filteredCategories[0].name);
+    }
+  }, [mode, category, filteredCategories.length]);
+
+  // True if the currently-set category isn't actually one of this vendor's real
+  // categories — catches both a missing selection and legacy products saved with a
+  // category (like the old hardcoded "Burgers" default) that was never real to begin with.
+  const categoryIsInvalid = !!category && !filteredCategories.some(c => c.name === category);
 
   // Addon Group Builder Handlers
   const handleAddGroup = (e: React.MouseEvent) => {
@@ -275,6 +289,11 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       return;
     }
 
+    if (!category || !filteredCategories.some(c => c.name === category)) {
+      setErrorStr("Please select a valid category for this product from the list.");
+      return;
+    }
+
     const parsedPrice = parseFloat(price);
     if (isNaN(parsedPrice) || parsedPrice <= 0) {
       setErrorStr("Pricing must be a valid positive decimal value.");
@@ -420,10 +439,13 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-600">Cuisine/Product Category</label>
                 <select
-                  value={category}
+                  value={categoryIsInvalid ? "" : category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  className={`w-full text-xs p-3 border rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 ${categoryIsInvalid ? "border-red-300" : "border-gray-200"}`}
                 >
+                  {(!category || categoryIsInvalid) && (
+                    <option value="" disabled>Select a category…</option>
+                  )}
                   {filteredCategories.length > 0 ? (
                     filteredCategories.map((c) => (
                       <option key={c.id} value={c.name}>{c.name}</option>
@@ -432,6 +454,11 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                     <option value="" disabled>No categories available</option>
                   )}
                 </select>
+                {categoryIsInvalid && (
+                  <p className="text-[10px] text-red-500 font-bold">
+                    "{category}" isn't a real category on your list — please pick one above and save again.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
