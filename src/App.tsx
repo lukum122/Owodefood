@@ -13,6 +13,7 @@ import { AdminLayout } from "./components/AdminLayout";
 import { PortalSimulator } from "./components/PortalSimulator";
 import { PwaUpdater } from "./components/PwaUpdater";
 import { LoadErrorBanner } from "./components/LoadErrorBanner";
+import { MaintenanceScreen } from "./components/MaintenanceScreen";
 
 // Customer Pages
 import { CustomerHome } from "./pages/CustomerHome";
@@ -68,7 +69,7 @@ export default function App() {
 // profiles, "no restaurants found") on every fresh load/refresh, which
 // looked like broken/missing data rather than "still loading."
 function AppShell() {
-  const { isInitialLoading } = useDatabase();
+  const { isInitialLoading, maintenanceMode, maintenanceMessage, currentUser } = useDatabase();
 
   if (isInitialLoading) {
     // The logo itself comes from the same data fetch this screen is
@@ -95,6 +96,24 @@ function AppShell() {
         <p className="text-sm font-semibold text-white/60">Loading Owode Food...</p>
       </div>
     );
+  }
+
+  if (maintenanceMode) {
+    // Only admin/employee/super_admin sessions bypass the lock -- everyone
+    // else (including anonymous, not-logged-in visitors) sees the
+    // maintenance screen instead of the app. /login and /register stay
+    // reachable no matter what, specifically so an admin always has a way
+    // to sign in and turn maintenance mode back off -- without this
+    // carve-out, turning maintenance mode on would lock everyone,
+    // including admins who aren't already logged in, out permanently.
+    const exemptRoles = ["admin", "employee", "super_admin"];
+    const userRoles = currentUser?.roles || (currentUser?.role ? [currentUser.role] : []);
+    const isExemptSession = userRoles.some(r => exemptRoles.includes(r));
+    const isAuthRoute = window.location.pathname === "/login" || window.location.pathname === "/register";
+
+    if (!isExemptSession && !isAuthRoute) {
+      return <MaintenanceScreen message={maintenanceMessage} />;
+    }
   }
 
   return (
