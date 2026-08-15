@@ -4078,6 +4078,10 @@ export const AdminSettings: React.FC = () => {
     updateGlobalServiceFeeSettings,
     globalFreeDelivery,
     updateGlobalFreeDelivery,
+    maintenanceMode,
+    updateMaintenanceMode,
+    maintenanceMessage,
+    updateMaintenanceMessage,
     surgeConfig,
     updateSurgeConfig,
     legalContent,
@@ -5020,6 +5024,62 @@ export const AdminSettings: React.FC = () => {
               className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
             >
               <Save className="w-4 h-4" /> Save Global Settings
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* CARD: Site Maintenance Mode */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-red-600 text-white flex items-center justify-center p-1 shadow-md shadow-red-100">
+            <Lock className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Site Maintenance Mode</h3>
+            <span className="text-xs text-gray-400 block mt-0.5 font-sans">Temporarily lock the entire site to everyone except admin/employee accounts, so you can safely test changes live.</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <label className={`flex items-start gap-4 p-4 rounded-2xl border transition cursor-pointer select-none ${maintenanceMode ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-100 hover:bg-gray-100/50"}`}>
+            <input
+              type="checkbox"
+              checked={maintenanceMode}
+              onChange={(e) => updateMaintenanceMode(e.target.checked)}
+              className="mt-1 w-4 h-4 text-red-600 focus:ring-red-100 border-gray-300 rounded cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-black text-gray-900 block uppercase tracking-wider">Enable Maintenance Mode</span>
+              <span className="text-[10px] text-gray-400 font-sans leading-normal block mt-1">
+                Customers, vendors, and riders will see the message below instead of the app. Checkout and order placement are also blocked server-side. Admin, employee, and super_admin accounts are unaffected and can keep using the site normally.
+              </span>
+            </div>
+          </label>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-600">Maintenance Message</label>
+            <textarea
+              value={maintenanceMessage}
+              onChange={(e) => updateMaintenanceMessage(e.target.value)}
+              rows={3}
+              placeholder="e.g. We're upgrading our systems and will be back by 6 PM."
+              className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-red-100 font-sans"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">Shown to everyone locked out while maintenance mode is on.</p>
+          </div>
+
+          <div className="pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              type="button"
+              onClick={async () => {
+                await saveSystemSettings();
+                setSuccessWord("Maintenance Settings Saved!");
+                setTimeout(() => setSuccessWord(""), 3000);
+              }}
+              className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+            >
+              <Save className="w-4 h-4" /> Save Maintenance Settings
             </button>
           </div>
         </div>
