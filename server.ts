@@ -2795,6 +2795,21 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     // user (stale cache, re-registration, etc.), so it's no longer accepted.
     const customerId = req.user.id;
 
+    // Site maintenance lock: blocks real order placement even if someone
+    // bypasses the frontend maintenance screen and hits this endpoint
+    // directly. Admin/employee/super_admin sessions are exempt, matching
+    // the same exemption used on the frontend maintenance screen.
+    const maintenanceSetting = await db.select().from(systemSettings).where(eq(systemSettings.key, "maintenanceMode"));
+    const isMaintenanceOn = maintenanceSetting[0]?.value === "true";
+    if (isMaintenanceOn) {
+      const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+      const reqUser = req.user;
+      const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.roles?.includes("employee") || reqUser.role === "admin" || reqUser.role === "super_admin" || reqUser.role === "employee" || superAdminEmails.includes(reqUser.email));
+      if (!isAdmin) {
+        return res.status(503).json({ error: "Owode Food is currently under maintenance. Please check back shortly." });
+      }
+    }
+
     if (!vendorId || (!isReceiptPickup && (!items || !Array.isArray(items)))) {
       return res.status(400).json({ error: "Missing required checkout fields" });
     }
