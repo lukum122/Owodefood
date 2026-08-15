@@ -58,6 +58,12 @@ interface DatabaseContextType {
   updateGlobalServiceFeeSettings: (type: "category" | "flat" | "percentage", value: number) => void;
   globalFreeDelivery: boolean;
   updateGlobalFreeDelivery: (isEnabled: boolean) => void;
+  // Site-wide maintenance lock: when enabled, everyone except admin/employee/
+  // super_admin sessions is shown a maintenance screen instead of the app.
+  maintenanceMode: boolean;
+  updateMaintenanceMode: (isEnabled: boolean) => void;
+  maintenanceMessage: string;
+  updateMaintenanceMessage: (message: string) => void;
   batchDeliverySystemEnabled: boolean;
   updateBatchDeliverySystemEnabled: (isEnabled: boolean) => void;
   batchDeliveryTimes: string[];
@@ -462,6 +468,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [globalServiceFeeType, setGlobalServiceFeeType] = useState<"category" | "flat" | "percentage">("category");
   const [globalServiceFeeValue, setGlobalServiceFeeValue] = useState<number>(0);
   const [globalFreeDelivery, setGlobalFreeDelivery] = useState<boolean>(false);
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string>("We're currently performing scheduled maintenance. Please check back shortly.");
   const [surgeConfig, setSurgeConfig] = useState<SystemSurgeConfig>({
     isSurgeActive: false,
     surgeFee: 0,
@@ -610,6 +618,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (data.systemSettings.globalServiceFeeType) setGlobalServiceFeeType(data.systemSettings.globalServiceFeeType as any);
             if (data.systemSettings.globalServiceFeeValue) setGlobalServiceFeeValue(Number(data.systemSettings.globalServiceFeeValue));
             if (data.systemSettings.globalFreeDelivery) setGlobalFreeDelivery(data.systemSettings.globalFreeDelivery === "true");
+            if (data.systemSettings.maintenanceMode) setMaintenanceMode(data.systemSettings.maintenanceMode === "true");
+            if (data.systemSettings.maintenanceMessage) setMaintenanceMessage(data.systemSettings.maintenanceMessage);
             if (data.systemSettings.batchDeliverySystemEnabled) setBatchDeliverySystemEnabled(data.systemSettings.batchDeliverySystemEnabled === "true");
             if (data.systemSettings.batchDeliveryTimes) {
               try { setBatchDeliveryTimes(JSON.parse(data.systemSettings.batchDeliveryTimes)); } catch(e){}
@@ -938,6 +948,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem("fd_global_free_delivery", String(isEnabled));
   };
 
+  const updateMaintenanceMode = (isEnabled: boolean) => {
+    setMaintenanceMode(isEnabled);
+  };
+
+  const updateMaintenanceMessage = (message: string) => {
+    setMaintenanceMessage(message);
+  };
+
   const updateBrandLogo = (logoDataUrl: string) => {
     setBrandLogo(logoDataUrl);
     try {
@@ -1021,6 +1039,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       { key: "globalServiceFeeType", value: globalServiceFeeType },
       { key: "globalServiceFeeValue", value: String(globalServiceFeeValue) },
       { key: "globalFreeDelivery", value: String(globalFreeDelivery) },
+      { key: "maintenanceMode", value: String(maintenanceMode) },
+      { key: "maintenanceMessage", value: maintenanceMessage },
       { key: "surgeConfig", value: JSON.stringify(surgeConfig) },
       { key: "receiptPickupConfig", value: JSON.stringify(receiptPickupConfig) },
       { key: "categoryServiceFees", value: JSON.stringify(categoryServiceFees) }
@@ -3532,6 +3552,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateGlobalServiceFeeSettings,
         globalFreeDelivery,
         updateGlobalFreeDelivery,
+        maintenanceMode,
+        updateMaintenanceMode,
+        maintenanceMessage,
+        updateMaintenanceMessage,
         batchDeliverySystemEnabled,
         updateBatchDeliverySystemEnabled,
         batchDeliveryTimes,
