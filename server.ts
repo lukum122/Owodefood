@@ -155,7 +155,24 @@ const authLimiter = process.env.VERCEL ? (req: express.Request, res: express.Res
   legacyHeaders: false,
 });
 
-app.use(express.json({ limit: "50mb" }));
+// Body size limit is chosen per-route rather than one blanket number for
+// the whole app. Only two routes legitimately carry base64-encoded image
+// data today (product/vendor photos, payment receipts) -- everything else
+// is small text/JSON fields, so a global 50mb limit meant every endpoint,
+// including login and PIN verification, accepted request bodies far
+// larger than they'd ever legitimately need, which is unnecessary
+// resource-exhaustion exposure. This narrows that to just the two routes
+// that actually need it; once the R2 migration moves images to real
+// hosted links instead of embedded base64, these two can shrink right
+// down alongside everything else, with no structural change needed here.
+const jsonLargeLimit = express.json({ limit: "50mb" });
+const jsonDefaultLimit = express.json({ limit: "2mb" });
+app.use((req, res, next) => {
+  if (req.path === "/api/sync/save" || req.path === "/api/checkout") {
+    return jsonLargeLimit(req, res, next);
+  }
+  return jsonDefaultLimit(req, res, next);
+});
 
 // -------------------------------------------------------------
 // SECURE LAZY SMTP EMAIL SENDER (ZEPTOMAIL SUPPORTED)
