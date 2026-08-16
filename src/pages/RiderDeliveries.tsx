@@ -10,14 +10,17 @@ export const RiderDeliveries: React.FC = () => {
     return <div className="text-gray-500 text-sm">Rider profile not synced.</div>;
   }
 
-  // Active routes assigned to this driver (status: out_for_delivery)
-  const activeJobs = orders.filter(
-    o => o.riderId === currentRider.id && o.status === "out_for_delivery"
-  );
+  // Active routes assigned to this driver (status: out_for_delivery),
+  // newest first -- same reasoning as the other order-list pages: new
+  // orders always get appended to the end of the shared context array,
+  // so display order needs its own explicit sort to be correct.
+  const activeJobs = orders
+    .filter(o => o.riderId === currentRider.id && o.status === "out_for_delivery")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const activeReceiptJobs = (orders || []).filter(
-    j => j.orderType === "receipt_pickup" && j.riderId === currentRider.id && (j.status === "accepted" || j.status === "out_for_delivery")
-  );
+  const activeReceiptJobs = (orders || [])
+    .filter(j => j.orderType === "receipt_pickup" && j.riderId === currentRider.id && (j.status === "accepted" || j.status === "out_for_delivery"))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
     const result = await updateDeliveryStatus(orderId, status);

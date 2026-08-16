@@ -10,8 +10,13 @@ export const VendorOrders: React.FC = () => {
     return <div className="text-sm font-semibold text-gray-500">No store record configured.</div>;
   }
 
-  // Filter orders by current vendor
-  const vendorOrders = orders.filter(o => o.vendorId === currentVendor.id);
+  // Filter orders by current vendor, newest first -- sorted here (not
+  // relying on fetch/array order) since new orders always get appended to
+  // the end of the shared context array regardless of how recent they
+  // are, same fix applied to the customer-facing My Orders page.
+  const vendorOrders = orders
+    .filter(o => o.vendorId === currentVendor.id)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Group active vs historic orders
   const activeStatuses = ["pending", "accepted", "preparing", "ready", "out_for_delivery"];

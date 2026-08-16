@@ -349,7 +349,13 @@ export const AdminOrders: React.FC = () => {
     .map(id => orders.find(o => o.id === id))
     .filter((o): o is Order => !!o);
   const standardTotalPages = standardTabTotalPages;
-  const receiptPickupOrders = orders.filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled" && o.status !== "awaiting_payment_verification" && !(o.batchDate && o.batchTime && o.status !== "delivered"));
+  // Newest first -- unlike standardOrders (only used for a count), this
+  // one is rendered directly as rows, so it has the same ordering gap the
+  // other order-list pages had: new orders otherwise land wherever the
+  // shared context array happens to place them, not necessarily at top.
+  const receiptPickupOrders = orders
+    .filter(o => o.orderType === "receipt_pickup" && o.status !== "cancelled" && o.status !== "awaiting_payment_verification" && !(o.batchDate && o.batchTime && o.status !== "delivered"))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const [receiptPickupPageOrderIds, setReceiptPickupPageOrderIds] = useState<string[]>([]);
   const [receiptPickupTabTotalCount, setReceiptPickupTabTotalCount] = useState(0);
@@ -1587,7 +1593,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs font-medium">
-                    {orders.filter(o => o.status === "awaiting_payment_verification").map((o) => (
+                    {orders.filter(o => o.status === "awaiting_payment_verification").sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50">
                         <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id.slice(0, 8)}</td>
                         <td className="py-3.5 px-4 font-bold text-gray-800">
