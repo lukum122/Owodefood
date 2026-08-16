@@ -17,7 +17,7 @@ export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string 
 };
 
 export const CustomerOrders: React.FC = () => {
-  const { orders, currentUser, currency, resubmitOrderReceipt } = useDatabase();
+  const { orders, currentUser, currency, resubmitOrderReceipt, fetchFullOrders } = useDatabase();
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   // Tracks which orders just had their receipt successfully resubmitted in
   // this session, so the UI can show a clear confirmation instead of
@@ -25,6 +25,22 @@ export const CustomerOrders: React.FC = () => {
   // keep showing the old rejection message right after a successful fix,
   // which would read as contradictory.
   const [justResubmittedIds, setJustResubmittedIds] = useState<Set<string>>(new Set());
+
+  // An admin/employee/super_admin session never gets `orders` populated by
+  // the general app-load fetch (that was intentionally moved to dedicated,
+  // faster admin-only endpoints for the actual admin pages). But this page
+  // is the CUSTOMER "My Orders" screen, not an admin page -- an admin
+  // account is still a real person who can place real orders, and their
+  // own orders should show up here the same as anyone else's. This pulls
+  // in the full orders dataset (merged, not replacing anything) only for
+  // exactly that case, so a regular customer session never makes this
+  // otherwise-pointless extra request.
+  useEffect(() => {
+    const isAdminSession = currentUser?.roles?.includes("admin") || currentUser?.roles?.includes("employee") || currentUser?.roles?.includes("super_admin") || currentUser?.role === "admin" || currentUser?.role === "employee" || currentUser?.role === "super_admin";
+    if (isAdminSession) {
+      fetchFullOrders();
+    }
+  }, [currentUser?.id]);
 
   // Filter orders where customer matches current logged user
   const customerOrders = orders.filter(o => o.customerId === currentUser?.id);
