@@ -1195,7 +1195,7 @@ app.get("/api/my-orders", verifyTokenOptional, async (req: any, res: any) => {
       return res.status(401).json({ error: "Unauthorized: Please log in." });
     }
 
-    const myOrders = await db.select().from(orders).where(eq(orders.customerId, reqUser.id));
+    const myOrders = await db.select().from(orders).where(eq(orders.customerId, reqUser.id)).orderBy(desc(orders.createdAt));
     const myOrderIds = myOrders.map(o => o.id);
     const myOrderItems = myOrderIds.length > 0
       ? await db.select().from(orderItems).where(inArray(orderItems.orderId, myOrderIds))
@@ -1224,7 +1224,7 @@ app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any
     }
 
     const [allOrders, allOrderItems] = await Promise.all([
-      db.select().from(orders),
+      db.select().from(orders).orderBy(desc(orders.createdAt)),
       db.select().from(orderItems),
     ]);
 
@@ -1289,7 +1289,7 @@ app.get("/api/admin/orders-delivered", verifyTokenOptional, async (req: any, res
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
-    const deliveredOrders = await db.select().from(orders).where(eq(orders.status, "delivered"));
+    const deliveredOrders = await db.select().from(orders).where(eq(orders.status, "delivered")).orderBy(desc(orders.createdAt));
     res.json({ orders: deliveredOrders });
   } catch (error: any) {
     console.error("Failed to load delivered orders:", error);
@@ -1496,7 +1496,7 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         allAppNotifications,
       ] = await Promise.all([
         db.select().from(users).where(eq(users.id, reqUser.id)),
-        db.select().from(orders).where(ordersFilter),
+        db.select().from(orders).where(ordersFilter).orderBy(desc(orders.createdAt)),
         reqUser.roles?.includes("rider")
           ? db.select().from(riders).where(eq(riders.userId, reqUser.id))
           : Promise.resolve([]),
