@@ -159,6 +159,43 @@ function getMailTransporter() {
   return transporter;
 }
 
+// -------------------------------------------------------------
+// TELEGRAM ORDER ALERTS
+// -------------------------------------------------------------
+// Fires into a staff group and/or a personal DM whenever a new order is
+// placed. Deliberately "fire and forget" from the caller's perspective —
+// a Telegram outage should never block or delay real order placement, so
+// every failure here is caught and logged, never thrown.
+async function sendTelegramNotification(text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.log(`[TELEGRAM SIMULATION] ${text}`);
+    return;
+  }
+
+  const chatIds = [process.env.TELEGRAM_GROUP_CHAT_ID, process.env.TELEGRAM_DM_CHAT_ID].filter(Boolean) as string[];
+  if (chatIds.length === 0) {
+    console.log(`[TELEGRAM SIMULATION - no chat IDs configured] ${text}`);
+    return;
+  }
+
+  for (const chatId of chatIds) {
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+      });
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`Telegram notification failed for chat ${chatId}:`, errorBody);
+      }
+    } catch (e) {
+      console.error(`Telegram notification failed for chat ${chatId}:`, e);
+    }
+  }
+}
+
 async function sendEmailNotification(to: string, subject: string, htmlContent: string) {
   try {
     const mailer = getMailTransporter();
@@ -3021,6 +3058,17 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     };
     sendPush(vendorId, "New Order Received!", `Order #${orderId} for ?${finalTotal.toLocaleString()}`);
     sendPush("admin", "New Platform Order!", `Order #${orderId} placed at ${vendorName}`);
+
+    // Telegram order alert -- fire-and-forget, never blocks the response.
+    const escapeHtml = (str: string) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    sendTelegramNotification(
+      `🔔 <b>New Order Received!</b>\n\n` +
+      `<b>Order:</b> #${orderId}\n` +
+      `<b>Vendor:</b> ${escapeHtml(vendorName)}\n` +
+      `<b>Customer:</b> ${escapeHtml(customerName)}\n` +
+      `<b>Amount:</b> ₦${finalTotal.toLocaleString()}\n` +
+      `<b>Payment:</b> ${escapeHtml(paymentMethod)}`
+    );
 
     // Bump the general-purpose data version so other open tabs/devices know
     // to refresh (this endpoint is outside the sync/save switch above).
