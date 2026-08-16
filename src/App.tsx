@@ -14,6 +14,7 @@ import { PortalSimulator } from "./components/PortalSimulator";
 import { PwaUpdater } from "./components/PwaUpdater";
 import { LoadErrorBanner } from "./components/LoadErrorBanner";
 import { MaintenanceScreen } from "./components/MaintenanceScreen";
+import { AnnouncementPopup } from "./components/AnnouncementPopup";
 
 // Customer Pages
 import { CustomerHome } from "./pages/CustomerHome";
@@ -122,6 +123,7 @@ function AppShell() {
           <PortalSimulator />
           <PwaUpdater />
           <LoadErrorBanner />
+          <AnnouncementPopup />
 
         <Routes>
           
