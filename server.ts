@@ -112,7 +112,33 @@ io.on("connection", (socket) => {
 
 // Security Middlewares
 app.use(helmet({
-  contentSecurityPolicy: false // Disable CSP if it interferes with Vite dev server or external images
+  // Only enforced in production -- Vite's dev server/HMR genuinely needs a
+  // much looser policy (inline scripts, eval, its own websocket), which is
+  // the original reason this was disabled outright. Real users only ever
+  // hit the production build, so restricting it to production closes the
+  // actual gap without touching local development at all.
+  contentSecurityPolicy: process.env.NODE_ENV === "production" ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"], // single bundled module script only, nothing inline anywhere in index.html
+      // 'unsafe-inline' is required here specifically because React writes
+      // inline `style={{...}}` attributes directly onto DOM elements
+      // (used throughout this app, e.g. heroBanner.backgroundColor) --
+      // this is a standard, expected CSP allowance for React apps, not a
+      // loophole; script-src above stays strict without it.
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      // 'data:' is required -- product/vendor photos and payment receipts
+      // are currently stored and rendered as base64 data URIs, not
+      // external links. Revisit once the R2 migration moves these to real
+      // hosted URLs, at which point that specific domain can be added
+      // here instead of broadening this further.
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "ws:", "wss:"], // ws/wss for the Socket.io connection
+      objectSrc: ["'none'"],
+      frameAncestors: ["'self'"],
+    },
+  } : false,
 }));
 app.use(cors({
   origin: process.env.NODE_ENV === "production" ? false : "http://localhost:5173"
@@ -644,6 +670,35 @@ async function clearBruteForceLock(key: string): Promise<void> {
   await db.delete(systemSettings).where(eq(systemSettings.key, `bf_${key}`));
 }
 
+// -------------------------------------------------------------
+// GRANULAR EMPLOYEE PERMISSIONS
+// -------------------------------------------------------------
+// Full admin/super_admin always bypasses this entirely (unrestricted, as
+// before). An "employee" role session only gets through if their
+// employees-table record actually lists the specific permission --
+// previously, "isAdmin" checks throughout this file either excluded
+// "employee" entirely (silently blocking every employee from actions
+// they were assigned permission for in the UI) or included it as a
+// blanket yes/no with no regard for which specific permission was
+// actually granted. This looks the employee up by email (the only link
+// the employees table has back to a real login) and checks their actual
+// permissions array.
+async function hasPermission(reqUser: any, permissionKey: string): Promise<boolean> {
+  if (!reqUser) return false;
+  const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+  const isFullAdmin = reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email);
+  if (isFullAdmin) return true;
+
+  const isEmployeeRole = reqUser.roles?.includes("employee") || reqUser.role === "employee";
+  if (!isEmployeeRole || !reqUser.email) return false;
+
+  const empRows = await db.select().from(employees).where(eq(employees.email, String(reqUser.email).toLowerCase())).limit(1);
+  if (empRows.length === 0) return false;
+  if (empRows[0].status !== "active") return false;
+
+  return Array.isArray(empRows[0].permissions) && (empRows[0].permissions as string[]).includes(permissionKey);
+}
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, pin } = req.body; // 'email' field here actually receives the 'identifier'
@@ -1111,7 +1166,7 @@ app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any
     const reqUser = req.user;
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
-    if (!isAdmin) {
+    if (!isAdmin && !(await hasPermission(reqUser, "manage_orders"))) {
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
@@ -1142,7 +1197,12 @@ app.get("/api/admin/users-full", verifyTokenOptional, async (req: any, res: any)
     const reqUser = req.user;
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
-    if (!isAdmin) {
+    // This feeds Manage Vendors and Manage Riders too (shown in each
+    // vendor/rider's owning account details), not just Manage Users --
+    // so either permission is enough, matching who legitimately needs it.
+    // Manage Users itself has no dedicated permission at all, so that
+    // specific page stays effectively full-admin-only.
+    if (!isAdmin && !(await hasPermission(reqUser, "manage_vendors")) && !(await hasPermission(reqUser, "manage_riders"))) {
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
@@ -1533,8 +1593,26 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       return res.status(401).json({ error: "Unauthorized: Please log in." });
     }
 
+    // A handful of admin-only actions map to a specific granular employee
+    // permission -- for those, an employee with that exact permission
+    // passes through instead of being blanket-blocked with everyone else.
+    // Everything else in adminOnlyActions has no matching permission
+    // category at all (payouts, wallets, bulk imports, user deletion,
+    // payment gateway config), so those stay strictly full-admin-only,
+    // deliberately not opened up by this.
+    const actionPermissionMap: Record<string, string> = {
+      "SYSTEM_SETTING_UPSERT": "view_settings",
+      "SYSTEM_SETTINGS_BULK": "view_settings",
+      "EMPLOYEE_UPSERT": "manage_employees",
+      "EMPLOYEE_DELETE": "manage_employees",
+    };
+
     if (adminOnlyActions.includes(type) && !isAdmin && !isTargetEmpty) {
-      return res.status(403).json({ error: "Forbidden: Admin access required" });
+      const requiredPermission = actionPermissionMap[type];
+      const permitted = requiredPermission ? await hasPermission(reqUser, requiredPermission) : false;
+      if (!permitted) {
+        return res.status(403).json({ error: "Forbidden: Admin access required" });
+      }
     }
     if (!type || !payload) {
       return res.status(400).json({ error: "Missing type or payload" });
@@ -1804,7 +1882,10 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "VENDOR_UPSERT": {
-        if (!isAdmin) {
+        // An employee with manage_vendors gets the same bypass as full
+        // admin here -- without it, they fall through to the ownership
+        // check below same as any other non-owner, and get blocked.
+        if (!isAdmin && !(await hasPermission(reqUser, "manage_vendors"))) {
           if (payload.userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
           const existingVendor = await db.select().from(vendors).where(eq(vendors.id, payload.id)).limit(1);
           if (existingVendor.length > 0) {
@@ -2055,7 +2136,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         const oldStatus = isNew ? null : existingOrder[0].status;
         const statusChanged = oldStatus !== payload.status;
 
-        if (!isAdmin) {
+        // An employee with manage_orders bypasses the ownership check
+        // below the same way admin does -- direct order CREATION above
+        // stays strictly admin-only regardless, since that's a different,
+        // more sensitive operation than viewing/updating existing orders.
+        if (!isAdmin && !(await hasPermission(reqUser, "manage_orders"))) {
           const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
           const userVendorId = userVendor.length > 0 ? userVendor[0].id : null;
           
@@ -2481,7 +2566,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "RIDER_UPSERT": {
-        if (!isAdmin) {
+        // Same pattern as VENDOR_UPSERT -- an employee with manage_riders
+        // bypasses the ownership check the same way admin does.
+        if (!isAdmin && !(await hasPermission(reqUser, "manage_riders"))) {
           if (payload.userId !== reqUser.id) return res.status(403).json({ error: "Forbidden: You do not own this account." });
           const existing = await db.select().from(riders).where(eq(riders.id, payload.id)).limit(1);
           if (existing.length > 0) {
