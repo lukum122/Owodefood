@@ -42,7 +42,17 @@ webpush.setVapidDetails(
   vapidPrivateKey
 );
 
-const JWT_SECRET = process.env.JWT_SECRET || "secure_fallback_secret_xyz123";
+// FATAL if missing -- deliberately no fallback value. The previous
+// hardcoded fallback ("secure_fallback_secret_xyz123") sat in this public
+// repo, and the startup check meant to catch a missing JWT_SECRET
+// (validateEnvironment) never actually runs on Vercel, since startServer()
+// is explicitly skipped there -- so that fallback was one missing env var
+// away from being live in production with zero warning. This throws
+// immediately at module load, unconditionally, on every environment.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("FATAL: JWT_SECRET environment variable is not set. Refusing to start with an insecure fallback secret.");
+}
 
 // Middleware to verify JWT token securely
 const verifyTokenOptional = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -484,6 +494,15 @@ app.post("/api/auth/confirm-pin-reset", authLimiter, async (req, res) => {
     }
     const user = userResult[0];
 
+    // Brute-force lock: 5 wrong-code guesses locks this user's reset flow
+    // for 10 minutes -- matching the code's own expiry window, since a
+    // locked-out code needed a fresh request anyway. Without this, a
+    // 4-digit code (9,000 possibilities) is guessable in that same window.
+    const lockCheck = await checkBruteForceLock(`pinreset_${user.id}`, 5, 10 * 60 * 1000);
+    if (lockCheck.locked) {
+      return res.status(429).json({ error: `Too many incorrect attempts. Please request a new code in ${lockCheck.retryAfterMinutes} minute(s).` });
+    }
+
     const storedRows = await db.select().from(systemSettings).where(eq(systemSettings.key, `pin_reset_${user.id}`)).limit(1);
     if (storedRows.length === 0) {
       return res.status(400).json({ error: "Invalid or expired reset code. Please request a new one." });
@@ -502,8 +521,13 @@ app.post("/api/auth/confirm-pin-reset", authLimiter, async (req, res) => {
     }
 
     if (String(code).trim() !== stored.code) {
+      await recordFailedAttempt(`pinreset_${user.id}`, 10 * 60 * 1000);
       return res.status(400).json({ error: "Incorrect verification code. Please check and try again." });
     }
+
+    // Correct code proven -- clear the lock so a legitimate follow-up
+    // reset later isn't penalized by earlier genuine typos.
+    await clearBruteForceLock(`pinreset_${user.id}`);
 
     const hashedPin = await bcrypt.hash(String(newPin), 10);
     await db.update(users).set({ pin: hashedPin }).where(eq(users.id, user.id));
@@ -562,17 +586,87 @@ app.post("/api/auth/check-user", async (req, res) => {
 });
 
 // Backend JWT Authentication Login
+// -------------------------------------------------------------
+// DATABASE-BACKED BRUTE-FORCE PROTECTION
+// -------------------------------------------------------------
+// express-rate-limit's in-memory store doesn't work reliably on Vercel --
+// serverless functions don't share memory between invocations, so an
+// in-memory counter can silently reset on every request. This persists
+// attempt counts in the existing systemSettings table instead (same
+// key-value pattern already used everywhere else in this project), so a
+// lock genuinely holds regardless of which serverless instance handles
+// the next request.
+async function checkBruteForceLock(key: string, maxAttempts: number, windowMs: number): Promise<{ locked: boolean; retryAfterMinutes?: number }> {
+  const settingKey = `bf_${key}`;
+  const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, settingKey)).limit(1);
+  if (rows.length === 0) return { locked: false };
+
+  let data: { count: number; windowStart: number };
+  try {
+    data = JSON.parse(rows[0].value);
+  } catch {
+    return { locked: false };
+  }
+
+  const now = Date.now();
+  if (now - data.windowStart > windowMs) return { locked: false }; // window expired, treat as fresh
+
+  if (data.count >= maxAttempts) {
+    const retryAfterMinutes = Math.max(1, Math.ceil((windowMs - (now - data.windowStart)) / 60000));
+    return { locked: true, retryAfterMinutes };
+  }
+
+  return { locked: false };
+}
+
+async function recordFailedAttempt(key: string, windowMs: number): Promise<void> {
+  const settingKey = `bf_${key}`;
+  const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, settingKey)).limit(1);
+  const now = Date.now();
+
+  let data: { count: number; windowStart: number };
+  if (rows.length > 0) {
+    try {
+      const existing = JSON.parse(rows[0].value);
+      data = (now - existing.windowStart > windowMs) ? { count: 1, windowStart: now } : { count: existing.count + 1, windowStart: existing.windowStart };
+    } catch {
+      data = { count: 1, windowStart: now };
+    }
+  } else {
+    data = { count: 1, windowStart: now };
+  }
+
+  await db.insert(systemSettings).values({ key: settingKey, value: JSON.stringify(data) })
+    .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(data) } });
+}
+
+async function clearBruteForceLock(key: string): Promise<void> {
+  await db.delete(systemSettings).where(eq(systemSettings.key, `bf_${key}`));
+}
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, pin } = req.body; // 'email' field here actually receives the 'identifier'
     const cleanIdentifier = email.trim().toLowerCase();
     const phoneIdentifier = cleanIdentifier.replace(/[\s\-\+\(\)]/g, "");
 
+    // Brute-force lock: 5 failed attempts locks this identifier out for 15
+    // minutes. Checked before the user lookup even happens, so a locked-out
+    // identifier can't be used to keep probing at all -- and every failure
+    // path below records identically, whether the identifier didn't match
+    // any account or the PIN itself was wrong, so which failure reason
+    // trips the lock never leaks whether an account exists.
+    const lockCheck = await checkBruteForceLock(`login_${cleanIdentifier}`, 5, 15 * 60 * 1000);
+    if (lockCheck.locked) {
+      return res.status(429).json({ error: `Too many failed attempts. Please try again in ${lockCheck.retryAfterMinutes} minute(s).` });
+    }
+
     const userResult = await db.select().from(users).where(
       sql`lower(${users.email}) = ${cleanIdentifier} OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${users.phone}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') = ${phoneIdentifier}`
     ).limit(1);
 
     if (userResult.length === 0) {
+      await recordFailedAttempt(`login_${cleanIdentifier}`, 15 * 60 * 1000);
       return res.status(401).json({ error: "Invalid email or PIN" });
     }
 
@@ -593,8 +687,12 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     if (!pinValid) {
+      await recordFailedAttempt(`login_${cleanIdentifier}`, 15 * 60 * 1000);
       return res.status(401).json({ error: "Invalid email or PIN" });
     }
+
+    // Correct PIN proven -- this identifier is no longer a brute-force risk.
+    await clearBruteForceLock(`login_${cleanIdentifier}`);
 
     if (user.isSuspended) {
       return res.status(403).json({ error: user.suspendedReason ? `Your account has been suspended: ${user.suspendedReason}` : "Your account has been suspended. Please contact support." });
