@@ -196,6 +196,81 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
+// Sends a payment receipt image with an order-details caption -- used for
+// bank-transfer orders specifically. Handles both of the two shapes a
+// receipt can currently/eventually take, with no code change needed when
+// the storage format changes from one to the other:
+//   - a base64 data URI (today's format -- images stored directly in the DB)
+//   - a real hosted URL (the format after the planned R2 migration)
+// Falls back to a text-only alert (via sendTelegramNotification) if the
+// image can't be sent for any reason, so a bad/oversized/malformed receipt
+// never means the order goes completely unnoticed in Telegram.
+async function sendTelegramPhoto(caption: string, imageData: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.log(`[TELEGRAM SIMULATION - photo] ${caption}`);
+    return;
+  }
+
+  const chatIds = [process.env.TELEGRAM_GROUP_CHAT_ID, process.env.TELEGRAM_DM_CHAT_ID].filter(Boolean) as string[];
+  if (chatIds.length === 0) {
+    console.log(`[TELEGRAM SIMULATION - photo, no chat IDs configured] ${caption}`);
+    return;
+  }
+
+  const isDataUri = imageData.startsWith("data:");
+  let photoBlob: Blob | null = null;
+
+  if (isDataUri) {
+    const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) {
+      console.error("Telegram receipt photo skipped: unrecognized data URI format.");
+      await sendTelegramNotification(`${caption}\n\n⚠️ Receipt image could not be attached (unrecognized format).`);
+      return;
+    }
+    const [, mimeType, base64Data] = match;
+    const buffer = Buffer.from(base64Data, "base64");
+    // Telegram's own hard limit for sendPhoto is 10MB -- the app's own
+    // compression already keeps receipts well under this in practice, but
+    // this guards against ever silently failing on an oversized one.
+    if (buffer.length > 10 * 1024 * 1024) {
+      console.error("Telegram receipt photo skipped: image exceeds 10MB.");
+      await sendTelegramNotification(`${caption}\n\n⚠️ Receipt image was too large to attach — please check the admin panel.`);
+      return;
+    }
+    photoBlob = new Blob([buffer], { type: mimeType });
+  }
+
+  for (const chatId of chatIds) {
+    try {
+      let response: Response;
+      if (isDataUri && photoBlob) {
+        const formData = new FormData();
+        formData.append("chat_id", chatId);
+        formData.append("caption", caption);
+        formData.append("parse_mode", "HTML");
+        formData.append("photo", photoBlob, "receipt.jpg");
+        response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, photo: imageData, caption, parse_mode: "HTML" }),
+        });
+      }
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`Telegram photo send failed for chat ${chatId}:`, errorBody);
+      }
+    } catch (e) {
+      console.error(`Telegram photo send failed for chat ${chatId}:`, e);
+    }
+  }
+}
+
 async function sendEmailNotification(to: string, subject: string, htmlContent: string) {
   try {
     const mailer = getMailTransporter();
@@ -3060,15 +3135,40 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     sendPush("admin", "New Platform Order!", `Order #${orderId} placed at ${vendorName}`);
 
     // Telegram order alert -- fire-and-forget, never blocks the response.
+    // Bank-transfer orders with a receipt attached get the receipt image
+    // itself with the order details as the caption; everything else gets
+    // the plain text alert.
     const escapeHtml = (str: string) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    sendTelegramNotification(
+    const telegramCaption =
       `🔔 <b>New Order Received!</b>\n\n` +
       `<b>Order:</b> #${orderId}\n` +
       `<b>Vendor:</b> ${escapeHtml(vendorName)}\n` +
       `<b>Customer:</b> ${escapeHtml(customerName)}\n` +
       `<b>Amount:</b> ₦${finalTotal.toLocaleString()}\n` +
-      `<b>Payment:</b> ${escapeHtml(paymentMethod)}`
-    );
+      `<b>Payment:</b> ${escapeHtml(paymentMethod)}`;
+
+    if (isBankTransfer && receiptImage) {
+      sendTelegramPhoto(telegramCaption, receiptImage);
+    } else if (isBankTransfer) {
+      sendTelegramNotification(`${telegramCaption}\n\n⚠️ No receipt attached yet.`);
+    } else {
+      sendTelegramNotification(telegramCaption);
+    }
+
+    // Receipt-pickup orders carry a second, entirely separate image -- the
+    // pickup receipt/voucher itself (proof of WHAT to collect), distinct
+    // from receiptImage above (proof of payment). A single order can
+    // legitimately have both at once, so this fires independently and
+    // always as its own message, never replacing the block above.
+    if (isReceiptPickup && receiptImageOrQr) {
+      const pickupCaption =
+        `📦 <b>Pickup Receipt/Voucher</b>\n\n` +
+        `<b>Order:</b> #${orderId}\n` +
+        `<b>Vendor:</b> ${escapeHtml(vendorName)}\n` +
+        `<b>Customer:</b> ${escapeHtml(customerName)}\n` +
+        (receiptNote ? `<b>Note:</b> ${escapeHtml(receiptNote)}\n` : "");
+      sendTelegramPhoto(pickupCaption, receiptImageOrQr);
+    }
 
     // Bump the general-purpose data version so other open tabs/devices know
     // to refresh (this endpoint is outside the sync/save switch above).
