@@ -224,7 +224,16 @@ function AppShell() {
             <Route path="payouts" element={<AdminPayouts />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="audit-log" element={<AdminAuditLog />} />
-            <Route path="discovery" element={<AdminDiscovery />} />
+            {/* Tighter than the parent /admin guard on purpose: this page
+                can inject raw HTML into the public homepage banner
+                (dangerouslySetInnerHTML, no sanitization), so it's
+                restricted to real admins only -- not employee accounts,
+                which the parent guard otherwise allows into /admin generally. */}
+            <Route path="discovery" element={
+              <AuthGuard allowedRoles={["admin", "super_admin"]}>
+                <AdminDiscovery />
+              </AuthGuard>
+            } />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 
