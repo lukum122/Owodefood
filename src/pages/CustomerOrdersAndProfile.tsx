@@ -43,8 +43,15 @@ export const CustomerOrders: React.FC = () => {
     }
   }, [currentUser?.id]);
 
-  // Filter orders where customer matches current logged user
-  const customerOrders = orders.filter(o => o.customerId === currentUser?.id);
+  // Filter orders where customer matches current logged user, newest first.
+  // Sorted here specifically (not relying on fetch/array order) because
+  // mergeOrdersIntoContext preserves each order's original position in the
+  // array once it's known, and only appends brand-new orders to the very
+  // end -- so a freshly-placed order would otherwise show at the bottom
+  // regardless of how the backend query itself is sorted.
+  const customerOrders = orders
+    .filter(o => o.customerId === currentUser?.id)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
