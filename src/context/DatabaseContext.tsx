@@ -153,6 +153,7 @@ interface DatabaseContextType {
   updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
   mergeOrdersIntoContext: (incomingOrders: Order[]) => void;
   fetchFullOrders: () => Promise<{ success: boolean; error?: string }>;
+  fetchMyOrders: () => Promise<{ success: boolean; error?: string }>;
   fetchDeliveredOrders: () => Promise<{ success: boolean; error?: string }>;
   fetchFullUsers: () => Promise<{ success: boolean; error?: string }>;
   reopenCancelledOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
@@ -2750,6 +2751,34 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
    * so nothing that already reads from `orders`/`users` elsewhere loses
    * data it was already relying on.
    */
+  // Fetches only the current session's own orders -- no admin permission
+  // required, works for any logged-in role. Needed specifically because
+  // an admin/employee session doesn't get `orders` populated by the
+  // general app-load fetch (that's tenant-isolated to non-admin sessions
+  // only), so without this, an admin/employee account that also places
+  // real orders of their own would never see them on their own "My
+  // Orders" page -- a completely different, unrelated need from
+  // fetchFullOrders above, which is gated by manage_orders and returns
+  // everyone's orders for the actual admin dashboards.
+  const fetchMyOrders = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = localStorage.getItem("fd_jwt_token");
+      const headers: any = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
+      const res = await fetch("/api/my-orders", { headers });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Failed to load your orders." };
+      mergeOrdersIntoContext(data.orders || []);
+      return { success: true };
+    } catch (err) {
+      console.error("[fetchMyOrders] Failed:", err);
+      return { success: false, error: "Failed to load your orders. Please check your connection." };
+    }
+  };
+
   const fetchFullOrders = async (): Promise<{ success: boolean; error?: string }> => {
     try {
       const token = localStorage.getItem("fd_jwt_token");
@@ -3632,6 +3661,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateDeliveryStatus,
         mergeOrdersIntoContext,
         fetchFullOrders,
+        fetchMyOrders,
         fetchDeliveredOrders,
         fetchFullUsers,
         reopenCancelledOrder,
