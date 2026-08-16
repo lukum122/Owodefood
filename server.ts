@@ -1161,6 +1161,42 @@ app.get("/api/admin/orders-by-tab", verifyTokenOptional, async (req: any, res: a
   }
 });
 
+// Any logged-in person's own orders -- customer, vendor, rider, employee,
+// or admin, doesn't matter. Deliberately requires NO admin permission at
+// all, since "can I see my own orders" isn't an admin-dashboard concern,
+// it's a basic account right every logged-in person has. This exists
+// specifically because /api/admin/orders-full (used for the actual admin
+// order-management dashboards) is gated by manage_orders, which correctly
+// keeps most staff out of the full cross-platform order list -- but an
+// employee without that permission still needs to see orders THEY
+// personally placed as a customer, and that's a completely different,
+// unrelated need from viewing everyone else's orders.
+app.get("/api/my-orders", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    if (!reqUser) {
+      return res.status(401).json({ error: "Unauthorized: Please log in." });
+    }
+
+    const myOrders = await db.select().from(orders).where(eq(orders.customerId, reqUser.id));
+    const myOrderIds = myOrders.map(o => o.id);
+    const myOrderItems = myOrderIds.length > 0
+      ? await db.select().from(orderItems).where(inArray(orderItems.orderId, myOrderIds))
+      : [];
+
+    const itemsByOrder: Record<string, any[]> = {};
+    for (const item of myOrderItems) {
+      if (!itemsByOrder[item.orderId]) itemsByOrder[item.orderId] = [];
+      itemsByOrder[item.orderId].push(item);
+    }
+
+    res.json({ orders: myOrders.map(o => ({ ...o, items: itemsByOrder[o.id] || [] })) });
+  } catch (error: any) {
+    console.error("Failed to load own orders:", error);
+    res.status(500).json({ error: "Failed to load your orders." });
+  }
+});
+
 app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
