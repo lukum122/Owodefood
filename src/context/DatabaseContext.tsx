@@ -835,6 +835,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateCoverageGuideText = (text: string) => {
     setCoverageGuideText(text);
+    // Persisted immediately here (not deferred to the bulk "Save Global
+    // Settings" button) -- this is its own dedicated "Save Coverage Guide"
+    // button elsewhere, so it needs to actually reach the server the
+    // moment it's clicked. The value is passed directly rather than read
+    // back from state, since state set above hasn't committed yet within
+    // this same function call -- reading it back here would still see the
+    // OLD value and silently persist that instead of what was just typed.
+    syncSave("SYSTEM_SETTING_UPSERT", { key: "coverageGuideText", value: text });
   };
 
   const updateExtremeLocationTiers = (tiers: ExtremeLocationTier[]) => {
