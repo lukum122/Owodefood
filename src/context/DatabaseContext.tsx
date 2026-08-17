@@ -64,6 +64,31 @@ interface DatabaseContextType {
   updateMaintenanceMode: (isEnabled: boolean) => void;
   maintenanceMessage: string;
   updateMaintenanceMessage: (message: string) => void;
+  // Announcement popup shown to visitors -- content, frequency, and
+  // audience all admin-configurable. No dedicated table: same
+  // systemSettings key-value pattern as maintenanceMode/coverageGuideText
+  // above. popupVersion bumps automatically on every save (never set
+  // directly), so editing the message always reaches everyone again
+  // regardless of what they'd previously dismissed.
+  popupEnabled: boolean;
+  popupMessage: string;
+  popupImage: string;
+  popupLinkUrl: string;
+  popupLinkLabel: string;
+  popupFrequency: "every_visit" | "first_visit" | "session" | "until_dismissed" | "every_n_days";
+  popupFrequencyDays: number;
+  popupAudience: string[];
+  popupVersion: string;
+  savePopupSettings: (settings: {
+    enabled: boolean;
+    message: string;
+    image: string;
+    linkUrl: string;
+    linkLabel: string;
+    frequency: "every_visit" | "first_visit" | "session" | "until_dismissed" | "every_n_days";
+    frequencyDays: number;
+    audience: string[];
+  }) => Promise<{ success: boolean; error?: string }>;
   batchDeliverySystemEnabled: boolean;
   updateBatchDeliverySystemEnabled: (isEnabled: boolean) => void;
   batchDeliveryTimes: string[];
@@ -471,6 +496,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [globalFreeDelivery, setGlobalFreeDelivery] = useState<boolean>(false);
   const [maintenanceMode, setMaintenanceMode] = useState<boolean>(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string>("We're currently performing scheduled maintenance. Please check back shortly.");
+  const [popupEnabled, setPopupEnabled] = useState<boolean>(false);
+  const [popupMessage, setPopupMessage] = useState<string>("");
+  const [popupImage, setPopupImage] = useState<string>("");
+  const [popupLinkUrl, setPopupLinkUrl] = useState<string>("");
+  const [popupLinkLabel, setPopupLinkLabel] = useState<string>("");
+  const [popupFrequency, setPopupFrequency] = useState<"every_visit" | "first_visit" | "session" | "until_dismissed" | "every_n_days">("until_dismissed");
+  const [popupFrequencyDays, setPopupFrequencyDays] = useState<number>(7);
+  const [popupAudience, setPopupAudience] = useState<string[]>(["customer"]);
+  const [popupVersion, setPopupVersion] = useState<string>("0");
   const [surgeConfig, setSurgeConfig] = useState<SystemSurgeConfig>({
     isSurgeActive: false,
     surgeFee: 0,
@@ -621,6 +655,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (data.systemSettings.globalFreeDelivery) setGlobalFreeDelivery(data.systemSettings.globalFreeDelivery === "true");
             if (data.systemSettings.maintenanceMode) setMaintenanceMode(data.systemSettings.maintenanceMode === "true");
             if (data.systemSettings.maintenanceMessage) setMaintenanceMessage(data.systemSettings.maintenanceMessage);
+            if (data.systemSettings.popupEnabled) setPopupEnabled(data.systemSettings.popupEnabled === "true");
+            if (data.systemSettings.popupMessage) setPopupMessage(data.systemSettings.popupMessage);
+            if (data.systemSettings.popupImage) setPopupImage(data.systemSettings.popupImage);
+            if (data.systemSettings.popupLinkUrl) setPopupLinkUrl(data.systemSettings.popupLinkUrl);
+            if (data.systemSettings.popupLinkLabel) setPopupLinkLabel(data.systemSettings.popupLinkLabel);
+            if (data.systemSettings.popupFrequency) setPopupFrequency(data.systemSettings.popupFrequency);
+            if (data.systemSettings.popupFrequencyDays) setPopupFrequencyDays(Number(data.systemSettings.popupFrequencyDays) || 7);
+            if (data.systemSettings.popupAudience) {
+              try { setPopupAudience(JSON.parse(data.systemSettings.popupAudience)); } catch {}
+            }
+            if (data.systemSettings.popupVersion) setPopupVersion(data.systemSettings.popupVersion);
             if (data.systemSettings.batchDeliverySystemEnabled) setBatchDeliverySystemEnabled(data.systemSettings.batchDeliverySystemEnabled === "true");
             if (data.systemSettings.batchDeliveryTimes) {
               try { setBatchDeliveryTimes(JSON.parse(data.systemSettings.batchDeliveryTimes)); } catch(e){}
@@ -963,6 +1008,52 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateMaintenanceMessage = (message: string) => {
     setMaintenanceMessage(message);
+  };
+
+  // Persists all popup fields together in one call, using the exact
+  // values passed in rather than reading back local state -- state set
+  // just before calling this wouldn't have committed yet within the same
+  // function, so reading it back here would still see the OLD values and
+  // silently save those instead (the same bug just fixed on the Coverage
+  // Guide). popupVersion is computed fresh here every time, never passed
+  // in or set directly elsewhere, so any saved change automatically
+  // reaches everyone again regardless of what they'd previously dismissed.
+  const savePopupSettings = async (settings: {
+    enabled: boolean;
+    message: string;
+    image: string;
+    linkUrl: string;
+    linkLabel: string;
+    frequency: "every_visit" | "first_visit" | "session" | "until_dismissed" | "every_n_days";
+    frequencyDays: number;
+    audience: string[];
+  }): Promise<{ success: boolean; error?: string }> => {
+    const newVersion = Date.now().toString();
+    setPopupEnabled(settings.enabled);
+    setPopupMessage(settings.message);
+    setPopupImage(settings.image);
+    setPopupLinkUrl(settings.linkUrl);
+    setPopupLinkLabel(settings.linkLabel);
+    setPopupFrequency(settings.frequency);
+    setPopupFrequencyDays(settings.frequencyDays);
+    setPopupAudience(settings.audience);
+    setPopupVersion(newVersion);
+
+    const result = await syncSave("SYSTEM_SETTINGS_BULK", [
+      { key: "popupEnabled", value: String(settings.enabled) },
+      { key: "popupMessage", value: settings.message },
+      { key: "popupImage", value: settings.image },
+      { key: "popupLinkUrl", value: settings.linkUrl },
+      { key: "popupLinkLabel", value: settings.linkLabel },
+      { key: "popupFrequency", value: settings.frequency },
+      { key: "popupFrequencyDays", value: String(settings.frequencyDays) },
+      { key: "popupAudience", value: JSON.stringify(settings.audience) },
+      { key: "popupVersion", value: newVersion },
+    ]);
+    if (!result?.success) {
+      return { success: false, error: result?.error || "Failed to save the announcement popup." };
+    }
+    return { success: true };
   };
 
   const updateBrandLogo = (logoDataUrl: string) => {
@@ -3593,6 +3684,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateMaintenanceMode,
         maintenanceMessage,
         updateMaintenanceMessage,
+        popupEnabled,
+        popupMessage,
+        popupImage,
+        popupLinkUrl,
+        popupLinkLabel,
+        popupFrequency,
+        popupFrequencyDays,
+        popupAudience,
+        popupVersion,
+        savePopupSettings,
         batchDeliverySystemEnabled,
         updateBatchDeliverySystemEnabled,
         batchDeliveryTimes,
