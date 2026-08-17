@@ -3,7 +3,7 @@ import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
 import { hasRole } from "../roleHelper";
 import { compressImageToDataUrl } from "../imageUtils";
-import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins, ClipboardList } from "lucide-react";
+import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins, ClipboardList, Megaphone, Image as ImageIcon } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
 /* 1. MASTER ORDERS AUDITOR SCREEN */
@@ -4088,6 +4088,15 @@ export const AdminSettings: React.FC = () => {
     updateMaintenanceMode,
     maintenanceMessage,
     updateMaintenanceMessage,
+    popupEnabled,
+    popupMessage,
+    popupImage,
+    popupLinkUrl,
+    popupLinkLabel,
+    popupFrequency,
+    popupFrequencyDays,
+    popupAudience,
+    savePopupSettings,
     surgeConfig,
     updateSurgeConfig,
     legalContent,
@@ -4201,10 +4210,37 @@ export const AdminSettings: React.FC = () => {
   const [newExtremeLocName, setNewExtremeLocName] = useState("");
   const [newExtremeLocTierId, setNewExtremeLocTierId] = useState("tier-1");
 
+  // Announcement popup form state -- local buffer synced from context on
+  // load, same pattern as guideInput above. Only persisted (via
+  // savePopupSettings) when the Save button is actually clicked.
+  const [popupEnabledInput, setPopupEnabledInput] = useState(popupEnabled);
+  const [popupMessageInput, setPopupMessageInput] = useState(popupMessage);
+  const [popupImageInput, setPopupImageInput] = useState(popupImage);
+  const [popupLinkUrlInput, setPopupLinkUrlInput] = useState(popupLinkUrl);
+  const [popupLinkLabelInput, setPopupLinkLabelInput] = useState(popupLinkLabel);
+  const [popupFrequencyInput, setPopupFrequencyInput] = useState(popupFrequency);
+  const [popupFrequencyDaysInput, setPopupFrequencyDaysInput] = useState(popupFrequencyDays);
+  const [popupAudienceInput, setPopupAudienceInput] = useState<string[]>(popupAudience);
+  const [isSavingPopup, setIsSavingPopup] = useState(false);
+
   // Load guideInput when coverageGuideText updates
   React.useEffect(() => {
     setGuideInput(coverageGuideText);
   }, [coverageGuideText]);
+
+  // Sync the popup form's local buffer whenever the loaded settings
+  // change (e.g. the initial async load completing after this component
+  // already mounted with the default empty/false values).
+  React.useEffect(() => {
+    setPopupEnabledInput(popupEnabled);
+    setPopupMessageInput(popupMessage);
+    setPopupImageInput(popupImage);
+    setPopupLinkUrlInput(popupLinkUrl);
+    setPopupLinkLabelInput(popupLinkLabel);
+    setPopupFrequencyInput(popupFrequency);
+    setPopupFrequencyDaysInput(popupFrequencyDays);
+    setPopupAudienceInput(popupAudience);
+  }, [popupEnabled, popupMessage, popupImage, popupLinkUrl, popupLinkLabel, popupFrequency, popupFrequencyDays, popupAudience]);
 
   const handleStartEditCategory = (cat: any) => {
     setEditingCatId(cat.id);
@@ -5086,6 +5122,194 @@ export const AdminSettings: React.FC = () => {
               className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
             >
               <Save className="w-4 h-4" /> Save Maintenance Settings
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* CARD: Announcement Popup */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-purple-600 text-white flex items-center justify-center p-1 shadow-md shadow-purple-100">
+            <Megaphone className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">Announcement Popup</h3>
+            <span className="text-xs text-gray-400 block mt-0.5 font-sans">Push an announcement to visitors -- text, an optional image, and an optional link, with control over how often it reappears.</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <label className={`flex items-start gap-4 p-4 rounded-2xl border transition cursor-pointer select-none ${popupEnabledInput ? "bg-purple-50 border-purple-200" : "bg-gray-50 border-gray-100 hover:bg-gray-100/50"}`}>
+            <input
+              type="checkbox"
+              checked={popupEnabledInput}
+              onChange={(e) => setPopupEnabledInput(e.target.checked)}
+              className="mt-1 w-4 h-4 text-purple-600 focus:ring-purple-100 border-gray-300 rounded cursor-pointer"
+            />
+            <div>
+              <span className="text-xs font-black text-gray-900 block uppercase tracking-wider">Enable Announcement Popup</span>
+              <span className="text-[10px] text-gray-400 font-sans leading-normal block mt-1">
+                When on, matching visitors see this popup according to the frequency and audience settings below.
+              </span>
+            </div>
+          </label>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-600">Message</label>
+            <textarea
+              value={popupMessageInput}
+              onChange={(e) => setPopupMessageInput(e.target.value)}
+              rows={4}
+              placeholder="e.g. We're now delivering to GRA! Order today and get free delivery on your first order."
+              className="w-full text-xs p-3.5 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-sans"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-600">Image (optional)</label>
+            {popupImageInput && (
+              <div className="relative w-full h-32 rounded-xl overflow-hidden border border-gray-200">
+                <img src={popupImageInput} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPopupImageInput("")}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-200 hover:border-purple-300 rounded-xl cursor-pointer transition bg-gray-50/20 hover:bg-purple-50/20 text-[11px] font-bold text-gray-500">
+              <ImageIcon className="w-4 h-4" />
+              {popupImageInput ? "Replace image" : "Upload image"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 3 * 1024 * 1024) {
+                    alert("Image size should be less than 3MB.");
+                    return;
+                  }
+                  try {
+                    const compressed = await compressImageToDataUrl(file);
+                    setPopupImageInput(compressed);
+                  } catch (err) {
+                    console.error("[popup image upload] Failed to process image:", err);
+                    alert(err instanceof Error ? err.message : "Failed to process that image. Please try a different photo.");
+                  }
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-600">Link URL (optional)</label>
+              <input
+                type="text"
+                value={popupLinkUrlInput}
+                onChange={(e) => setPopupLinkUrlInput(e.target.value)}
+                placeholder="https://... or /some-page"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-600">Link Button Label</label>
+              <input
+                type="text"
+                value={popupLinkLabelInput}
+                onChange={(e) => setPopupLinkLabelInput(e.target.value)}
+                placeholder="e.g. Order Now"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-600">How Often It Shows</label>
+              <select
+                value={popupFrequencyInput}
+                onChange={(e) => setPopupFrequencyInput(e.target.value as typeof popupFrequencyInput)}
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100"
+              >
+                <option value="every_visit">Every visit</option>
+                <option value="first_visit">First visit only, ever</option>
+                <option value="session">Once per session</option>
+                <option value="until_dismissed">Every visit, until closed</option>
+                <option value="every_n_days">Every N days</option>
+              </select>
+            </div>
+            {popupFrequencyInput === "every_n_days" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-600">Days Between Shows</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={popupFrequencyDaysInput}
+                  onChange={(e) => setPopupFrequencyDaysInput(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:ring-4 focus:ring-purple-100 font-mono"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-600">Who Sees It</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "customer", label: "Customers" },
+                { id: "vendor", label: "Vendors" },
+                { id: "rider", label: "Riders" },
+                { id: "employee", label: "Employees" },
+                { id: "admin", label: "Admins" },
+              ].map((role) => {
+                const checked = popupAudienceInput.includes(role.id);
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() => {
+                      setPopupAudienceInput(checked
+                        ? popupAudienceInput.filter(r => r !== role.id)
+                        : [...popupAudienceInput, role.id]);
+                    }}
+                    className={`px-3 py-2 rounded-xl text-[11px] font-bold border transition ${checked ? "bg-purple-600 border-purple-600 text-white" : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"}`}
+                  >
+                    {role.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              type="button"
+              disabled={isSavingPopup}
+              onClick={async () => {
+                setIsSavingPopup(true);
+                const result = await savePopupSettings({
+                  enabled: popupEnabledInput,
+                  message: popupMessageInput,
+                  image: popupImageInput,
+                  linkUrl: popupLinkUrlInput,
+                  linkLabel: popupLinkLabelInput,
+                  frequency: popupFrequencyInput,
+                  frequencyDays: popupFrequencyDaysInput,
+                  audience: popupAudienceInput,
+                });
+                setIsSavingPopup(false);
+                setSuccessWord(result.success ? "Announcement Popup Saved!" : (result.error || "Failed to save."));
+                setTimeout(() => setSuccessWord(""), 3000);
+              }}
+              className={`px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 ${isSavingPopup ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <Save className="w-4 h-4" /> {isSavingPopup ? "Saving..." : "Save Announcement Popup"}
             </button>
           </div>
         </div>
