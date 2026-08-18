@@ -4223,6 +4223,60 @@ export const AdminSettings: React.FC = () => {
   const [popupAudienceInput, setPopupAudienceInput] = useState<string[]>(popupAudience);
   const [isSavingPopup, setIsSavingPopup] = useState(false);
 
+  // One-time R2 image migration UI state
+  const [isMigratingImages, setIsMigratingImages] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<string>("");
+  const [migrationTotalMigrated, setMigrationTotalMigrated] = useState(0);
+  const [migrationErrors, setMigrationErrors] = useState<string[]>([]);
+
+  const runImageMigration = async () => {
+    setIsMigratingImages(true);
+    setMigrationStatus("Starting...");
+    setMigrationTotalMigrated(0);
+    setMigrationErrors([]);
+    let totalMigrated = 0;
+    const allErrors: string[] = [];
+
+    try {
+      const token = localStorage.getItem("fd_jwt_token");
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
+
+      // Repeatedly calls the batch endpoint until it reports done -- each
+      // call migrates up to 15 images server-side, well within Vercel's
+      // execution time limit, rather than risking one long request timing
+      // out partway through a large migration.
+      let done = false;
+      let safetyCounter = 0;
+      while (!done && safetyCounter < 500) {
+        safetyCounter++;
+        const res = await fetch("/api/admin/migrate-images-to-r2", { method: "POST", headers });
+        const data = await res.json();
+        if (!res.ok) {
+          setMigrationStatus(data.error || "Migration failed.");
+          break;
+        }
+        totalMigrated += data.migratedThisBatch || 0;
+        allErrors.push(...(data.errors || []));
+        setMigrationTotalMigrated(totalMigrated);
+        setMigrationErrors([...allErrors]);
+        done = data.done;
+        if (!done) {
+          setMigrationStatus(`Migrated ${totalMigrated} so far, ${data.remaining} remaining...`);
+        }
+      }
+      setMigrationStatus(done ? `Done! Migrated ${totalMigrated} image(s) total.` : "Stopped -- check errors below.");
+    } catch (err) {
+      console.error("[Image Migration] Failed:", err);
+      setMigrationStatus("Migration failed due to a connection error. You can safely try again -- already-migrated images won't be re-processed.");
+    } finally {
+      setIsMigratingImages(false);
+    }
+  };
+
   // Load guideInput when coverageGuideText updates
   React.useEffect(() => {
     setGuideInput(coverageGuideText);
@@ -5312,6 +5366,48 @@ export const AdminSettings: React.FC = () => {
               <Save className="w-4 h-4" /> {isSavingPopup ? "Saving..." : "Save Announcement Popup"}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* CARD: R2 Image Migration */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex items-center gap-4 border-b border-gray-50 pb-6">
+          <div className="w-16 h-16 rounded-2xl bg-cyan-600 text-white flex items-center justify-center p-1 shadow-md shadow-cyan-100">
+            <ImageIcon className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-gray-950">One-Time Image Migration to R2</h3>
+            <span className="text-xs text-gray-400 block mt-0.5 font-sans">Moves existing product/vendor photos and receipts out of the database and into Cloudflare R2. Safe to run more than once -- already-migrated images are automatically skipped.</span>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <button
+            type="button"
+            disabled={isMigratingImages}
+            onClick={runImageMigration}
+            className={`px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2 ${isMigratingImages ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <ImageIcon className="w-4 h-4" /> {isMigratingImages ? "Migrating..." : "Run Image Migration"}
+          </button>
+
+          {migrationStatus && (
+            <div className={`p-4 rounded-xl text-xs font-bold ${migrationStatus.startsWith("Done") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-cyan-50 text-cyan-700 border border-cyan-100"}`}>
+              {migrationStatus}
+            </div>
+          )}
+
+          {migrationErrors.length > 0 && (
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 space-y-1">
+              <p className="text-[11px] font-black text-rose-700 uppercase tracking-wider">{migrationErrors.length} item(s) failed to migrate:</p>
+              {migrationErrors.slice(0, 10).map((err, i) => (
+                <p key={i} className="text-[10px] text-rose-600 font-mono">{err}</p>
+              ))}
+              {migrationErrors.length > 10 && (
+                <p className="text-[10px] text-rose-500">...and {migrationErrors.length - 10} more.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
