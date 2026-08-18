@@ -26,6 +26,7 @@ import {
   auditLogs,
   payoutLogs,
 } from "./src/db/schema.ts";
+import { uploadPublicImage, uploadPrivateImage, getSignedPrivateUrl, isPublicR2Configured, isPrivateR2Configured } from "./src/server/r2.ts";
 import { eq, sql, inArray, count, sum, and, or, ilike, gte, lte, desc } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
@@ -1214,6 +1215,33 @@ app.get("/api/my-orders", verifyTokenOptional, async (req: any, res: any) => {
   }
 });
 
+// Proxies access to a private-bucket receipt/voucher image. The database
+// never stores a raw R2 URL for these -- it stores a URL pointing back at
+// this exact endpoint (see uploadPrivateImage in src/server/r2.ts), so
+// every existing <img src={...}> across the app keeps working completely
+// unchanged. This generates a fresh, short-lived signed URL on every
+// request and redirects to it -- the private bucket itself is never made
+// publicly reachable, only this authenticated proxy can reach it.
+app.get("/api/r2/private-image", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: "Please log in to view this image." });
+    }
+    const key = String(req.query.key || "");
+    if (!key) {
+      return res.status(400).json({ error: "Missing image key." });
+    }
+    const signedUrl = await getSignedPrivateUrl(key);
+    if (!signedUrl) {
+      return res.status(404).json({ error: "Image not found or storage not configured." });
+    }
+    res.redirect(302, signedUrl);
+  } catch (error: any) {
+    console.error("Failed to serve private image:", error);
+    res.status(500).json({ error: "Failed to load image." });
+  }
+});
+
 app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
@@ -1245,6 +1273,124 @@ app.get("/api/admin/orders-full", verifyTokenOptional, async (req: any, res: any
 // Riders (the latter two need it to show each vendor/rider's owning
 // account's contact details). PIN deliberately excluded, matching the
 // existing admin bulk-user query pattern.
+// One-time migration: moves existing base64 images (products, vendors,
+// receipts, branding settings) out of the database and into R2. Runs in
+// small batches per call, on purpose -- Vercel's serverless functions
+// have a real execution time limit, and this app just went through a
+// real outage from exceeding platform limits once already, so this is
+// deliberately conservative rather than trying to process everything in
+// one long-running request. The admin UI calls this repeatedly until it
+// reports done, showing progress between each batch.
+app.post("/api/admin/migrate-images-to-r2", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+    const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    if (!isPublicR2Configured() || !isPrivateR2Configured()) {
+      return res.status(400).json({ error: "R2 isn't fully configured yet -- check that all environment variables are set in Vercel." });
+    }
+
+    const BATCH_SIZE = 15;
+    let migratedThisBatch = 0;
+    const errors: string[] = [];
+
+    const productRows = await db.select().from(products).where(sql`${products.image} LIKE 'data:%'`).limit(BATCH_SIZE);
+    for (const p of productRows) {
+      if (migratedThisBatch >= BATCH_SIZE) break;
+      const newUrl = await uploadPublicImage(p.image, "products");
+      if (newUrl) {
+        await db.update(products).set({ image: newUrl }).where(eq(products.id, p.id));
+        migratedThisBatch++;
+      } else {
+        errors.push(`Product ${p.id}: upload failed`);
+      }
+    }
+
+    if (migratedThisBatch < BATCH_SIZE) {
+      const vendorRows = await db.select().from(vendors).where(or(sql`${vendors.image} LIKE 'data:%'`, sql`${vendors.coverImage} LIKE 'data:%'`)).limit(BATCH_SIZE - migratedThisBatch);
+      for (const v of vendorRows) {
+        if (migratedThisBatch >= BATCH_SIZE) break;
+        const updates: any = {};
+        if (v.image?.startsWith("data:")) {
+          const newUrl = await uploadPublicImage(v.image, "vendors");
+          if (newUrl) { updates.image = newUrl; } else { errors.push(`Vendor ${v.id} logo: upload failed`); }
+        }
+        if (v.coverImage?.startsWith("data:")) {
+          const newUrl = await uploadPublicImage(v.coverImage, "vendors");
+          if (newUrl) { updates.coverImage = newUrl; } else { errors.push(`Vendor ${v.id} cover: upload failed`); }
+        }
+        if (Object.keys(updates).length > 0) {
+          await db.update(vendors).set(updates).where(eq(vendors.id, v.id));
+          migratedThisBatch++;
+        }
+      }
+    }
+
+    if (migratedThisBatch < BATCH_SIZE) {
+      const orderRows = await db.select().from(orders).where(or(sql`${orders.paymentReceiptUrl} LIKE 'data:%'`, sql`${orders.receiptImageOrQr} LIKE 'data:%'`)).limit(BATCH_SIZE - migratedThisBatch);
+      for (const o of orderRows) {
+        if (migratedThisBatch >= BATCH_SIZE) break;
+        const updates: any = {};
+        if (o.paymentReceiptUrl?.startsWith("data:")) {
+          const newUrl = await uploadPrivateImage(o.paymentReceiptUrl, "receipts");
+          if (newUrl) { updates.paymentReceiptUrl = newUrl; } else { errors.push(`Order ${o.id} receipt: upload failed`); }
+        }
+        if (o.receiptImageOrQr?.startsWith("data:")) {
+          const newUrl = await uploadPrivateImage(o.receiptImageOrQr, "receipts");
+          if (newUrl) { updates.receiptImageOrQr = newUrl; } else { errors.push(`Order ${o.id} voucher: upload failed`); }
+        }
+        if (Object.keys(updates).length > 0) {
+          await db.update(orders).set(updates).where(eq(orders.id, o.id));
+          migratedThisBatch++;
+        }
+      }
+    }
+
+    if (migratedThisBatch < BATCH_SIZE) {
+      const settingRows = await db.select().from(systemSettings).where(
+        or(
+          and(eq(systemSettings.key, "brandLogo"), sql`${systemSettings.value} LIKE 'data:%'`),
+          and(eq(systemSettings.key, "popupImage"), sql`${systemSettings.value} LIKE 'data:%'`),
+          and(eq(systemSettings.key, "heroBanner"), sql`${systemSettings.value} LIKE '%"image":"data:%'`)
+        )
+      ).limit(BATCH_SIZE - migratedThisBatch);
+      for (const s of settingRows) {
+        if (migratedThisBatch >= BATCH_SIZE) break;
+        const resolvedValue = await resolveSettingImageUpload(s.key, s.value);
+        if (resolvedValue !== s.value) {
+          await db.update(systemSettings).set({ value: resolvedValue }).where(eq(systemSettings.key, s.key));
+          migratedThisBatch++;
+        } else {
+          errors.push(`Setting ${s.key}: upload failed`);
+        }
+      }
+    }
+
+    const [remainingProducts, remainingVendors, remainingOrders, remainingSettings] = await Promise.all([
+      db.select({ c: count() }).from(products).where(sql`${products.image} LIKE 'data:%'`),
+      db.select({ c: count() }).from(vendors).where(or(sql`${vendors.image} LIKE 'data:%'`, sql`${vendors.coverImage} LIKE 'data:%'`)),
+      db.select({ c: count() }).from(orders).where(or(sql`${orders.paymentReceiptUrl} LIKE 'data:%'`, sql`${orders.receiptImageOrQr} LIKE 'data:%'`)),
+      db.select({ c: count() }).from(systemSettings).where(
+        or(
+          and(eq(systemSettings.key, "brandLogo"), sql`${systemSettings.value} LIKE 'data:%'`),
+          and(eq(systemSettings.key, "popupImage"), sql`${systemSettings.value} LIKE 'data:%'`),
+          and(eq(systemSettings.key, "heroBanner"), sql`${systemSettings.value} LIKE '%"image":"data:%'`)
+        )
+      ),
+    ]);
+    const remaining = Number(remainingProducts[0]?.c || 0) + Number(remainingVendors[0]?.c || 0) + Number(remainingOrders[0]?.c || 0) + Number(remainingSettings[0]?.c || 0);
+
+    res.json({ migratedThisBatch, remaining, done: remaining === 0, errors });
+  } catch (error: any) {
+    console.error("Image migration batch failed:", error);
+    res.status(500).json({ error: "Migration batch failed. Please try again." });
+  }
+});
+
 app.get("/api/admin/users-full", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const reqUser = req.user;
@@ -1582,6 +1728,31 @@ app.get("/api/admin/audit-logs", verifyTokenOptional, async (req: any, res) => {
 });
 
 // 3. Database Synchronization Endpoint: SAVE
+// A handful of systemSettings keys carry an image -- most (brandLogo,
+// popupImage) store it as a flat base64 value directly, but heroBanner
+// stores it nested inside a JSON-stringified config object. This handles
+// both shapes uniformly: uploads to the PUBLIC bucket if genuine new
+// base64 data is found, and returns the value completely unchanged for
+// every other key or on any failure, so this never risks corrupting an
+// unrelated setting's value.
+async function resolveSettingImageUpload(key: string, value: string): Promise<string> {
+  if (key === "brandLogo" || key === "popupImage") {
+    return (await uploadPublicImage(value, "branding")) || value;
+  }
+  if (key === "heroBanner") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed.image === "string" && parsed.image.startsWith("data:")) {
+        parsed.image = (await uploadPublicImage(parsed.image, "branding")) || parsed.image;
+        return JSON.stringify(parsed);
+      }
+    } catch {
+      // Not valid JSON, or no image field -- leave completely untouched.
+    }
+  }
+  return value;
+}
+
 app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
   try {
     const { type, payload } = req.body;
@@ -1953,6 +2124,16 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             payload.rating = 5.0;
           }
         }
+        // Upload to the PUBLIC bucket if these are genuine new base64
+        // uploads; falls back to the original value unchanged if R2 isn't
+        // configured yet, the value is already a URL (unchanged from a
+        // previous save), or the upload fails for any reason.
+        if (payload.image) {
+          payload.image = (await uploadPublicImage(payload.image, "vendors")) || payload.image;
+        }
+        if (payload.coverImage) {
+          payload.coverImage = (await uploadPublicImage(payload.coverImage, "vendors")) || payload.coverImage;
+        }
         await db.insert(vendors).values({
           id: payload.id,
           userId: payload.userId,
@@ -2062,6 +2243,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           if (existingProd.length > 0 && existingProd[0].vendorId !== userVendor[0].id) {
              return res.status(403).json({ error: "Forbidden: Cannot modify a product owned by another vendor." });
           }
+        }
+        // Upload to the PUBLIC bucket if this is a genuine new base64
+        // upload; falls back unchanged if R2 isn't configured, the value
+        // is already a URL, or the upload fails.
+        if (payload.image) {
+          payload.image = (await uploadPublicImage(payload.image, "products")) || payload.image;
         }
         await db.insert(products).values({
           id: payload.id,
@@ -2822,12 +3009,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       case "SYSTEM_SETTINGS_BULK":
         for (const setting of payload) {
           if (!setting.key || setting.value === undefined || setting.value === null) continue;
+          const resolvedValue = await resolveSettingImageUpload(setting.key, String(setting.value));
           await db.insert(systemSettings).values({
             key: setting.key,
-            value: String(setting.value),
+            value: resolvedValue,
           }).onConflictDoUpdate({
             target: systemSettings.key,
-            set: { value: String(setting.value) },
+            set: { value: resolvedValue },
           });
         }
         break;
@@ -2933,17 +3121,19 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
       }
 
-      case "SYSTEM_SETTING_UPSERT":
+      case "SYSTEM_SETTING_UPSERT": {
+        const resolvedValue = await resolveSettingImageUpload(payload.key, String(payload.value));
         await db.insert(systemSettings).values({
           key: payload.key,
-          value: String(payload.value),
+          value: resolvedValue,
         }).onConflictDoUpdate({
           target: systemSettings.key,
           set: {
-            value: String(payload.value),
+            value: resolvedValue,
           },
         });
         break;
+      }
 
       case "REVIEWS_BULK":
         for (const r of payload) {
@@ -3132,9 +3322,19 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 // 4. Secure Checkout API
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage, orderType, receiptImageOrQr, receiptNote, batchDate, batchTime } = req.body;
+    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage: rawReceiptImage, orderType, receiptImageOrQr: rawReceiptImageOrQr, receiptNote, batchDate, batchTime } = req.body;
 
     const isReceiptPickup = orderType === "receipt_pickup";
+
+    // Upload to the PRIVATE bucket if this is genuine base64 image data;
+    // uploadPrivateImage returns null (never throws) for anything that
+    // isn't a real image data URI -- including the "PRESET_INVOICE_1" /
+    // "PRESET_QR_2" sentinel strings, which aren't real uploads at all --
+    // and for any R2 failure, so this always falls back to the original
+    // value unchanged. Nothing about order placement itself depends on
+    // this succeeding.
+    const receiptImage = rawReceiptImage ? (await uploadPrivateImage(rawReceiptImage, "receipts")) || rawReceiptImage : rawReceiptImage;
+    const receiptImageOrQr = rawReceiptImageOrQr ? (await uploadPrivateImage(rawReceiptImageOrQr, "receipts")) || rawReceiptImageOrQr : rawReceiptImageOrQr;
 
     if (!req.user) {
       return res.status(403).json({ error: `Unauthorized: Invalid JWT token. Details: ${req.jwtError || 'Missing token'}` });
@@ -3386,7 +3586,15 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       `<b>Payment:</b> ${escapeHtml(paymentMethod)}`;
 
     if (isBankTransfer && receiptImage) {
-      sendTelegramPhoto(telegramCaption, receiptImage);
+      // Telegram gets the ORIGINAL raw image data, not the R2-converted
+      // value -- sendTelegramPhoto already handles raw base64 correctly
+      // by uploading it directly to Telegram, no external fetch needed.
+      // The R2 proxy URL stored in the database is relative and requires
+      // our own auth, so Telegram's servers could never actually load it
+      // -- and even if it were absolute, routing it back through our own
+      // server would add back exactly the bandwidth this migration exists
+      // to remove.
+      sendTelegramPhoto(telegramCaption, rawReceiptImage);
     } else if (isBankTransfer) {
       sendTelegramNotification(`${telegramCaption}\n\n⚠️ No receipt attached yet.`);
     } else {
@@ -3405,7 +3613,9 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
         `<b>Vendor:</b> ${escapeHtml(vendorName)}\n` +
         `<b>Customer:</b> ${escapeHtml(customerName)}\n` +
         (receiptNote ? `<b>Note:</b> ${escapeHtml(receiptNote)}\n` : "");
-      sendTelegramPhoto(pickupCaption, receiptImageOrQr);
+      // Same reasoning as the payment receipt above -- Telegram needs the
+      // original raw image data, not the R2 proxy URL stored in the DB.
+      sendTelegramPhoto(pickupCaption, rawReceiptImageOrQr);
     }
 
     // Bump the general-purpose data version so other open tabs/devices know
