@@ -112,6 +112,20 @@ io.on("connection", (socket) => {
 
 
 // Security Middlewares
+
+// R2 images now live on real external URLs (the custom domain from
+// R2_PUBLIC_BASE_URL, plus the raw *.r2.cloudflarestorage.com endpoint as
+// a safety net for any records saved before the custom domain was set up)
+// -- this reads the actual configured domain at startup, rather than
+// hardcoding one specific deployment's domain, so it stays correct if the
+// custom domain is ever changed.
+let r2PublicOrigin: string | null = null;
+try {
+  if (process.env.R2_PUBLIC_BASE_URL) r2PublicOrigin = new URL(process.env.R2_PUBLIC_BASE_URL).origin;
+} catch {
+  console.error("[CSP] R2_PUBLIC_BASE_URL is set but isn't a valid URL -- skipping it in the image policy.");
+}
+
 app.use(helmet({
   // Only enforced in production -- Vite's dev server/HMR genuinely needs a
   // much looser policy (inline scripts, eval, its own websocket), which is
@@ -129,12 +143,12 @@ app.use(helmet({
       // loophole; script-src above stays strict without it.
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      // 'data:' is required -- product/vendor photos and payment receipts
-      // are currently stored and rendered as base64 data URIs, not
-      // external links. Revisit once the R2 migration moves these to real
-      // hosted URLs, at which point that specific domain can be added
-      // here instead of broadening this further.
-      imgSrc: ["'self'", "data:"],
+      // 'data:' still allowed for any images not yet migrated off base64.
+      // The R2 domains below cover real uploaded images post-migration --
+      // deliberately still a specific, known list, not a broad https:
+      // wildcard, matching the original intent of only opening this up to
+      // exactly the domains actually in use.
+      imgSrc: ["'self'", "data:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : [])],
       connectSrc: ["'self'", "ws:", "wss:"], // ws/wss for the Socket.io connection
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],
