@@ -64,6 +64,13 @@
       "when": 1786170867785,
       "tag": "0008_wooden_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0009_add_user_suspension",
+      "breakpoints": true
     }
   ]
 }
