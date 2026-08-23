@@ -49,6 +49,7 @@ export const VendorSettings: React.FC = () => {
   const [deliveryFee, setDeliveryFee] = useState<number>(currentVendor?.deliveryFee || 750);
   const [receiptPickupEnabled, setReceiptPickupEnabled] = useState<boolean>(currentVendor?.receiptPickupEnabled !== false);
   const [batchDeliveryEnabled, setBatchDeliveryEnabled] = useState<boolean>(currentVendor?.batchDeliveryEnabled !== false);
+  const [immediateDeliveryEnabled, setImmediateDeliveryEnabled] = useState<boolean>(currentVendor?.immediateDeliveryEnabled !== false);
   const [batchCutoffOverride, setBatchCutoffOverride] = useState<string>(currentVendor?.batchCutoffOverrideMinutes != null ? String(currentVendor.batchCutoffOverrideMinutes) : "");
   const [isTemporarilyClosed, setIsTemporarilyClosed] = useState<boolean>(currentVendor?.isTemporarilyClosed || false);
 
@@ -93,6 +94,7 @@ export const VendorSettings: React.FC = () => {
       setDeliveryFee(currentVendor.deliveryFee || 750);
       setReceiptPickupEnabled(currentVendor.receiptPickupEnabled !== false);
       setBatchDeliveryEnabled(currentVendor.batchDeliveryEnabled !== false);
+      setImmediateDeliveryEnabled(currentVendor.immediateDeliveryEnabled !== false);
       setBatchCutoffOverride(currentVendor.batchCutoffOverrideMinutes != null ? String(currentVendor.batchCutoffOverrideMinutes) : "");
       setIsTemporarilyClosed(currentVendor.isTemporarilyClosed || false);
       hasInitialized.current = true;
@@ -153,6 +155,11 @@ export const VendorSettings: React.FC = () => {
       return;
     }
 
+    if (!batchDeliveryEnabled && !immediateDeliveryEnabled) {
+      setErrorStr("At least one delivery mode (Deliver Now or Batch Delivery) must stay enabled.");
+      return;
+    }
+
     try {
       const finalAddress = streetAddress.trim() + (selectedDistrict ? `, ${selectedDistrict}` : "");
       
@@ -181,6 +188,7 @@ export const VendorSettings: React.FC = () => {
         deliveryFee,
         receiptPickupEnabled,
         batchDeliveryEnabled,
+        immediateDeliveryEnabled,
         batchCutoffOverrideMinutes: batchCutoffOverride === "" ? null : Math.max(0, Number(batchCutoffOverride) || 0),
         isTemporarilyClosed,
       });
@@ -443,7 +451,7 @@ export const VendorSettings: React.FC = () => {
             <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
               <div>
                 <label className="text-[11px] font-bold text-gray-800 block">Participate in Batch Delivery</label>
-                <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Let customers schedule orders into an admin-coordinated batch for free/discounted delivery. "Buy now" always stays available regardless of this setting.</span>
+                <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Let customers schedule orders into an admin-coordinated batch for free/discounted delivery.</span>
               </div>
               <label className="flex items-center cursor-pointer">
                 <input
@@ -454,6 +462,29 @@ export const VendorSettings: React.FC = () => {
                 />
               </label>
             </div>
+
+            {/* Immediate ("Deliver Now") Delivery Toggle -- independent of the
+                one above. Together they give three real states: both on
+                (offer both, the default), immediate only, or batch only.
+                At least one must always stay on, enforced both here and
+                again on the server. */}
+            <div className="pt-4 border-t border-gray-150 flex items-center justify-between">
+              <div>
+                <label className="text-[11px] font-bold text-gray-800 block">Offer "Deliver Now"</label>
+                <span className="text-[9px] text-gray-500 font-sans block mt-0.5">Let customers get immediate delivery, outside the batch schedule. Turn this off to accept scheduled batch orders only.</span>
+              </div>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={immediateDeliveryEnabled}
+                  onChange={(e) => setImmediateDeliveryEnabled(e.target.checked)}
+                  className="w-5 h-5 text-emerald-600 focus:ring-emerald-100 border-gray-300 rounded cursor-pointer"
+                />
+              </label>
+            </div>
+            {!batchDeliveryEnabled && !immediateDeliveryEnabled && (
+              <p className="text-[10px] text-red-500 font-bold pt-1">At least one delivery mode must stay enabled, or customers won't be able to order from you at all.</p>
+            )}
 
             {batchDeliveryEnabled && (
               <div className="pt-2 flex items-center justify-between">

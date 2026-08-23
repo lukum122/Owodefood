@@ -397,6 +397,24 @@ export const CustomerCheckout: React.FC = () => {
   const cartVendor = firstCartItem ? vendors.find(v => v.id === firstCartItem.product.vendorId) : null;
   const normalDeliveryFee = calculateDeliveryFee(cartVendor?.id, total, deliveryAddress);
   const availableBatchSlots = cartVendor ? getAvailableBatchSlots(cartVendor.id, deliveryAddress) : [];
+  // Mirrors batchDeliveryEnabled's own default: undefined/missing means
+  // allowed (true), only an explicit false actually turns it off -- so
+  // vendors created before this feature existed are unaffected.
+  const immediateAllowed = cartVendor?.immediateDeliveryEnabled !== false;
+  // A vendor that's batch-only but has no slots open right now genuinely
+  // has no way to accept an order at this exact moment -- distinct from
+  // every other case, where at least one path is always available.
+  const vendorCurrentlyUnavailable = !immediateAllowed && availableBatchSlots.length === 0;
+
+  // If this vendor doesn't offer "Deliver Now" at all, force batch mode
+  // automatically rather than leaving the customer defaulted to a mode
+  // that isn't actually available to them.
+  React.useEffect(() => {
+    if (!immediateAllowed && deliveryMode === "now" && availableBatchSlots.length > 0) {
+      setDeliveryMode("batch");
+    }
+  }, [immediateAllowed, cartVendor?.id]);
+
   const deliveryFee = (deliveryMode === "batch" && selectedBatch) ? applyBatchDiscount(normalDeliveryFee) : normalDeliveryFee;
   const serviceFee = calculateServiceFee(cartVendor?.id, total);
   const grandTotal = total + tax + deliveryFee + serviceFee;
@@ -440,8 +458,26 @@ export const CustomerCheckout: React.FC = () => {
       return;
     }
 
+    if (vendorCurrentlyUnavailable) {
+      setErrorWord("This vendor is only accepting scheduled orders right now, and no batch slots are currently open. Please check back later.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     if (deliveryMode === "batch" && !selectedBatch) {
       setErrorWord("Please select a batch delivery time, or switch to Deliver Now.");
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Safety net: this shouldn't be reachable given the auto-select effect
+    // and the picker hiding "Deliver Now" when it's not offered, but never
+    // let an order through in "now" mode for a vendor that's explicitly
+    // turned that mode off.
+    if (deliveryMode === "now" && !immediateAllowed) {
+      setErrorWord("This vendor doesn't offer immediate delivery. Please select a scheduled delivery time.");
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -836,24 +872,37 @@ export const CustomerCheckout: React.FC = () => {
             </div>
           </div>
 
-          {/* Delivery timing: now vs batch */}
+          {/* Delivery timing: now vs batch. The "Deliver Now" tile is
+              omitted entirely (not just disabled) when the vendor has
+              turned it off -- a batch-only vendor with open slots gets a
+              single-choice scheduling view instead of a picker with a
+              dead option in it. */}
+          {vendorCurrentlyUnavailable && (
+            <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold space-y-1">
+              <p>This vendor is only accepting scheduled orders right now, and no batch slots are currently open.</p>
+              <p className="font-medium opacity-80">Please check back closer to their next scheduled batch time.</p>
+            </div>
+          )}
+
           {availableBatchSlots.length > 0 && (
             <div className="space-y-3">
               <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
                 <Layers className="w-4 h-4 text-emerald-500" />
                 Delivery Timing
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setDeliveryMode("now"); setSelectedBatch(null); }}
-                  className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
-                    deliveryMode === "now" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-150 bg-gray-50/50 text-gray-600"
-                  }`}
-                >
-                  Deliver Now
-                  <div className="text-[10px] font-medium mt-0.5 opacity-70">{currency}{normalDeliveryFee.toLocaleString()} delivery</div>
-                </button>
+              <div className={immediateAllowed ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2"}>
+                {immediateAllowed && (
+                  <button
+                    type="button"
+                    onClick={() => { setDeliveryMode("now"); setSelectedBatch(null); }}
+                    className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
+                      deliveryMode === "now" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-150 bg-gray-50/50 text-gray-600"
+                    }`}
+                  >
+                    Deliver Now
+                    <div className="text-[10px] font-medium mt-0.5 opacity-70">{currency}{normalDeliveryFee.toLocaleString()} delivery</div>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDeliveryMode("batch")}
@@ -862,7 +911,7 @@ export const CustomerCheckout: React.FC = () => {
                   }`}
                 >
                   Schedule & Save
-                  <div className="text-[10px] font-medium mt-0.5 opacity-70">Batch delivery discount</div>
+                  <div className="text-[10px] font-medium mt-0.5 opacity-70">{immediateAllowed ? "Batch delivery discount" : "This vendor requires scheduled delivery"}</div>
                 </button>
               </div>
 
