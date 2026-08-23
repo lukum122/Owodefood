@@ -1,0 +1,1 @@
+ALTER TABLE "vendors" ADD COLUMN "immediate_delivery_enabled" boolean DEFAULT true;
