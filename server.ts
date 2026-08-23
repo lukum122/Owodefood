@@ -1234,8 +1234,15 @@ app.get("/api/my-orders", verifyTokenOptional, async (req: any, res: any) => {
 // this exact endpoint (see uploadPrivateImage in src/server/r2.ts), so
 // every existing <img src={...}> across the app keeps working completely
 // unchanged. This generates a fresh, short-lived signed URL on every
-// request and redirects to it -- the private bucket itself is never made
-// publicly reachable, only this authenticated proxy can reach it.
+// request, then fetches the image bytes SERVER-SIDE and streams them
+// straight to the response -- deliberately not a redirect to R2's own
+// domain. A redirect would mean the browser's own fetch() call has to
+// follow a cross-origin hop to R2, which CSP's connect-src then has to
+// know about and explicitly allow -- and R2's exact signed-URL domain
+// format isn't guaranteed to stay the same. Streaming the bytes through
+// this server instead means the browser only ever talks to this app's
+// own domain, so it works regardless of CSP or whatever URL shape R2
+// happens to generate.
 app.get("/api/r2/private-image", verifyTokenOptional, async (req: any, res: any) => {
   try {
     if (!req.user) {
@@ -1249,10 +1256,34 @@ app.get("/api/r2/private-image", verifyTokenOptional, async (req: any, res: any)
     if (!signedUrl) {
       return res.status(404).json({ error: "Image not found or storage not configured." });
     }
-    res.redirect(302, signedUrl);
+
+    const r2Response = await fetch(signedUrl);
+    if (!r2Response.ok || !r2Response.body) {
+      return res.status(502).json({ error: "Failed to fetch image from storage." });
+    }
+
+    res.setHeader("Content-Type", r2Response.headers.get("content-type") || "application/octet-stream");
+    const contentLength = r2Response.headers.get("content-length");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    // Short cache -- long enough to avoid re-fetching on every re-render
+    // of the same page, short enough that a receipt resubmission or any
+    // future access-control change takes effect quickly.
+    res.setHeader("Cache-Control", "private, max-age=60");
+
+    const reader = r2Response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(value);
+    }
+    res.end();
   } catch (error: any) {
     console.error("Failed to serve private image:", error);
-    res.status(500).json({ error: "Failed to load image." });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to load image." });
+    } else {
+      res.end();
+    }
   }
 });
 
