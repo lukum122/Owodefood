@@ -2191,6 +2191,8 @@ export const AdminVendors: React.FC = () => {
   const [editCommissionValue, setEditCommissionValue] = useState<number>(15);
   const [editFreeDelivery, setEditFreeDelivery] = useState<boolean>(false);
   const [editReceiptPickupEnabled, setEditReceiptPickupEnabled] = useState<boolean>(true);
+  const [editBatchDeliveryEnabled, setEditBatchDeliveryEnabled] = useState<boolean>(true);
+  const [editImmediateDeliveryEnabled, setEditImmediateDeliveryEnabled] = useState<boolean>(true);
   const [editOpeningTime, setEditOpeningTime] = useState("08:00");
   const [editClosingTime, setEditClosingTime] = useState("22:00");
   const [editDescription, setEditDescription] = useState("");
@@ -2238,6 +2240,8 @@ export const AdminVendors: React.FC = () => {
     setEditCommissionValue(v.commissionValue !== undefined ? v.commissionValue : 15);
     setEditFreeDelivery(!!v.freeDelivery);
     setEditReceiptPickupEnabled(v.receiptPickupEnabled !== false);
+    setEditBatchDeliveryEnabled(v.batchDeliveryEnabled !== false);
+    setEditImmediateDeliveryEnabled(v.immediateDeliveryEnabled !== false);
     setEditOpeningTime(v.openingTime || "08:00");
     setEditClosingTime(v.closingTime || "22:00");
     setEditDescription(v.description || "");
@@ -2246,6 +2250,12 @@ export const AdminVendors: React.FC = () => {
 
   const handleSaveChanges = async () => {
     if (!selectedVendor) return;
+
+    if (!editBatchDeliveryEnabled && !editImmediateDeliveryEnabled) {
+      window.alert("At least one delivery mode (Deliver Now or Batch Delivery) must stay enabled.");
+      return;
+    }
+
     const finalAddress = editAddress.trim() + (editZone ? `, ${editZone}` : "");
     const result = await adminUpdateVendor(selectedVendor.id, {
       name: editName,
@@ -2261,6 +2271,8 @@ export const AdminVendors: React.FC = () => {
       commissionValue: editCommissionValue,
       freeDelivery: editFreeDelivery,
       receiptPickupEnabled: editReceiptPickupEnabled,
+      batchDeliveryEnabled: editBatchDeliveryEnabled,
+      immediateDeliveryEnabled: editImmediateDeliveryEnabled,
       openingTime: editOpeningTime,
       closingTime: editClosingTime,
       description: editDescription,
@@ -2614,6 +2626,43 @@ export const AdminVendors: React.FC = () => {
                     </div>
                   </label>
                 </div>
+
+                {/* Delivery Mode: strictly immediate, strictly batch, or
+                    both -- same two independent toggles as the vendor's
+                    own settings page, editable here too for support cases
+                    (a vendor confused about their own setting, or needing
+                    a quick override without depending on them logging in). */}
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editImmediateDeliveryEnabled}
+                      onChange={(e) => setEditImmediateDeliveryEnabled(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-800 block">Offer "Deliver Now"</span>
+                      <span className="text-[9px] text-gray-400 block font-sans">Immediate delivery, outside the batch schedule</span>
+                    </div>
+                  </label>
+                </div>
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editBatchDeliveryEnabled}
+                      onChange={(e) => setEditBatchDeliveryEnabled(e.target.checked)}
+                      className="w-4 h-4 text-sky-600 focus:ring-sky-100 border-gray-300 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-800 block">Participate in Batch Delivery</span>
+                      <span className="text-[9px] text-gray-400 block font-sans">Scheduled orders grouped for discounted delivery</span>
+                    </div>
+                  </label>
+                </div>
+                {!editBatchDeliveryEnabled && !editImmediateDeliveryEnabled && (
+                  <p className="text-[10px] text-red-500 font-bold pt-1">At least one delivery mode must stay enabled, or customers won't be able to order from this vendor at all.</p>
+                )}
 
                 {/* Custom Service Charge Scheme */}
                 <div className="space-y-1.5">
