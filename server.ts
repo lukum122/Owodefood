@@ -1411,11 +1411,12 @@ app.get("/api/admin/users-full", verifyTokenOptional, async (req: any, res: any)
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
     // This feeds Manage Vendors and Manage Riders too (shown in each
-    // vendor/rider's owning account details), not just Manage Users --
-    // so either permission is enough, matching who legitimately needs it.
-    // Manage Users itself has no dedicated permission at all, so that
-    // specific page stays effectively full-admin-only.
-    if (!isAdmin && !(await hasPermission(reqUser, "manage_vendors")) && !(await hasPermission(reqUser, "manage_riders"))) {
+    // vendor/rider's owning account details), and now also the customer
+    // profile popup on Manage Orders -- so any of these three permissions
+    // is enough, matching who legitimately needs it. Manage Users itself
+    // has no dedicated permission at all, so that specific page stays
+    // effectively full-admin-only.
+    if (!isAdmin && !(await hasPermission(reqUser, "manage_vendors")) && !(await hasPermission(reqUser, "manage_riders")) && !(await hasPermission(reqUser, "manage_orders"))) {
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
