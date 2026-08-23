@@ -2148,6 +2148,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         if (payload.coverImage) {
           payload.coverImage = (await uploadPublicImage(payload.coverImage, "vendors")) || payload.coverImage;
         }
+        // Enforced server-side, not just in the vendor settings UI -- a
+        // vendor must always have at least one delivery mode reachable,
+        // or customers would have no way to ever check out with them.
+        if (payload.batchDeliveryEnabled === false && payload.immediateDeliveryEnabled === false) {
+          return res.status(400).json({ error: "At least one delivery mode (Deliver Now or Batch Delivery) must stay enabled." });
+        }
         await db.insert(vendors).values({
           id: payload.id,
           userId: payload.userId,
@@ -2175,6 +2181,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           commissionValue: payload.commissionValue,
           freeDelivery: payload.freeDelivery,
           batchDeliveryEnabled: payload.batchDeliveryEnabled,
+          immediateDeliveryEnabled: payload.immediateDeliveryEnabled,
           batchCutoffOverrideMinutes: payload.batchCutoffOverrideMinutes,
         }).onConflictDoUpdate({
           target: vendors.id,
@@ -2203,6 +2210,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             commissionValue: payload.commissionValue,
             freeDelivery: payload.freeDelivery,
             batchDeliveryEnabled: payload.batchDeliveryEnabled,
+            immediateDeliveryEnabled: payload.immediateDeliveryEnabled,
             batchCutoffOverrideMinutes: payload.batchCutoffOverrideMinutes,
           },
         });
