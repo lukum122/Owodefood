@@ -41,6 +41,12 @@ export const vendors = pgTable("vendors", {
   commissionValue: integer("commission_value"),
   freeDelivery: boolean("free_delivery").default(false),
   batchDeliveryEnabled: boolean("batch_delivery_enabled").default(true), // vendor's own opt-out toggle - defaults to participating
+  // Independent from the toggle above -- together these give three real
+  // states: both on (offer both, today's default), immediate only
+  // (existing opt-out), or batch only (this new column off while the
+  // other stays on). Defaults to true so no existing vendor's behavior
+  // changes just from this column existing.
+  immediateDeliveryEnabled: boolean("immediate_delivery_enabled").default(true),
   batchCutoffOverrideMinutes: integer("batch_cutoff_override_minutes"), // null = inherit category/platform default
 }, (table) => ({
   userIdIdx: index("vendors_user_id_idx").on(table.userId),
