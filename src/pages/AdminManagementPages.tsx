@@ -11,6 +11,8 @@ import * as LucideIcons from "lucide-react";
 export const AdminOrders: React.FC = () => {
   const { 
     orders, 
+    users,
+    fetchFullUsers,
     updateVendorOrder, 
     currency, 
     vatEnabled, 
@@ -21,6 +23,27 @@ export const AdminOrders: React.FC = () => {
     reopenCancelledOrder,
     mergeOrdersIntoContext
   } = useDatabase();
+
+  // Customer profile popup -- Manage Orders never gets `users` populated
+  // by the general app-load fetch for admin/employee sessions (same
+  // reason My Orders needed its own fetch earlier), so this pulls the
+  // full user list in lazily, once, the first time it's actually needed
+  // rather than on every page load regardless of whether anyone clicks a
+  // customer name.
+  const [viewingCustomerId, setViewingCustomerId] = useState<string | null>(null);
+  const [hasFetchedUsersForProfile, setHasFetchedUsersForProfile] = useState(false);
+  const [isLoadingCustomerProfile, setIsLoadingCustomerProfile] = useState(false);
+
+  const openCustomerProfile = async (customerId: string) => {
+    setViewingCustomerId(customerId);
+    if (!hasFetchedUsersForProfile) {
+      setIsLoadingCustomerProfile(true);
+      await fetchFullUsers();
+      setHasFetchedUsersForProfile(true);
+      setIsLoadingCustomerProfile(false);
+    }
+  };
+
 
   // Tracks which specific order (and which action) is currently mid-flight,
   // so the button can show real feedback instead of appearing to do
@@ -1327,7 +1350,11 @@ export const AdminOrders: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
-                        <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">
+                          <button type="button" onClick={() => openCustomerProfile(o.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {o.customerName}
+                          </button>
+                        </td>
                         <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod?.replace(/_/g, " ")}</td>
                         <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
                         <td className="py-3.5 px-4">
@@ -1419,7 +1446,11 @@ export const AdminOrders: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
-                        <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">
+                          <button type="button" onClick={() => openCustomerProfile(o.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {o.customerName}
+                          </button>
+                        </td>
                         <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
                         <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
                         <td className="py-3.5 px-4">
@@ -1523,7 +1554,11 @@ export const AdminOrders: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{rp.vendorName}</td>
-                        <td className="py-3.5 px-4 text-gray-700">{rp.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">
+                          <button type="button" onClick={() => openCustomerProfile(rp.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {rp.customerName}
+                          </button>
+                        </td>
                         <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">
                           {rp.receiptImageOrQr === "PRESET_INVOICE_1" && "Invoice #88210"}
                           {rp.receiptImageOrQr === "PRESET_QR_2" && "QR Voucher"}
@@ -1605,7 +1640,11 @@ export const AdminOrders: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-gray-600">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-600">
+                          <button type="button" onClick={() => openCustomerProfile(o.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {o.customerName}
+                          </button>
+                        </td>
                         <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
                         <td className="py-3.5 px-4">
                           {o.paymentReceiptUrl ? (
@@ -1701,7 +1740,11 @@ export const AdminOrders: React.FC = () => {
                               <tr key={o.id} className="hover:bg-gray-50/50">
                                 <td className="py-3.5 px-4 font-mono text-gray-500">#{o.id.slice(0, 8)}</td>
                                 <td className="py-3.5 px-4 font-bold text-gray-800">{o.vendorName}</td>
-                                <td className="py-3.5 px-4 text-gray-600">{o.customerName}</td>
+                                <td className="py-3.5 px-4 text-gray-600">
+                          <button type="button" onClick={() => openCustomerProfile(o.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {o.customerName}
+                          </button>
+                        </td>
                                 <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
                                 <td className="py-3.5 px-4 text-gray-500 max-w-[180px] truncate" title={o.deliveryAddress}>{o.deliveryAddress}</td>
                                 <td className="py-3.5 px-4 font-mono text-right font-bold text-gray-800">{currency}{o.totalAmount.toLocaleString()}</td>
@@ -1806,7 +1849,11 @@ export const AdminOrders: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
-                          <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                          <td className="py-3.5 px-4 text-gray-700">
+                          <button type="button" onClick={() => openCustomerProfile(o.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {o.customerName}
+                          </button>
+                        </td>
                           <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
                           <td className="py-3.5 px-4">
                             {o.rejectionReason ? (
@@ -1904,7 +1951,11 @@ export const AdminOrders: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3.5 px-4 font-semibold capitalize text-gray-800">{o.vendorName}</td>
-                        <td className="py-3.5 px-4 text-gray-700">{o.customerName}</td>
+                        <td className="py-3.5 px-4 text-gray-700">
+                          <button type="button" onClick={() => openCustomerProfile(o.customerId)} className="text-left hover:text-purple-600 hover:underline transition cursor-pointer">
+                            {o.customerName}
+                          </button>
+                        </td>
                         <td className="py-3.5 px-4 text-gray-400 font-mono text-[11px] uppercase">{o.paymentMethod.replace(/_/g, " ")}</td>
                         <td className="py-3.5 px-4 text-right font-black font-mono text-gray-900">{currency}{(o.totalAmount ?? 0).toLocaleString()}</td>
                         <td className="py-3.5 px-4">
@@ -1980,6 +2031,81 @@ export const AdminOrders: React.FC = () => {
           )
         )}
       </div>
+
+      {/* Customer Profile Popup -- stays on the orders page rather than
+          navigating away, since this is meant for quickly checking on a
+          customer while scanning through several orders in a row. Order
+          count/spend is computed from the orders already loaded in this
+          page, not a separate fetch -- cheap and always in sync with what's
+          currently on screen. Deep editing (role changes, suspension,
+          deletion) intentionally stays on Manage Users, linked from here,
+          rather than duplicating that whole surface in a popup. */}
+      {viewingCustomerId && (() => {
+        const customer = users.find(u => u.id === viewingCustomerId);
+        const customerOrders = orders.filter(o => o.customerId === viewingCustomerId);
+        const totalSpent = customerOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+        return (
+          <div
+            onClick={() => setViewingCustomerId(null)}
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-150"
+            >
+              <div className="p-6 space-y-5">
+                <div className="flex items-start justify-between">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-lg">
+                    {(customer?.name || "?").charAt(0).toUpperCase()}
+                  </div>
+                  <button type="button" onClick={() => setViewingCustomerId(null)} className="text-gray-400 hover:text-gray-600 transition">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {isLoadingCustomerProfile ? (
+                  <div className="py-8 text-center text-xs font-bold text-gray-400">Loading customer details...</div>
+                ) : !customer ? (
+                  <div className="py-8 text-center text-xs font-bold text-gray-400">Customer record not found.</div>
+                ) : (
+                  <>
+                    <div>
+                      <h3 className="font-bold text-lg text-gray-950">{customer.name}</h3>
+                      {customer.isSuspended && (
+                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[9px] font-black uppercase tracking-wider">Suspended</span>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between"><span className="text-gray-400 font-bold">Email</span><span className="text-gray-700 font-medium">{customer.email || "—"}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400 font-bold">Phone</span><span className="text-gray-700 font-medium">{customer.phone || "—"}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-400 font-bold">Role</span><span className="text-gray-700 font-medium capitalize">{customer.role || "—"}</span></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+                      <div className="text-center">
+                        <p className="text-lg font-black text-gray-950">{customerOrders.length}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Orders (on this page)</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-black text-gray-950">{currency}{totalSpent.toLocaleString()}</p>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Spent (on this page)</p>
+                      </div>
+                    </div>
+
+                    <a
+                      href="/admin/customers"
+                      className="block w-full text-center py-2.5 px-4 bg-[#070329] hover:bg-opacity-90 text-white text-xs font-bold rounded-xl transition"
+                    >
+                      Manage Full Profile
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Lightbox / High Resolution Proof Zoom Viewer */}
       {zoomedImage && (
