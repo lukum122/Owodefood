@@ -71,6 +71,13 @@
       "when": 1786800000000,
       "tag": "0009_add_user_suspension",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787401048871,
+      "tag": "0010_complex_azazel",
+      "breakpoints": true
     }
   ]
 }
