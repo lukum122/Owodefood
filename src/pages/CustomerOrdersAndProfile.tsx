@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, UserRole } from "../types";
+import { SecureImage } from "../components/SecureImage";
 import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign, XCircle, Download, X } from "lucide-react";
 import { compressImageToDataUrl } from "../imageUtils";
 
@@ -322,11 +323,10 @@ export const CustomerOrders: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
             className="relative max-w-4xl max-h-[80vh] w-full flex items-center justify-center p-2 rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150"
           >
-            <img
+            <SecureImage
               src={zoomedImage}
               alt="Receipt / QR Preview"
               className="max-w-full max-h-[75vh] object-contain rounded-2xl select-none"
-              referrerPolicy="no-referrer"
             />
           </div>
 

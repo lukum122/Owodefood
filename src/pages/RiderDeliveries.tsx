@@ -1,6 +1,7 @@
 import React from "react";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus } from "../types";
+import { SecureImage } from "../components/SecureImage";
 import { Compass, Bike, Store, MapPin, Phone, CheckCircle2, User, Truck } from "lucide-react";
 
 export const RiderDeliveries: React.FC = () => {
@@ -175,7 +176,7 @@ export const RiderDeliveries: React.FC = () => {
                           </div>
                         )}
                         {job.receiptImageOrQr !== "PRESET_INVOICE_1" && job.receiptImageOrQr !== "PRESET_QR_2" && (
-                          <img src={job.receiptImageOrQr} alt="Receipt Preview" className="w-full h-full object-contain" />
+                          <SecureImage src={job.receiptImageOrQr} alt="Receipt Preview" className="w-full h-full object-contain" />
                         )}
                       </div>
 

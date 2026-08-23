@@ -3,6 +3,7 @@ import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order, UserRole } from "../types";
 import { hasRole } from "../roleHelper";
 import { compressImageToDataUrl } from "../imageUtils";
+import { SecureImage } from "../components/SecureImage";
 import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins, ClipboardList, Megaphone, Image as ImageIcon } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
@@ -2012,11 +2013,10 @@ export const AdminOrders: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
             className="relative max-w-4xl max-h-[80vh] w-full flex items-center justify-center p-2 rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl animate-in zoom-in-95 duration-150"
           >
-            <img 
-              src={zoomedImage} 
-              alt="High Resolution Proof Preview" 
+            <SecureImage
+              src={zoomedImage}
+              alt="High Resolution Proof Preview"
               className="max-w-full max-h-[75vh] object-contain rounded-2xl select-none"
-              referrerPolicy="no-referrer"
             />
           </div>
 
