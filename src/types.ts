@@ -73,6 +73,7 @@ export interface Vendor {
   verificationDoc?: string;
   receiptPickupEnabled?: boolean;
   batchDeliveryEnabled?: boolean; // vendor's own opt-out toggle for batch delivery, defaults to true
+  immediateDeliveryEnabled?: boolean; // vendor's own opt-out toggle for "Deliver Now", defaults to true -- together with batchDeliveryEnabled, gives immediate-only / batch-only / both
   batchCutoffOverrideMinutes?: number; // vendor's own lead-time override, null = inherit category/platform default
 }
 
