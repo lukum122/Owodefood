@@ -305,6 +305,81 @@ export function isVendorOpen(vendor: any): boolean {
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 }
 
+// Companion to isVendorOpen -- returns what (if anything) should be shown
+// alongside the plain Open/Closed badge: a specific reopening time if
+// closed, or a "closing soon" warning if open but closing within the
+// next hour. Returns null when there's nothing extra worth showing (open
+// and not closing soon), so the caller just keeps its default display.
+export function getVendorHoursDisplay(vendor: any): { label: string; urgent: boolean } | null {
+  if (!vendor) return null;
+
+  const formatTime = (time: string): string => {
+    const [h, m] = time.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const displayH = h % 12 === 0 ? 12 : h % 12;
+    return `${displayH}:${String(m).padStart(2, "0")} ${period}`;
+  };
+
+  const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const hasStructuredHours = vendor.operatingHours && typeof vendor.operatingHours === "object" && Object.keys(vendor.operatingHours).length > 0;
+
+  if (isVendorOpen(vendor)) {
+    let closing = vendor.closingTime || "22:00";
+    if (hasStructuredHours) {
+      const todayHours = vendor.operatingHours[daysOfWeek[now.getDay()]];
+      if (todayHours && todayHours.closeTime) closing = todayHours.closeTime;
+    }
+    const [clH, clM] = closing.split(":").map(Number);
+    const closeMinutes = clH * 60 + clM;
+    // Overnight hours (e.g. closes 02:00) wrap past midnight -- treat the
+    // close time as "tomorrow" for this comparison so the minutes-until
+    // math stays correct instead of coming out negative.
+    const effectiveCloseMinutes = closeMinutes < currentMinutes - 12 * 60 ? closeMinutes + 24 * 60 : closeMinutes;
+    const minutesUntilClose = effectiveCloseMinutes - currentMinutes;
+    if (minutesUntilClose >= 0 && minutesUntilClose <= 60) {
+      return { label: `Closes ${formatTime(closing)}`, urgent: true };
+    }
+    return null;
+  }
+
+  // Manually closed by the vendor -- we genuinely don't know when they'll
+  // reopen, so don't guess a time; just say so plainly.
+  if (vendor.isTemporarilyClosed) {
+    return { label: "Temporarily Closed", urgent: false };
+  }
+
+  if (hasStructuredHours) {
+    const todayName = daysOfWeek[now.getDay()];
+    const todayHours = vendor.operatingHours[todayName];
+    // Closed right now but hasn't opened yet today -- covers both a
+    // normal "not open yet" case and overnight hours where "today's"
+    // opening time is later than the current early-morning hour.
+    if (todayHours && todayHours.isOpen && todayHours.openTime) {
+      const [opH, opM] = todayHours.openTime.split(":").map(Number);
+      const openMinutes = opH * 60 + opM;
+      if (currentMinutes < openMinutes) {
+        return { label: `Opens ${formatTime(todayHours.openTime)}`, urgent: false };
+      }
+    }
+    // Otherwise scan forward for the next day this vendor is actually open.
+    for (let i = 1; i <= 7; i++) {
+      const dayName = daysOfWeek[(now.getDay() + i) % 7];
+      const dayHours = vendor.operatingHours[dayName];
+      if (dayHours && dayHours.isOpen && dayHours.openTime) {
+        const dayLabel = i === 1 ? "Tomorrow" : dayName;
+        return { label: `Opens ${dayLabel} ${formatTime(dayHours.openTime)}`, urgent: false };
+      }
+    }
+    return null; // no open day found anywhere in the week
+  }
+
+  // Legacy vendors with flat opening/closing fields, no per-day schedule.
+  const opening = vendor.openingTime || "08:00";
+  return { label: `Opens ${formatTime(opening)}`, urgent: false };
+}
+
 export interface AppNotification {
   id: string;
   userId: string; // The user ID it belongs to (or "admin" or "all")
