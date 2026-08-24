@@ -148,7 +148,14 @@ app.use(helmet({
       // deliberately still a specific, known list, not a broad https:
       // wildcard, matching the original intent of only opening this up to
       // exactly the domains actually in use.
-      imgSrc: ["'self'", "data:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : [])],
+      // 'blob:' is required specifically for SecureImage (private receipts
+      // and pickup vouchers) -- it fetches the image bytes itself, then
+      // displays them via a browser-generated blob: URL rather than a
+      // real hosted link, since the image was never at a public URL to
+      // begin with. This is a fixed browser-generated scheme, not a
+      // domain, so it doesn't widen what's allowed the way adding a real
+      // external domain would.
+      imgSrc: ["'self'", "data:", "blob:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : [])],
       connectSrc: ["'self'", "ws:", "wss:"], // ws/wss for the Socket.io connection
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],
