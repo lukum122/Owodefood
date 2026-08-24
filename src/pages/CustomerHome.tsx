@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
-import { isVendorOpen } from "../types";
+import { isVendorOpen, getVendorHoursDisplay } from "../types";
 import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, LayoutGrid, Store, UtensilsCrossed, Apple, Pill, ShoppingBag, Flame, Shuffle, ArrowUpDown, Heart } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
@@ -949,15 +949,25 @@ export const CustomerHome: React.FC = () => {
                         {currency}{(vendor.deliveryFee ?? 750).toLocaleString()} delivery
                       </span>
                       
-                      {isVendorOpen(vendor) ? (
-                        <span className="text-[#0ea5e9] font-black inline-flex items-center gap-0.5">
-                          Order <ChevronRight className="w-3 h-3" />
-                        </span>
-                      ) : (
-                        <span className="text-red-600 bg-red-50 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider">
-                          Closed
-                        </span>
-                      )}
+                      {(() => {
+                        const hoursInfo = getVendorHoursDisplay(vendor);
+                        if (isVendorOpen(vendor)) {
+                          return hoursInfo ? (
+                            <span className="text-amber-600 bg-amber-50 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider">
+                              {hoursInfo.label}
+                            </span>
+                          ) : (
+                            <span className="text-[#0ea5e9] font-black inline-flex items-center gap-0.5">
+                              Order <ChevronRight className="w-3 h-3" />
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="text-red-600 bg-red-50 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider">
+                            {hoursInfo ? hoursInfo.label : "Closed"}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
