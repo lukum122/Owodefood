@@ -4,7 +4,7 @@ import { useUpdateManager } from '../context/UpdateManagerContext';
 import * as LucideIcons from 'lucide-react';
 
 export const PwaUpdater = () => {
-  const { isUpdateAvailable, triggerUpdate, isBannerDismissed, dismissUpdateBanner } = useUpdateManager();
+  const { isUpdateAvailable, triggerUpdate, isUpdating, isBannerDismissed, dismissUpdateBanner } = useUpdateManager();
   const location = useLocation();
 
   if (!isUpdateAvailable || isBannerDismissed) return null;
@@ -26,15 +26,17 @@ export const PwaUpdater = () => {
         <div className="flex gap-3">
           <button
             onClick={dismissUpdateBanner}
-            className="text-white/80 hover:text-white text-sm font-medium"
+            disabled={isUpdating}
+            className="text-white/80 hover:text-white text-sm font-medium disabled:opacity-50"
           >
             Dismiss
           </button>
           <button
             onClick={triggerUpdate}
-            className="bg-white text-blue-600 px-4 py-1.5 rounded text-sm font-bold shadow hover:bg-gray-50 transition"
+            disabled={isUpdating}
+            className="bg-white text-blue-600 px-4 py-1.5 rounded text-sm font-bold shadow hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Update Now
+            {isUpdating ? "Updating…" : "Update Now"}
           </button>
         </div>
       </div>
@@ -55,15 +57,17 @@ export const PwaUpdater = () => {
       <div className="flex gap-2 justify-end mt-1">
         <button
           onClick={dismissUpdateBanner}
-          className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+          disabled={isUpdating}
+          className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
         >
           Not right now
         </button>
         <button
           onClick={triggerUpdate}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-200"
+          disabled={isUpdating}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Update Now
+          {isUpdating ? "Updating…" : "Update Now"}
         </button>
       </div>
     </div>
