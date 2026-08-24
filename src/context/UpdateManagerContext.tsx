@@ -4,6 +4,7 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 interface UpdateManagerContextType {
   isUpdateAvailable: boolean;
   triggerUpdate: () => void;
+  isUpdating: boolean;
   startCriticalOperation: () => void;
   endCriticalOperation: () => void;
   withUpdateLock: <T>(operation: () => Promise<T>) => Promise<T>;
@@ -42,6 +43,7 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   const [criticalOperationsCount, setCriticalOperationsCount] = useState(0);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
   const [serverVersion, setServerVersion] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const appMountTimeRef = useRef<number>(Date.now());
   const pendingVersionRef = useRef<string | null>(null);
@@ -125,8 +127,28 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   // detects and offers the update independently through its own normal
   // polling.
 
-  const triggerUpdate = useCallback(() => {
-    updateServiceWorker(true);
+  const triggerUpdate = useCallback(async () => {
+    setIsUpdating(true);
+
+    // Safety net: if the proper service-worker update handshake hangs or
+    // fails silently (seen in practice on flaky mobile connections, where
+    // the new SW file itself is slow to fetch), force a plain reload
+    // after a few seconds regardless. A stale cached version reloading
+    // fresh is always better than a click that visibly does nothing.
+    const fallbackTimer = setTimeout(() => {
+      window.location.reload();
+    }, 6000);
+
+    try {
+      await updateServiceWorker(true);
+      // updateServiceWorker(true) reloads the page itself on success --
+      // if we're still here, it didn't, so let the fallback timer above
+      // handle it rather than assuming success silently.
+    } catch (err) {
+      console.error("[UpdateManager] Service worker update failed, falling back to plain reload:", err);
+      clearTimeout(fallbackTimer);
+      window.location.reload();
+    }
   }, [updateServiceWorker]);
 
   const startCriticalOperation = useCallback(() => {
@@ -165,6 +187,7 @@ export const UpdateManagerProvider: React.FC<{ children: React.ReactNode }> = ({
   const value: UpdateManagerContextType = {
     isUpdateAvailable,
     triggerUpdate,
+    isUpdating,
     startCriticalOperation,
     endCriticalOperation,
     withUpdateLock,
