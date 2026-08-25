@@ -87,6 +87,11 @@ export const RiderDeliveries: React.FC = () => {
                     </p>
                     <p className="text-gray-500 mt-1">Destination: <b>{job.deliveryAddress}</b></p>
                     <p className="text-gray-500 mt-1 font-mono">Contact: <b>{job.deliveryPhone || "N/A"}</b></p>
+                    {job.specialInstructions && (
+                      <p className="text-amber-700 mt-1.5 bg-amber-50 px-2 py-1 rounded-lg text-[11px] font-semibold">
+                        📝 {job.specialInstructions}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -203,6 +208,11 @@ export const RiderDeliveries: React.FC = () => {
                       </p>
                       <p className="text-gray-500 mt-1">Destination: <b>{job.deliveryAddress}</b></p>
                       <p className="text-gray-500 mt-1 font-mono">Contact: <b>{job.deliveryPhone || "N/A"}</b></p>
+                      {job.specialInstructions && (
+                        <p className="text-amber-700 mt-1.5 bg-amber-50 px-2 py-1 rounded-lg text-[11px] font-semibold">
+                          📝 {job.specialInstructions}
+                        </p>
+                      )}
                     </div>
 
                     <div className="mt-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-1">

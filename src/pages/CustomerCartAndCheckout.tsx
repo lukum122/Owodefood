@@ -210,7 +210,7 @@ export const CustomerCart: React.FC = () => {
           </button>
 
           <p className="text-[10px] text-gray-400 leading-relaxed text-center">
-            Secured end-to-end checkout. Real-time courier dispatch initialized immediately on settlement.
+            Secure checkout. A courier is matched to your order as soon as payment is confirmed.
           </p>
         </div>
 
@@ -336,6 +336,7 @@ export const CustomerCheckout: React.FC = () => {
     }
     return rawPhone;
   });
+  const [specialInstructions, setSpecialInstructions] = useState<string>("");
   
   const [paymentMethod, setPaymentMethod] = useState("Credit Card");
   const [deliveryMode, setDeliveryMode] = useState<"now" | "batch">("now");
@@ -601,12 +602,20 @@ export const CustomerCheckout: React.FC = () => {
 
     setIsSubmittingOrder(true);
     try {
+      const orderOptions: any = {};
+      if (deliveryMode === "batch" && selectedBatch) {
+        orderOptions.batchDate = selectedBatch.date;
+        orderOptions.batchTime = selectedBatch.time;
+      }
+      if (specialInstructions.trim()) {
+        orderOptions.specialInstructions = specialInstructions.trim();
+      }
       const { success, error } = await placeOrder(
         deliveryAddress.trim(),
         paymentMethod,
         deliveryPhone.trim(),
         paymentMethod === "Local Bank Transfer" ? receiptBase64 : undefined,
-        (deliveryMode === "batch" && selectedBatch) ? { batchDate: selectedBatch.date, batchTime: selectedBatch.time } : undefined
+        Object.keys(orderOptions).length > 0 ? orderOptions : undefined
       );
       if (success) {
         setIsOrdered(true);
@@ -633,7 +642,7 @@ export const CustomerCheckout: React.FC = () => {
         <div className="space-y-2">
           <h2 className="text-2xl font-black text-[#070329]">Order Received!</h2>
           <p className="text-xs text-gray-500 leading-relaxed">
-            Your culinary order is logged actively. Our courier dispatch matches instantly!
+            We've got your order and matched it with a courier. Track it live from your Orders page.
           </p>
         </div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-[#0ea5e9] bg-sky-50 py-1.5 px-3.5 rounded-xl inline-block font-mono">
@@ -646,8 +655,8 @@ export const CustomerCheckout: React.FC = () => {
   return (
     <div className="space-y-8 font-sans max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-black text-[#070329] tracking-tight">Complete Settlement</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Please finalize your courier details and payment authorization.</p>
+        <h1 className="text-2xl font-black text-[#070329] tracking-tight">Checkout</h1>
+        <p className="text-xs text-gray-500 mt-0.5">Confirm your delivery details and complete payment.</p>
       </div>
 
       {!currentUser && (
@@ -945,6 +954,19 @@ export const CustomerCheckout: React.FC = () => {
                 ⚠️ * Required: Must be an active, reachable phone number for courier coordination.
               </p>
             </div>
+
+            <div>
+              <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none mb-2">
+                Special Instructions <span className="text-gray-350 font-medium normal-case">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={specialInstructions}
+                onChange={(e) => setSpecialInstructions(e.target.value.slice(0, 500))}
+                placeholder="e.g. Call on arrival, leave with the gateman..."
+                className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+              />
+            </div>
           </div>
 
           {/* Delivery timing: now vs batch. The "Deliver Now" tile is
@@ -1203,7 +1225,7 @@ export const CustomerCheckout: React.FC = () => {
                         {/* STAGE: METHOD_SELECT */}
                         {checkoutFundingProcess.stage === "method_select" && (
                           <div className="space-y-3">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block text-center">Choose Simulated Payment Channel</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block text-center">Choose Payment Channel</span>
                             
                             <div className="grid grid-cols-2 gap-2">
                               <button
@@ -1318,7 +1340,7 @@ export const CustomerCheckout: React.FC = () => {
                           <div className="space-y-3.5">
                             <div className="text-center space-y-1">
                               <span className="font-extrabold text-[10px] text-gray-700 block uppercase">Enter Secure SMS OTP</span>
-                              <p className="text-[9px] text-gray-400">A simulated verification code has been generated.</p>
+                              <p className="text-[9px] text-gray-400">A verification code has been sent to your phone.</p>
                             </div>
 
                             <input 
@@ -1365,11 +1387,11 @@ export const CustomerCheckout: React.FC = () => {
                         {/* STAGE: BANK_TRANSFER */}
                         {checkoutFundingProcess.stage === "bank_transfer" && (
                           <div className="space-y-3.5">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase block text-center">Simulated Escrow Bank Transfer</span>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase block text-center">Bank Transfer</span>
                             
                             <div className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl space-y-2 text-[11px]">
                               <div className="flex justify-between">
-                                <span className="text-gray-400">Escrow Bank:</span>
+                                <span className="text-gray-400">Bank:</span>
                                 <span className="font-bold text-gray-800">Providus Bank</span>
                               </div>
                               <div className="flex justify-between items-center">
@@ -1378,12 +1400,12 @@ export const CustomerCheckout: React.FC = () => {
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-400">Account Name:</span>
-                                <span className="font-bold text-gray-800 truncate max-w-[120px]">Owode Escrow Checkout</span>
+                                <span className="font-bold text-gray-800 truncate max-w-[120px]">Owode Food Wallet</span>
                               </div>
                             </div>
 
                             <p className="text-[8px] text-amber-700/80 bg-amber-50 p-2 rounded-lg text-center leading-normal">
-                              💡 Copy details and click below to simulate incoming settlement verification clearing.
+                              💡 Copy these details, make the transfer, then tap below to confirm.
                             </p>
 
                             <div className="flex gap-2">
@@ -1658,7 +1680,7 @@ export const CustomerCheckout: React.FC = () => {
 
             {/* Payment Options Selection inside Monnify Web Checkout */}
             <div className="space-y-2.5">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block font-mono">Settlement Route</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block font-mono">Choose Payment Method</span>
               
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 {[

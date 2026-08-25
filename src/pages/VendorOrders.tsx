@@ -116,6 +116,13 @@ export const VendorOrders: React.FC = () => {
                         </p>
                       </div>
 
+                      {order.specialInstructions && (
+                        <div className="space-y-1">
+                          <span className="font-bold text-amber-600 uppercase tracking-widest block text-[10px]">Customer Note</span>
+                          <p className="text-gray-700 bg-amber-50 px-2.5 py-1.5 rounded-lg text-[11px] font-medium">{order.specialInstructions}</p>
+                        </div>
+                      )}
+
                       {order.riderId && (
                         <div className="pt-2">
                           <span className="py-1 px-2.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-[10px] font-bold inline-block">
