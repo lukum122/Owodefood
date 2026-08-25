@@ -153,6 +153,7 @@ export interface Order {
   receiptNote?: string;
   batchDate?: string; // e.g. "2026-08-10"
   batchTime?: string; // e.g. "13:00"
+  specialInstructions?: string; // optional note from the customer for the rider/vendor
 }
 
 export interface OrderItem {
