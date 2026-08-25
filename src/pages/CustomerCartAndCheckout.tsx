@@ -732,7 +732,7 @@ export const CustomerCheckout: React.FC = () => {
               <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Guest Account Setup</span>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-650 flex items-center gap-1.5 leading-none">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
                     <User className="w-4 h-4 text-purple-500" />
                     Full Name
                   </label>
@@ -741,12 +741,12 @@ export const CustomerCheckout: React.FC = () => {
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
                     placeholder="Enter your first and last name"
-                    className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
+                    className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-[#070329] focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-650 flex items-center gap-1.5 leading-none">
+                  <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
                     <Mail className="w-4 h-4 text-pink-500" />
                     Email Address
                   </label>
@@ -755,7 +755,7 @@ export const CustomerCheckout: React.FC = () => {
                     value={guestEmail}
                     onChange={(e) => setGuestEmail(e.target.value)}
                     placeholder="e.g. name@example.com"
-                    className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
+                    className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-[#070329] focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
                     required
                   />
                 </div>
@@ -847,7 +847,7 @@ export const CustomerCheckout: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 relative">
-                <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
+                <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
                   <MapPin className="w-4 h-4 text-red-500" />
                   Delivery Zone / District
                 </label>
@@ -884,7 +884,7 @@ export const CustomerCheckout: React.FC = () => {
                           placeholder="🔍 Search delivery zones..."
                           value={zoneSearchQuery}
                           onChange={(e) => setZoneSearchQuery(e.target.value)}
-                          className="w-full text-xs p-2.5 border-2 border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50"
+                          className="w-full text-xs p-2.5 border-2 border-gray-200 rounded-xl outline-none focus:border-[#070329] focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
@@ -918,7 +918,7 @@ export const CustomerCheckout: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
+                <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
                   <MapPin className="w-4 h-4 text-[#0ea5e9]" />
                   Street Address &amp; Landmark Details
                 </label>
@@ -927,7 +927,7 @@ export const CustomerCheckout: React.FC = () => {
                   value={streetAddress}
                   onChange={(e) => setStreetAddress(e.target.value)}
                   placeholder="e.g. 15 Fate Road, Opp. Phase 2 Gate"
-                  className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+                  className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-[#070329] focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
                   required
                 />
               </div>
@@ -935,7 +935,7 @@ export const CustomerCheckout: React.FC = () => {
 
             {/* Delivery contact phone input */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
+              <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
                 <Phone className="w-4 h-4 text-emerald-500" />
                 Delivery Phone Number
               </label>
@@ -947,7 +947,7 @@ export const CustomerCheckout: React.FC = () => {
                   if (val.length <= 15) setDeliveryPhone(val);
                 }}
                 placeholder="Enter active phone number (e.g., 2348012345678)"
-                className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+                className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-[#070329] focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
                 required
               />
               <p className="text-[10px] text-amber-600 font-bold tracking-tight">
@@ -956,7 +956,7 @@ export const CustomerCheckout: React.FC = () => {
             </div>
 
             <div>
-              <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none mb-2">
+              <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none mb-2">
                 Special Instructions <span className="text-gray-350 font-medium normal-case">(optional)</span>
               </label>
               <input
@@ -964,7 +964,7 @@ export const CustomerCheckout: React.FC = () => {
                 value={specialInstructions}
                 onChange={(e) => setSpecialInstructions(e.target.value.slice(0, 500))}
                 placeholder="e.g. Call on arrival, leave with the gateman..."
-                className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+                className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-[#070329] focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
               />
             </div>
           </div>
@@ -983,7 +983,7 @@ export const CustomerCheckout: React.FC = () => {
 
           {availableBatchSlots.length > 0 && (
             <div className="space-y-3">
-              <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
+              <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
                 <Layers className="w-4 h-4 text-emerald-500" />
                 Delivery Timing
               </label>
@@ -1077,10 +1077,10 @@ export const CustomerCheckout: React.FC = () => {
                       setPaymentMethod(m.name);
                       setErrorWord("");
                     }}
-                    className={`w-full p-3.5 text-left rounded-2xl border-[1.5px] transition duration-150 cursor-pointer flex items-center gap-3 ${
+                    className={`w-full p-3.5 text-left rounded-2xl border-2 transition duration-150 cursor-pointer flex items-center gap-3 ${
                       isSel
                         ? "border-[#070329] bg-gray-50/70"
-                        : "border-gray-150 bg-white hover:bg-gray-50/50"
+                        : "border-gray-250 bg-white hover:bg-gray-50/50"
                     }`}
                   >
                     <div className="w-10 h-10 rounded-xl bg-[#070329] text-white flex items-center justify-center text-base shrink-0">
@@ -1088,9 +1088,9 @@ export const CustomerCheckout: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-extrabold block text-gray-900">{m.name}</span>
-                      <span className="text-[10px] text-gray-400 mt-0.5 block leading-tight truncate">{m.desc}</span>
+                      <span className="text-[11px] text-gray-600 font-medium mt-0.5 block leading-tight truncate">{m.desc}</span>
                     </div>
-                    <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 relative ${isSel ? "border-[#070329]" : "border-gray-250"}`}>
+                    <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 relative ${isSel ? "border-[#070329]" : "border-gray-350"}`}>
                       {isSel && <div className="absolute inset-[3px] bg-[#070329] rounded-full"></div>}
                     </div>
                   </button>
@@ -1565,7 +1565,7 @@ export const CustomerCheckout: React.FC = () => {
         {checkoutStep === "payment" && (
         <div className="lg:col-span-5 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-gray-50 pb-3">
-            <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider leading-none">Billing Overview</h3>
+            <h3 className="font-extrabold text-xs text-gray-700 uppercase tracking-wider leading-none">Billing Overview</h3>
             <span className="text-[9px] bg-sky-50 text-sky-700 py-0.5 px-2 rounded-xl font-bold uppercase font-mono">Express Fleet</span>
           </div>
 
@@ -1578,13 +1578,13 @@ export const CustomerCheckout: React.FC = () => {
               return (
                 <div key={item.id} className="py-3 flex flex-col justify-center text-xs first:pt-0 last:pb-0 font-medium font-sans">
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-700">{item.product.name} <b className="text-[#070329]">x{item.quantity}</b></span>
-                    <span className="font-bold text-gray-800 font-mono">{currency}{rowTotal.toLocaleString()}</span>
+                    <span className="text-gray-800 font-semibold">{item.product.name} <b className="text-[#070329]">x{item.quantity}</b></span>
+                    <span className="font-bold text-gray-900 font-mono">{currency}{rowTotal.toLocaleString()}</span>
                   </div>
                   
                   {/* Detailed chosen addons inside order confirmation card */}
                   {item.selectedAddons && item.selectedAddons.length > 0 && (
-                    <div className="flex flex-col gap-0.5 pl-3 mt-1 text-[10px] text-gray-400 font-semibold font-sans">
+                    <div className="flex flex-col gap-0.5 pl-3 mt-1 text-[10px] text-gray-600 font-semibold font-sans">
                       {item.selectedAddons.map(a => (
                         <span key={a.id}>+ {a.name} {a.quantity && a.quantity > 1 ? `x${a.quantity}` : ""} (+ {currency}{((a.price ?? 0) * (a.quantity ?? 1)).toLocaleString()})</span>
                       ))}
@@ -1595,7 +1595,7 @@ export const CustomerCheckout: React.FC = () => {
             })}
           </div>
 
-          <div className="space-y-2 text-xs text-gray-600 border-t border-gray-100 pt-4 font-sans">
+          <div className="space-y-2 text-xs text-gray-700 font-medium border-t border-gray-100 pt-4 font-sans">
             <div className="flex justify-between font-sans">
               <span>Items Total</span>
               <span className="font-bold text-gray-950">{currency}{total.toLocaleString()}</span>
@@ -1603,16 +1603,16 @@ export const CustomerCheckout: React.FC = () => {
             {vatEnabled && (
               <div className="flex justify-between font-sans">
                 <span>Estimated VAT ({vatRate}%)</span>
-                <span>{currency}{Math.round(tax).toLocaleString()}</span>
+                <span className="font-bold text-gray-900">{currency}{Math.round(tax).toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between font-sans">
               <span>Standard Fleet Delivery</span>
-              <span>{currency}{deliveryFee.toLocaleString()}</span>
+              <span className="font-bold text-gray-900">{currency}{deliveryFee.toLocaleString()}</span>
             </div>
             <div className="flex justify-between font-sans">
               <span>Service Fee</span>
-              <span>{currency}{serviceFee.toLocaleString()}</span>
+              <span className="font-bold text-gray-900">{currency}{serviceFee.toLocaleString()}</span>
             </div>
             <div className="border-t border-gray-100 pt-3.5 flex justify-between text-sm font-sans">
               <span className="font-bold text-gray-950 font-sans">Grand total</span>
