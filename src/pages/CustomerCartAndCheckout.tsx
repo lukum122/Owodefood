@@ -741,7 +741,7 @@ export const CustomerCheckout: React.FC = () => {
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
                     placeholder="Enter your first and last name"
-                    className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
+                    className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
                     required
                   />
                 </div>
@@ -755,7 +755,7 @@ export const CustomerCheckout: React.FC = () => {
                     value={guestEmail}
                     onChange={(e) => setGuestEmail(e.target.value)}
                     placeholder="e.g. name@example.com"
-                    className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
+                    className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold text-gray-900"
                     required
                   />
                 </div>
@@ -857,7 +857,7 @@ export const CustomerCheckout: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowZoneDropdown(!showZoneDropdown)}
-                    className="w-full text-left text-xs p-3.5 border border-gray-150 rounded-2xl bg-gray-50/50 hover:bg-gray-100/50 transition font-semibold text-gray-800 flex items-center justify-between"
+                    className="w-full text-left text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 hover:bg-gray-100 transition font-semibold text-gray-800 flex items-center justify-between"
                   >
                     <span className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-teal-600 shrink-0" />
@@ -884,7 +884,7 @@ export const CustomerCheckout: React.FC = () => {
                           placeholder="🔍 Search delivery zones..."
                           value={zoneSearchQuery}
                           onChange={(e) => setZoneSearchQuery(e.target.value)}
-                          className="w-full text-xs p-2.5 border border-gray-100 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50/50"
+                          className="w-full text-xs p-2.5 border-2 border-gray-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 font-medium text-gray-900 bg-gray-50"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
@@ -927,7 +927,7 @@ export const CustomerCheckout: React.FC = () => {
                   value={streetAddress}
                   onChange={(e) => setStreetAddress(e.target.value)}
                   placeholder="e.g. 15 Fate Road, Opp. Phase 2 Gate"
-                  className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+                  className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
                   required
                 />
               </div>
@@ -947,7 +947,7 @@ export const CustomerCheckout: React.FC = () => {
                   if (val.length <= 15) setDeliveryPhone(val);
                 }}
                 placeholder="Enter active phone number (e.g., 2348012345678)"
-                className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+                className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
                 required
               />
               <p className="text-[10px] text-amber-600 font-bold tracking-tight">
@@ -964,7 +964,7 @@ export const CustomerCheckout: React.FC = () => {
                 value={specialInstructions}
                 onChange={(e) => setSpecialInstructions(e.target.value.slice(0, 500))}
                 placeholder="e.g. Call on arrival, leave with the gateman..."
-                className="w-full text-xs p-3.5 border border-gray-100 rounded-2xl bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
+                className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
               />
             </div>
           </div>
