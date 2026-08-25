@@ -3632,7 +3632,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         socketRef.current.disconnect();
       }
     };
-  }, [currentUser]);
+  // Reconnects only when WHO is logged in actually changes (login, logout,
+  // or the vendor identity changing) -- not on [currentUser] as a whole
+  // object, which used to mean ANY field update anywhere on the user
+  // (wallet balance, a routine profile sync, etc.) recreated this
+  // connection from scratch. Each reconnect briefly drops the socket
+  // before re-establishing, which is what caused live features relying on
+  // it (like order tracking) to intermittently vanish until a manual
+  // reload gave a single fresh connection.
+  }, [currentUser?.id, currentVendor?.id]);
 
   return (
     <DatabaseContext.Provider
