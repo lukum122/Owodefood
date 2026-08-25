@@ -417,6 +417,12 @@ export const CustomerCheckout: React.FC = () => {
   // has no way to accept an order at this exact moment -- distinct from
   // every other case, where at least one path is always available.
   const vendorCurrentlyUnavailable = !immediateAllowed && availableBatchSlots.length === 0;
+  // deliveryPhone defaults to just "+234" (a bare country code, no real
+  // number) when a guest has no phone on file -- that's a non-empty
+  // string, so a plain .trim() check alone doesn't catch it. Nigerian
+  // numbers need at least 10 real digits; this counts only the digits,
+  // ignoring the leading + and country code formatting either way.
+  const hasRealPhoneNumber = deliveryPhone.replace(/\D/g, "").length >= 10;
 
   // If this vendor doesn't offer "Deliver Now" at all, force batch mode
   // automatically rather than leaving the customer defaulted to a mode
@@ -477,13 +483,13 @@ export const CustomerCheckout: React.FC = () => {
         return;
       }
     }
-    if (!deliveryAddress.trim()) {
-      setErrorWord("Please state a physical drop-off address.");
+    if (!streetAddress.trim()) {
+      setErrorWord("Please state your street address and landmark details.");
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    if (!deliveryPhone.trim()) {
-      setErrorWord("Please state an active delivery phone number.");
+    if (!hasRealPhoneNumber) {
+      setErrorWord("Please state a real, active delivery phone number (not just a country code).");
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -505,15 +511,15 @@ export const CustomerCheckout: React.FC = () => {
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingOrder) return; // already submitting -- ignore repeat taps
-    if (!deliveryAddress.trim()) {
-      setErrorWord("Please state a physical drop-off address.");
+    if (!streetAddress.trim()) {
+      setErrorWord("Please state your street address and landmark details.");
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    if (!deliveryPhone.trim()) {
-      setErrorWord("Please state an active delivery phone number.");
+    if (!hasRealPhoneNumber) {
+      setErrorWord("Please state a real, active delivery phone number (not just a country code).");
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
