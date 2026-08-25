@@ -19,12 +19,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   const [image, setImage] = useState("");
   const [category, setCategory] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
+  const [priority, setPriority] = useState<number>(0);
   const [addons, setAddons] = useState<{ id: string; name: string; price: number; }[]>([]);
   const [maxAddons, setMaxAddons] = useState("");
   
   // Addon Groups & builder states
   const [addonGroups, setAddonGroups] = useState<any[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupPriority, setNewGroupPriority] = useState<number>(0);
   const [newGroupRequired, setNewGroupRequired] = useState(false);
   const [newGroupMin, setNewGroupMin] = useState("1");
   const [newGroupMax, setNewGroupMax] = useState("");
@@ -69,6 +71,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setAddons(editingProduct.addons || []);
       setMaxAddons(editingProduct.maxAddons != null ? editingProduct.maxAddons.toString() : "");
       setAddonGroups(editingProduct.addonGroups || []);
+      setPriority(editingProduct.priority ?? 0);
     } else if (mode === "new") {
       setName("");
       setDescription("");
@@ -79,6 +82,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setAddons([]);
       setMaxAddons("");
       setAddonGroups([]);
+      setPriority(0);
     }
   }, [mode, id, editingProduct]);
 
@@ -117,7 +121,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         maxSelections: newGroupMax ? parseInt(newGroupMax) || undefined : undefined,
         allowMultipleQuantity: newGroupAllowMulti,
         maxQuantityPerAddon: newGroupMaxPerAddon ? parseInt(newGroupMaxPerAddon) || undefined : undefined,
-        addons: groupAddons
+        addons: groupAddons,
+        priority: newGroupPriority
       } : g));
       setEditingGroupId(null);
     } else {
@@ -130,12 +135,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         maxSelections: newGroupMax ? parseInt(newGroupMax) || undefined : undefined,
         allowMultipleQuantity: newGroupAllowMulti,
         maxQuantityPerAddon: newGroupMaxPerAddon ? parseInt(newGroupMaxPerAddon) || undefined : undefined,
-        addons: groupAddons
+        addons: groupAddons,
+        priority: newGroupPriority
       };
       setAddonGroups([...addonGroups, newGroup]);
     }
 
     setNewGroupName("");
+    setNewGroupPriority(0);
     setNewGroupRequired(false);
     setNewGroupMin("1");
     setNewGroupMax("");
@@ -148,6 +155,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     e.preventDefault();
     setEditingGroupId(null);
     setNewGroupName("");
+    setNewGroupPriority(0);
     setNewGroupRequired(false);
     setNewGroupMin("1");
     setNewGroupMax("");
@@ -160,6 +168,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     e.preventDefault();
     setEditingGroupId(g.id);
     setNewGroupName(g.name);
+    setNewGroupPriority(g.priority ?? 0);
     setNewGroupRequired(g.isRequired);
     setNewGroupMin(g.minSelections != null ? g.minSelections.toString() : "1");
     setNewGroupMax(g.maxSelections != null ? g.maxSelections.toString() : "");
@@ -174,6 +183,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     if (editingGroupId === groupId) {
       setEditingGroupId(null);
       setNewGroupName("");
+      setNewGroupPriority(0);
       setNewGroupRequired(false);
       setNewGroupMin("1");
       setNewGroupMax("");
@@ -325,7 +335,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         isAvailable,
         addons,
         maxAddons: parsedMaxAddons,
-        addonGroups
+        addonGroups,
+        priority
       });
       if (!result?.success) {
         setErrorStr(result?.error || "Failed to add the product. Please check your connection and try again.");
@@ -333,9 +344,15 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         return;
       }
       setSuccessStr("Fabulous! Your new culinary item was successfully minted in the system.");
-      // isSubmitting intentionally left true here — the button stays disabled/labeled
-      // "Saving..." until navigation away happens, so a second click can't sneak in.
-      setTimeout(() => navigate("/vendor/products"), 1200);
+      // Explicitly reset here rather than relying on navigating away to
+      // implicitly clean this up -- that assumption was fragile and left
+      // isSubmitting stuck true for a future edit session in some cases.
+      // The brief 1200ms delay before navigating still blocks a second
+      // click from sneaking in during that window.
+      setTimeout(() => {
+        setIsSubmitting(false);
+        navigate("/vendor/products");
+      }, 1200);
     } else if (mode === "edit" && editingProduct) {
       const result = await updateProduct({
         ...editingProduct,
@@ -347,7 +364,8 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         isAvailable,
         addons,
         maxAddons: parsedMaxAddons,
-        addonGroups
+        addonGroups,
+        priority
       });
       if (!result?.success) {
         setErrorStr(result?.error || "Failed to save the product. Please check your connection and try again.");
@@ -355,7 +373,10 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         return;
       }
       setSuccessStr("Success! Product details were hot-swapped and saved.");
-      setTimeout(() => navigate("/vendor/products"), 1200);
+      setTimeout(() => {
+        setIsSubmitting(false);
+        navigate("/vendor/products");
+      }, 1200);
     } else {
       // Neither branch matched (shouldn't normally happen) — don't leave the button stuck disabled.
       setIsSubmitting(false);
@@ -446,7 +467,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-600">Cuisine/Product Category</label>
                 <select
@@ -494,6 +515,18 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                     Sold Out (Grayed Out)
                   </button>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-600">Menu Order Priority</label>
+                <input
+                  type="number"
+                  value={priority}
+                  onChange={(e) => setPriority(Number(e.target.value) || 0)}
+                  placeholder="0"
+                  className="w-full p-3 rounded-xl border border-gray-150 bg-gray-50/50 focus:bg-white focus:border-[#070329] outline-none transition text-xs font-bold"
+                />
+                <p className="text-[10px] text-gray-400 font-medium">Lower numbers show first on your menu. Leave at 0 for default ordering.</p>
               </div>
             </div>
 
@@ -767,13 +800,23 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Group Name</label>
-                      <input
-                        type="text"
-                        value={newGroupName}
-                        onChange={(e) => setNewGroupName(e.target.value)}
-                        placeholder="e.g. Choose Rice Style / Extra Protein"
-                        className="w-full text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newGroupName}
+                          onChange={(e) => setNewGroupName(e.target.value)}
+                          placeholder="e.g. Choose Rice Style / Extra Protein"
+                          className="flex-1 min-w-0 text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                        <input
+                          type="number"
+                          value={newGroupPriority}
+                          onChange={(e) => setNewGroupPriority(Number(e.target.value) || 0)}
+                          title="Menu order priority -- lower shows first"
+                          placeholder="0"
+                          className="w-14 shrink-0 text-xs p-2.5 border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-100 font-mono text-center"
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-1.5">
@@ -919,7 +962,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                 <div className="space-y-2 text-xs">
                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Configured Addon Groups ({addonGroups.length})</span>
                   <div className="space-y-2.5">
-                    {addonGroups.map((g) => (
+                    {[...addonGroups].sort((a: any, b: any) => (a.priority ?? 0) - (b.priority ?? 0)).map((g) => (
                       <div key={g.id} className="p-4 bg-white border border-gray-200 rounded-2xl flex items-start justify-between gap-4">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
