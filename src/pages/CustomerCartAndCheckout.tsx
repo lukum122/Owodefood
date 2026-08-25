@@ -55,29 +55,29 @@ export const CustomerCart: React.FC = () => {
     <div className="space-y-8 font-sans">
       <div>
         <h1 className="text-2xl font-black text-[#070329] tracking-tight">Review Your Food Basket</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Ordering secure partner inventory with real-time fleet dispatch.</p>
+        <p className="text-xs text-gray-500 mt-0.5">Review what's in your basket before checking out.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* Cart Item lists */}
         <div className="lg:col-span-8 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-4 gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Basket Items ({cart.length})</span>
-              <div className="px-2 py-0.5 bg-blue-50 text-blue-700 font-extrabold text-[10px] rounded-full border border-blue-100">
-                Bike Limit: {maxCartItems} Items Max
+          <div className="border-b border-gray-100 pb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-gray-500 uppercase tracking-wider">Basket Items ({cart.length})</span>
+              <div className="px-2.5 py-1 bg-sky-50 text-sky-700 font-extrabold text-[9.5px] rounded-full">
+                Bike Limit: {maxCartItems} Max
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-[11px] font-bold text-gray-500">
+            <div className="flex items-center justify-between">
+              <div className="text-[10.5px] font-bold text-gray-500">
                 Order Load: <span className={cart.reduce((sum, item) => sum + item.quantity, 0) >= maxCartItems ? "text-red-650" : "text-[#0ea5e9]"}>{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>/{maxCartItems}
               </div>
               <button
                 onClick={clearCart}
-                className="text-xs font-bold text-red-650 hover:text-red-700 flex items-center gap-1.5 cursor-pointer"
+                className="text-[10.5px] font-bold text-red-650 hover:text-red-700 flex items-center gap-1.5 cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
                 Empty Cart
               </button>
             </div>
@@ -157,7 +157,7 @@ export const CustomerCart: React.FC = () => {
 
           <div className="space-y-3.5 text-xs text-gray-600">
             <div className="flex justify-between">
-              <span>Fulfillment Subtotal</span>
+              <span>Items Subtotal</span>
               <span className="font-bold text-gray-950">{currency}{total.toLocaleString()}</span>
             </div>
             {vatEnabled && (
@@ -286,6 +286,7 @@ export const CustomerCheckout: React.FC = () => {
     register,
     login,
     getUserWalletBalance,
+    requestWalletFunding,
     getAvailableBatchSlots,
     applyBatchDiscount
   } = useDatabase();
@@ -350,7 +351,7 @@ export const CustomerCheckout: React.FC = () => {
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<{ date: string; time: string; label: string } | null>(null);
 
-  // Interactive Sandbox Funding Process for Checkout page
+  // Wallet top-up flow shown inline during checkout (card, bank transfer)
   const [checkoutFundingProcess, setCheckoutFundingProcess] = useState<{
     amount: number;
     stage: "method_select" | "card_entry" | "bank_transfer" | "otp_entry" | "processing" | "success";
@@ -362,6 +363,10 @@ export const CustomerCheckout: React.FC = () => {
     txRef: string;
     error?: string;
     loaderText?: string;
+    // Bank transfer funding is genuinely pending admin verification, not
+    // instant like card/wallet gateways -- this keeps the success screen
+    // from falsely claiming the balance is already available when it isn't.
+    isPending?: boolean;
   } | null>(null);
   const [zoneSearchQuery, setZoneSearchQuery] = useState("");
   const [showZoneDropdown, setShowZoneDropdown] = useState(false);
@@ -676,7 +681,7 @@ export const CustomerCheckout: React.FC = () => {
         
         {/* Address and pay selection */}
         <div className="lg:col-span-7 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
-          <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider mb-2">Fulfillment Details</h3>
+          <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider mb-2">Delivery Details</h3>
 
           {/* Two-step indicator -- Delivery / Payment. Tapping a completed
               step goes back to it; the upcoming step isn't clickable until
@@ -1138,13 +1143,13 @@ export const CustomerCheckout: React.FC = () => {
                   <div className="space-y-3 text-xs font-sans">
                     <span className="font-bold text-gray-700 block text-[10px] uppercase tracking-wider font-mono">Monnify Secure Digital Pay</span>
                     <p className="text-gray-550 leading-relaxed text-[11px]">
-                      Your payment of {currency}{grandTotal.toLocaleString()} will be securely authorized via Monnify's instant verification network.
+                      Your payment of {currency}{grandTotal.toLocaleString()} will be securely processed and instantly verified.
                     </p>
 
                     {monnifySuccess ? (
                       <div className="p-3 bg-green-50 text-green-700 border border-green-150 rounded-xl font-bold flex items-center gap-2 animate-in zoom-in-95 duration-200">
                         <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span>Secure Monnify Transaction Successful! Ready to finalize.</span>
+                        <span>Payment confirmed! Ready to finalize your order.</span>
                       </div>
                     ) : (
                       <button
@@ -1156,7 +1161,7 @@ export const CustomerCheckout: React.FC = () => {
                         className="w-full py-3 h-11 bg-[#0ea5e9] hover:bg-[#0284c7] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                       >
                         <ShieldCheck className="w-4 h-4 text-white" />
-                        Initialize Monnify Checkout
+                        Pay Now
                       </button>
                     )}
                   </div>
@@ -1167,7 +1172,8 @@ export const CustomerCheckout: React.FC = () => {
                     <span className="font-bold text-gray-700 block text-[10px] uppercase tracking-wider font-mono">Owode Food Core Balance</span>
                     
                     {checkoutFundingProcess ? (
-                      // 🔒 INLINE SECURE GATEWAY SANDBOX SIMULATOR FOR CHECKOUT TOP-UP
+                      // 🔒 INLINE WALLET TOP-UP FLOW -- calls the real
+                      // /api/wallet/fund endpoint via requestWalletFunding
                       <div className="p-4 bg-white border border-blue-150 rounded-2xl space-y-4 shadow-sm animate-in zoom-in-95 duration-200">
                         {/* Gateway Header */}
                         <div className="flex items-center justify-between border-b border-gray-50 pb-2.5">
@@ -1175,9 +1181,6 @@ export const CustomerCheckout: React.FC = () => {
                             <Shield className="w-4 h-4 text-blue-600 animate-pulse" />
                             <span className="font-extrabold text-xs text-blue-950">Owode Secure Pay 🔒</span>
                           </div>
-                          <span className="text-[8px] font-mono font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                            SANDBOX
-                          </span>
                         </div>
 
                         {/* Amount & Reference */}
@@ -1294,10 +1297,10 @@ export const CustomerCheckout: React.FC = () => {
                                 type="button"
                                 onClick={() => {
                                   if (!checkoutFundingProcess.cardNumber || !checkoutFundingProcess.cardExpiry || !checkoutFundingProcess.cardCvv) {
-                                    setCheckoutFundingProcess(prev => prev ? { ...prev, error: "Please enter sandbox credentials." } : null);
+                                    setCheckoutFundingProcess(prev => prev ? { ...prev, error: "Please enter your card details." } : null);
                                     return;
                                   }
-                                  setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Authorizing with sandbox issuing bank..." } : null);
+                                  setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Authorizing with your card issuer..." } : null);
                                   setTimeout(() => {
                                     setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "otp_entry" } : null);
                                   }, 1300);
@@ -1329,31 +1332,32 @@ export const CustomerCheckout: React.FC = () => {
 
                             <button
                               type="button"
-                              onClick={() => setCheckoutFundingProcess(prev => prev ? { ...prev, otp: "123456" } : null)}
-                              className="w-full py-0.5 text-center text-[9px] font-bold text-blue-600 hover:underline block"
-                            >
-                              💡 Auto-fill Sandbox Code (123456)
-                            </button>
-
-                            <button
-                              type="button"
                               onClick={() => {
-                                if (checkoutFundingProcess.otp !== "123456" && checkoutFundingProcess.otp.length < 4) {
-                                  setCheckoutFundingProcess(prev => prev ? { ...prev, error: "Incorrect OTP code. Use sandbox code: 123456" } : null);
+                                if (checkoutFundingProcess.otp.length < 4) {
+                                  setCheckoutFundingProcess(prev => prev ? { ...prev, error: "Please enter the code sent to your phone." } : null);
                                   return;
                                 }
-                                setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Settle funds in merchant ledger..." } : null);
-                                setTimeout(() => {
+                                setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Confirming your payment..." } : null);
+                                (async () => {
                                   const amt = checkoutFundingProcess.amount;
-                                  const newBal = checkoutWalletBalance + amt;
-                                  localStorage.setItem("fd_wallet_balance", String(newBal));
-                                  window.dispatchEvent(new Event("wallet-balance-updated"));
+                                  if (!currentUser) {
+                                    setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "otp_entry", error: "Please log in to fund your wallet." } : null);
+                                    return;
+                                  }
+                                  // Real backend call -- writes an actual wallet_transactions row
+                                  // and updates the real balance, replacing what used to be a
+                                  // localStorage-only fake success with no real effect at all.
+                                  const txId = await requestWalletFunding(currentUser.id, amt, "monnify");
+                                  if (!txId) {
+                                    setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "otp_entry", error: "Payment could not be confirmed. Please try again." } : null);
+                                    return;
+                                  }
                                   setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
-                                }, 1200);
+                                })();
                               }}
                               className="w-full py-2 bg-[#0ea5e9] hover:bg-[#0284c7] text-white rounded-xl text-[10px] font-black transition text-center"
                             >
-                              Verify OTP & Settle ⚡
+                              Verify & Complete Payment
                             </button>
                           </div>
                         )}
@@ -1393,18 +1397,28 @@ export const CustomerCheckout: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Scanning sandbox incoming settlement clearing feed..." } : null);
-                                  setTimeout(() => {
+                                  setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "processing", error: undefined, loaderText: "Submitting your transfer for verification..." } : null);
+                                  (async () => {
                                     const amt = checkoutFundingProcess.amount;
-                                    const newBal = checkoutWalletBalance + amt;
-                                    localStorage.setItem("fd_wallet_balance", String(newBal));
-                                    window.dispatchEvent(new Event("wallet-balance-updated"));
-                                    setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "success" } : null);
-                                  }, 1500);
+                                    if (!currentUser) {
+                                      setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "bank_transfer", error: "Please log in to fund your wallet." } : null);
+                                      return;
+                                    }
+                                    // Real backend call. Bank transfer funding
+                                    // comes back "pending" until an admin
+                                    // verifies it -- never instant, unlike
+                                    // card/wallet gateways.
+                                    const txId = await requestWalletFunding(currentUser.id, amt, "bank_transfer");
+                                    if (!txId) {
+                                      setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "bank_transfer", error: "Could not submit your transfer. Please try again." } : null);
+                                      return;
+                                    }
+                                    setCheckoutFundingProcess(prev => prev ? { ...prev, stage: "success", isPending: true } : null);
+                                  })();
                                 }}
                                 className="flex-[2] py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black transition text-center shadow-sm"
                               >
-                                I have transferred ⚡
+                                I have transferred
                               </button>
                             </div>
                           </div>
@@ -1416,7 +1430,7 @@ export const CustomerCheckout: React.FC = () => {
                             <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
                             <div className="space-y-1">
                               <p className="text-[11px] font-bold text-gray-700">
-                                {checkoutFundingProcess.loaderText || "Verifying secure sandbox settlement..."}
+                                {checkoutFundingProcess.loaderText || "Processing your payment..."}
                               </p>
                               <p className="text-[9px] text-gray-400 font-mono">Secured SSL Connection Active</p>
                             </div>
@@ -1431,8 +1445,14 @@ export const CustomerCheckout: React.FC = () => {
                             </div>
 
                             <div className="space-y-0.5">
-                              <h4 className="font-extrabold text-[#070329] text-xs">Sandbox Credit Clearance Complete</h4>
-                              <p className="text-[10px] text-gray-500">Your Owode Food wallet has been successfully topped up.</p>
+                              <h4 className="font-extrabold text-[#070329] text-xs">
+                                {checkoutFundingProcess.isPending ? "Transfer Received" : "Wallet Funded"}
+                              </h4>
+                              <p className="text-[10px] text-gray-500">
+                                {checkoutFundingProcess.isPending
+                                  ? "We've received your transfer details. Your balance will update once our team verifies it -- usually within a few hours."
+                                  : "Your Owode Food wallet has been credited and is ready to use."}
+                              </p>
                             </div>
 
                             <button
@@ -1591,7 +1611,7 @@ export const CustomerCheckout: React.FC = () => {
               ? "Closed - Cannot Place Order"
               : isSubmittingOrder
               ? "Placing Order..."
-              : "Authorize Purchase & Place Order"}
+              : "Place Order"}
           </button>
         </div>
         )}
