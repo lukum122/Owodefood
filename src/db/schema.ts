@@ -104,6 +104,7 @@ export const orders = pgTable("orders", {
   receiptNote: text("receipt_note"),
   batchDate: text("batch_date"), // e.g. "2026-08-10" -- set only for batch-delivery orders
   batchTime: text("batch_time"), // e.g. "13:00" -- the batch slot the customer chose
+  specialInstructions: text("special_instructions"), // optional note from the customer, e.g. "call on arrival, leave with the gateman"
 }, (table) => ({
   customerIdIdx: index("orders_customer_id_idx").on(table.customerId),
   vendorIdIdx: index("orders_vendor_id_idx").on(table.vendorId),
