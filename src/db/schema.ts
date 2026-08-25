@@ -65,6 +65,11 @@ export const products = pgTable("products", {
   addons: jsonb("addons"), // stores array of Addon objects
   maxAddons: integer("max_addons"),
   addonGroups: jsonb("addon_groups"), // stores array of AddonGroup objects
+  // Lower shows first. Defaults to 0 so every existing product sorts
+  // together (falls back to name-based ordering among ties), and vendors
+  // can pull specific items to the front without needing to set this on
+  // everything at once.
+  priority: integer("priority").notNull().default(0),
 }, (table) => ({
   vendorIdIdx: index("products_vendor_id_idx").on(table.vendorId),
 }));
