@@ -1246,8 +1246,8 @@ export const CustomerVendorMenu: React.FC = () => {
 
       {/* Customize Product Modal */}
       {customizingProduct && (() => {
-        const addonGroups = customizingProduct.addonGroups && customizingProduct.addonGroups.length > 0
-          ? customizingProduct.addonGroups
+        const addonGroups = (customizingProduct.addonGroups && customizingProduct.addonGroups.length > 0
+          ? [...customizingProduct.addonGroups].sort((a: any, b: any) => (a.priority ?? 0) - (b.priority ?? 0))
           : customizingProduct.addons && customizingProduct.addons.length > 0
             ? [{
                 id: "legacy-group",
@@ -1256,7 +1256,7 @@ export const CustomerVendorMenu: React.FC = () => {
                 maxSelections: customizingProduct.maxAddons,
                 addons: customizingProduct.addons
               }]
-            : [];
+            : []);
 
         const isAllSelectionsValid = addonGroups.every(isGroupValid);
 

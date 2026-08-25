@@ -746,8 +746,8 @@ export const AdminPOS: React.FC = () => {
 
       {/* MODAL 1: ADDON CUSTOMIZATION */}
       {addonModalProduct && (() => {
-        const addonGroups = addonModalProduct.addonGroups && addonModalProduct.addonGroups.length > 0
-          ? addonModalProduct.addonGroups
+        const addonGroups = (addonModalProduct.addonGroups && addonModalProduct.addonGroups.length > 0
+          ? [...addonModalProduct.addonGroups].sort((a: any, b: any) => (a.priority ?? 0) - (b.priority ?? 0))
           : addonModalProduct.addons && addonModalProduct.addons.length > 0
             ? [{
                 id: "legacy-group",
@@ -756,7 +756,7 @@ export const AdminPOS: React.FC = () => {
                 maxSelections: addonModalProduct.maxAddons,
                 addons: addonModalProduct.addons
               }]
-            : [];
+            : []);
 
         const getGroupSelectionCount = (groupId: string) => {
           return (Object.values(posAddonSelections) as any[])
