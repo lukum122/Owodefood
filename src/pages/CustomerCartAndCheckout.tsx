@@ -338,6 +338,12 @@ export const CustomerCheckout: React.FC = () => {
   
   const [paymentMethod, setPaymentMethod] = useState("Credit Card");
   const [deliveryMode, setDeliveryMode] = useState<"now" | "batch">("now");
+  // Two-step checkout: Delivery details first, Payment second -- replaces
+  // the old single continuous scroll. "Continue to Payment" validates the
+  // delivery fields before advancing; nothing about how those fields are
+  // actually validated/submitted changed, only when the payment section
+  // becomes visible.
+  const [checkoutStep, setCheckoutStep] = useState<"delivery" | "payment">("delivery");
   // Prevents a double-tap/double-click from firing handlePlaceOrder twice,
   // which would create two genuinely separate order records in the
   // database -- there was no guard against this at all before.
@@ -439,6 +445,36 @@ export const CustomerCheckout: React.FC = () => {
       setMonnifySuccess(true);
       setShowMonnifyModal(false);
     }, 2500);
+  };
+
+  // Reuses the exact same checks handlePlaceOrder already does for these
+  // fields, just triggered earlier -- when moving from the Delivery step
+  // to Payment, not at final submit. Keeps this from silently drifting
+  // out of sync with the real validation over time.
+  const validateDeliveryStepAndAdvance = () => {
+    if (!deliveryAddress.trim()) {
+      setErrorWord("Please state a physical drop-off address.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (!deliveryPhone.trim()) {
+      setErrorWord("Please state an active delivery phone number.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (vendorCurrentlyUnavailable) {
+      setErrorWord("This vendor is only accepting scheduled orders right now, and no batch slots are currently open. Please check back later.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (deliveryMode === "batch" && !selectedBatch) {
+      setErrorWord("Please select a batch delivery time, or switch to Deliver Now.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    setErrorWord("");
+    setCheckoutStep("payment");
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
@@ -642,6 +678,40 @@ export const CustomerCheckout: React.FC = () => {
         <div className="lg:col-span-7 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
           <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider mb-2">Fulfillment Details</h3>
 
+          {/* Two-step indicator -- Delivery / Payment. Tapping a completed
+              step goes back to it; the upcoming step isn't clickable until
+              reached, matching the approved mockup. */}
+          <div className="flex items-center gap-3 pb-2">
+            {(["delivery", "payment"] as const).map((step, idx) => {
+              const stepNum = idx + 1;
+              const isActive = checkoutStep === step;
+              const isDone = checkoutStep === "payment" && step === "delivery";
+              return (
+                <React.Fragment key={step}>
+                  {idx > 0 && (
+                    <div className={`flex-1 h-0.5 rounded-full ${isDone || checkoutStep === "payment" ? "bg-[#070329]" : "bg-gray-150"}`} />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { if (isDone) setCheckoutStep(step); }}
+                    className={`flex flex-col items-center gap-1.5 ${isDone ? "cursor-pointer" : "cursor-default"}`}
+                  >
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-mono font-bold transition-all ${
+                      isActive ? "bg-[#070329] text-white scale-110" : isDone ? "bg-[#070329] text-white" : "bg-gray-100 text-gray-400"
+                    }`}>
+                      {isDone ? "✓" : stepNum}
+                    </div>
+                    <span className={`text-[10px] font-bold ${isActive ? "text-[#070329]" : "text-gray-400"}`}>
+                      {step === "delivery" ? "Delivery" : "Payment"}
+                    </span>
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {checkoutStep === "delivery" && (
+          <>
           {/* Guest account identification */}
           {!currentUser && (
             <div className="space-y-4 pb-4 border-b border-gray-100">
@@ -950,6 +1020,18 @@ export const CustomerCheckout: React.FC = () => {
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={validateDeliveryStepAndAdvance}
+            className="w-full py-3.5 rounded-2xl bg-[#070329] hover:bg-opacity-90 text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            Continue to Payment
+          </button>
+          </>
+          )}
+
+          {checkoutStep === "payment" && (
+          <>
           {/* Payment Method selector */}
           <div className="space-y-3">
             <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
@@ -1427,9 +1509,15 @@ export const CustomerCheckout: React.FC = () => {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
 
-        {/* Pricing Subtotals panel side card on Checkout */}
+        {/* Pricing Subtotals panel side card on Checkout -- only shown
+            during the Payment step now, since it culminates in the actual
+            submit button; showing it during Delivery would let someone
+            reach "Place Order" before the delivery fields are validated. */}
+        {checkoutStep === "payment" && (
         <div className="lg:col-span-5 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-gray-50 pb-3">
             <h3 className="font-bold text-xs text-gray-400 uppercase tracking-wider leading-none">Billing Overview</h3>
@@ -1503,6 +1591,7 @@ export const CustomerCheckout: React.FC = () => {
               : "Authorize Purchase & Place Order"}
           </button>
         </div>
+        )}
 
       </form>
 
