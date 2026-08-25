@@ -1632,7 +1632,7 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       allReviews,
     ] = await Promise.all([
       db.select().from(vendors),
-      db.select().from(products),
+      db.select().from(products).orderBy(products.priority, products.name),
       db.select().from(paymentGateways),
       db.select().from(extremeLocationTiers),
       db.select().from(extremeLocations),
@@ -2324,6 +2324,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           addons: payload.addons ? JSON.stringify(payload.addons) : null,
           maxAddons: payload.maxAddons,
           addonGroups: payload.addonGroups ? JSON.stringify(payload.addonGroups) : null,
+          priority: payload.priority ?? 0,
         }).onConflictDoUpdate({
           target: products.id,
           set: {
@@ -2337,6 +2338,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             addons: payload.addons ? JSON.stringify(payload.addons) : null,
             maxAddons: payload.maxAddons,
             addonGroups: payload.addonGroups ? JSON.stringify(payload.addonGroups) : null,
+            priority: payload.priority ?? 0,
           },
         });
 
