@@ -94,6 +94,7 @@ export interface AddonGroup {
   allowMultipleQuantity?: boolean;
   maxQuantityPerAddon?: number;
   addons: Addon[];
+  priority?: number; // lower shows first; groups stored as JSON on the product, not a real column, so sorting happens client/server-side, not via SQL ORDER BY
 }
 
 export interface Product {
@@ -109,6 +110,7 @@ export interface Product {
   addons?: Addon[];
   maxAddons?: number;
   addonGroups?: AddonGroup[];
+  priority?: number; // lower shows first; defaults to 0
 }
 
 export type OrderStatus =
