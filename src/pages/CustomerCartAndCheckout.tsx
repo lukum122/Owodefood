@@ -107,8 +107,8 @@ export const CustomerCart: React.FC = () => {
                     {item.selectedAddons && item.selectedAddons.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {item.selectedAddons.map((addon) => (
-                          <span key={addon.id} className="text-[9px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold uppercase font-mono tracking-wide border border-gray-200">
-                            + {addon.name} {addon.quantity && addon.quantity > 1 ? `x${addon.quantity}` : ""} ({currency}{((addon.price ?? 0) * (addon.quantity ?? 1)).toLocaleString()})
+                          <span key={addon.id} className="text-[8.5px] bg-gray-50 text-gray-500 px-2 py-0.5 rounded-md font-bold uppercase font-mono tracking-wide border border-gray-150">
+                            + {addon.name} {addon.quantity && addon.quantity > 1 ? `x${addon.quantity}` : ""}
                           </span>
                         ))}
                       </div>
@@ -121,17 +121,17 @@ export const CustomerCart: React.FC = () => {
 
                   {/* Adjust Quantities and trash action */}
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-gray-100 py-1.5 px-3 rounded-xl border border-gray-150">
+                    <div className="flex items-center gap-2.5 border border-gray-150 py-1.5 px-3 rounded-xl bg-white">
                       <button
                         onClick={() => updateCartQuantity(item.id, item.quantity - 1)}
-                        className="text-gray-500 hover:text-red-500 text-xs font-black cursor-pointer px-1 py-0.5"
+                        className="text-[#070329] hover:text-red-500 text-sm font-black cursor-pointer w-4 text-center"
                       >
-                        -
+                        −
                       </button>
                       <span className="text-xs font-extrabold font-mono min-w-4 text-center">{item.quantity}</span>
                       <button
                         onClick={() => handleIncreaseQuantity(item)}
-                        className="text-gray-500 hover:text-green-500 text-xs font-black cursor-pointer px-1 py-0.5"
+                        className="text-[#070329] hover:text-emerald-600 text-sm font-black cursor-pointer w-4 text-center"
                       >
                         +
                       </button>
@@ -965,8 +965,8 @@ export const CustomerCheckout: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => { setDeliveryMode("now"); setSelectedBatch(null); }}
-                    className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
-                      deliveryMode === "now" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-150 bg-gray-50/50 text-gray-600"
+                    className={`p-3.5 rounded-2xl border-[1.5px] text-xs font-bold transition text-left ${
+                      deliveryMode === "now" ? "border-[#070329] bg-gray-50/70 text-gray-900" : "border-gray-150 bg-white text-gray-500"
                     }`}
                   >
                     Deliver Now
@@ -976,8 +976,8 @@ export const CustomerCheckout: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setDeliveryMode("batch")}
-                  className={`p-3 rounded-2xl border text-xs font-bold transition text-left ${
-                    deliveryMode === "batch" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-150 bg-gray-50/50 text-gray-600"
+                  className={`p-3.5 rounded-2xl border-[1.5px] text-xs font-bold transition text-left ${
+                    deliveryMode === "batch" ? "border-[#070329] bg-gray-50/70 text-gray-900" : "border-gray-150 bg-white text-gray-500"
                   }`}
                 >
                   Schedule & Save
@@ -1034,14 +1034,14 @@ export const CustomerCheckout: React.FC = () => {
           <>
           {/* Payment Method selector */}
           <div className="space-y-3">
-            <label className="text-xs font-bold text-gray-600 flex items-center gap-1.5 leading-none">
-              <CreditCard className="w-4 h-4 text-[#0ea5e9]" />
-              Settlement Protocol
+            <label className="text-[11px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5 leading-none">
+              Payment Method
             </label>
-            
-            <div className="grid grid-cols-2 gap-3">
+
+            <div className="space-y-2.5">
               {activeGateways.map((m) => {
                 const isSel = paymentMethod === m.name;
+                const gatewayIcon = m.name.includes("Wallet") ? "👛" : m.name.includes("Transfer") ? "🏦" : "💳";
                 return (
                   <button
                     key={m.id}
@@ -1050,18 +1050,21 @@ export const CustomerCheckout: React.FC = () => {
                       setPaymentMethod(m.name);
                       setErrorWord("");
                     }}
-                    className={`p-4 text-left rounded-2xl border transition duration-205 cursor-pointer flex justify-between items-start ${
-                      isSel 
-                        ? "bg-blue-600/5 border-[#0ea5e9] text-blue-950 shadow-sm" 
-                        : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                    className={`w-full p-3.5 text-left rounded-2xl border-[1.5px] transition duration-150 cursor-pointer flex items-center gap-3 ${
+                      isSel
+                        ? "border-[#070329] bg-gray-50/70"
+                        : "border-gray-150 bg-white hover:bg-gray-50/50"
                     }`}
                   >
-                    <div>
-                      <span className="text-xs font-bold block">{m.name}</span>
-                      <span className="text-[10px] text-gray-400 mt-0.5 block leading-tight">{m.desc}</span>
+                    <div className="w-10 h-10 rounded-xl bg-[#070329] text-white flex items-center justify-center text-base shrink-0">
+                      {gatewayIcon}
                     </div>
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isSel ? "border-[#0ea5e9] bg-[#0ea5e9]" : "border-gray-300"}`}>
-                      {isSel && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-extrabold block text-gray-900">{m.name}</span>
+                      <span className="text-[10px] text-gray-400 mt-0.5 block leading-tight truncate">{m.desc}</span>
+                    </div>
+                    <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 relative ${isSel ? "border-[#070329]" : "border-gray-250"}`}>
+                      {isSel && <div className="absolute inset-[3px] bg-[#070329] rounded-full"></div>}
                     </div>
                   </button>
                 );
