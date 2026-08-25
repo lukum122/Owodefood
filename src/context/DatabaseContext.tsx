@@ -2054,7 +2054,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const clearCart = () => setCart([]);
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string; specialInstructions?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
     let activeUser = currentUser;
     if (!activeUser) {
       const savedSession = localStorage.getItem("fd_session_user");
@@ -2158,6 +2158,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           receiptNote: options?.receiptNote,
           batchDate: options?.batchDate,
           batchTime: options?.batchTime,
+          specialInstructions: options?.specialInstructions,
           items: isReceiptPickup ? [] : cart.map(item => ({
             productId: item.product.id,
             name: item.product.name,
@@ -2231,6 +2232,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         receiptNote: options?.receiptNote,
         batchDate: options?.batchDate,
         batchTime: options?.batchTime,
+        specialInstructions: options?.specialInstructions,
         items: isReceiptPickup ? [] : cart.map(item => ({
           id: "oi-" + generateId(),
           orderId: data.orderId,
