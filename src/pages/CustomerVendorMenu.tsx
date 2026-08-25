@@ -3,11 +3,11 @@ import { useParams, Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
 import { compressImageToDataUrl } from "../imageUtils";
-import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, ShieldCheck, X, Truck, AlertTriangle, Heart } from "lucide-react";
+import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, ShieldCheck, X, Truck, AlertTriangle, Heart, Layers } from "lucide-react";
 
 export const CustomerVendorMenu: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [], placeOrder, orders, updateVendorOrder } = useDatabase();
+  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [], placeOrder, orders, updateVendorOrder, coverageGuideText } = useDatabase();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -375,6 +375,58 @@ export const CustomerVendorMenu: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {coverageGuideText && coverageGuideText.trim() && (
+        <div className="border border-teal-100 bg-teal-50/20 rounded-2xl p-4 space-y-1 mt-4">
+          <details className="group">
+            <summary className="flex items-center justify-between font-extrabold text-xs text-teal-950 cursor-pointer outline-none select-none">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-teal-600" />
+                <span>📍 Owode Food Coverage & Faraway Surcharges</span>
+              </div>
+              <span className="transition-transform group-open:rotate-180 text-teal-600 font-bold text-xs">▼</span>
+            </summary>
+            <div className="mt-3 text-xs text-teal-900 space-y-2 leading-relaxed whitespace-pre-line border-t border-teal-100/50 pt-3">
+              {(() => {
+                return coverageGuideText.split("\n").map((line, index) => {
+                  if (line.startsWith("###")) {
+                    return (
+                      <h4 key={index} className="font-bold text-teal-950 mt-3 mb-1 text-[11px] uppercase tracking-wider">
+                        {line.replace("###", "").trim()}
+                      </h4>
+                    );
+                  }
+                  if (line.startsWith("-")) {
+                    const cleanLine = line.replace("-", "").trim();
+                    const boldParts = cleanLine.split("**");
+                    return (
+                      <li key={index} className="ml-3 list-disc text-[11px] text-teal-900 leading-relaxed font-medium">
+                        {boldParts.map((part, i) => (
+                          i % 2 === 1 ? <strong key={i} className="font-black text-[#070329]">{part}</strong> : part
+                        ))}
+                      </li>
+                    );
+                  }
+                  if (line.trim() === "---") {
+                    return <hr key={index} className="border-t border-teal-100/50 my-2" />;
+                  }
+                  if (line.trim() === "") {
+                    return <div key={index} className="h-1" />;
+                  }
+                  const boldParts = line.split("**");
+                  return (
+                    <p key={index} className="text-[11px] text-teal-900 leading-relaxed font-medium">
+                      {boldParts.map((part, i) => (
+                        i % 2 === 1 ? <strong key={i} className="font-black text-[#070329]">{part}</strong> : part
+                      ))}
+                    </p>
+                  );
+                });
+              })()}
+            </div>
+          </details>
+        </div>
+      )}
 
       {/* Interactive Tabs Header matching image mockup */}
       <section className="border-b border-gray-100 flex gap-8">
