@@ -458,6 +458,25 @@ export const CustomerCheckout: React.FC = () => {
   // to Payment, not at final submit. Keeps this from silently drifting
   // out of sync with the real validation over time.
   const validateDeliveryStepAndAdvance = () => {
+    if (!currentUser) {
+      if (!guestName.trim()) {
+        setErrorWord("Please provide your full name to complete guest checkout.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (!guestEmail.trim()) {
+        setErrorWord("Please provide your email address to complete guest checkout.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      const burnerDomains = ["mailinator.com", "yopmail.com", "tempmail.com", "10minutemail.com", "guerrillamail.com", "throwawaymail.com", "temp-mail.org", "fakeinbox.com"];
+      const emailDomain = guestEmail.split("@")[1]?.toLowerCase();
+      if (emailDomain && burnerDomains.includes(emailDomain)) {
+        setErrorWord("Temporary or burner email addresses are not allowed for registration.");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
     if (!deliveryAddress.trim()) {
       setErrorWord("Please state a physical drop-off address.");
       window.scrollTo({ top: 0, behavior: 'smooth' });
