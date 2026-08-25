@@ -3385,9 +3385,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 // 4. Secure Checkout API
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage: rawReceiptImage, orderType, receiptImageOrQr: rawReceiptImageOrQr, receiptNote, batchDate, batchTime } = req.body;
+    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage: rawReceiptImage, orderType, receiptImageOrQr: rawReceiptImageOrQr, receiptNote, batchDate, batchTime, specialInstructions } = req.body;
 
     const isReceiptPickup = orderType === "receipt_pickup";
+    // Free-text from the customer -- trim and cap length defensively,
+    // same principle as any other free-text field accepted from a client.
+    const sanitizedSpecialInstructions = typeof specialInstructions === "string" && specialInstructions.trim()
+      ? specialInstructions.trim().slice(0, 500)
+      : null;
 
     // Upload to the PRIVATE bucket if this is genuine base64 image data;
     // uploadPrivateImage returns null (never throws) for anything that
@@ -3561,6 +3566,7 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       receiptNote: receiptNote || null,
       batchDate: validatedBatchDate,
       batchTime: validatedBatchTime,
+      specialInstructions: sanitizedSpecialInstructions,
       createdAt: new Date().toISOString()
     });
 
@@ -3597,6 +3603,7 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       receiptNote: receiptNote || null,
       batchDate: validatedBatchDate,
       batchTime: validatedBatchTime,
+      specialInstructions: sanitizedSpecialInstructions,
       createdAt: new Date().toISOString(),
       items: isReceiptPickup ? [] : items.map((item: any) => ({
         id: Math.random().toString(36).substring(2, 11),
