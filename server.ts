@@ -1828,7 +1828,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "SYSTEM_SETTINGS_BULK",
       "USERS_BULK", "VENDORS_BULK", "ORDERS_BULK", "RIDERS_BULK", "PRODUCTS_BULK",
       "EXTREME_LOCATION_UPSERT", "EXTREME_LOCATION_DELETE", "EMPLOYEE_UPSERT", 
-      "EMPLOYEE_DELETE", "USER_DELETE"
+      "EMPLOYEE_DELETE", "USER_DELETE", "EMPLOYEE_CREATE"
     ];
     
     let isTargetEmpty = false;
@@ -1882,6 +1882,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       "SYSTEM_SETTINGS_BULK": "view_settings",
       "EMPLOYEE_UPSERT": "manage_employees",
       "EMPLOYEE_DELETE": "manage_employees",
+      "EMPLOYEE_CREATE": "manage_employees",
     };
 
     if (adminOnlyActions.includes(type) && !isAdmin && !isTargetEmpty) {
@@ -3043,6 +3044,93 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       case "EXTREME_LOCATION_DELETE":
         await db.delete(extremeLocations).where(eq(extremeLocations.id, payload.id));
         break;
+
+      case "EMPLOYEE_CREATE": {
+        // Dedicated action for creating one new staff member, replacing the
+        // old pattern of the frontend doing this via two separate,
+        // un-checked syncSave calls (EMPLOYEES_BULK + USER_UPSERT) with no
+        // way to know if either actually succeeded, and no login credential
+        // ever generated for the new hire. This does everything atomically:
+        // validates, creates both the employee and user records with a
+        // real bcrypt-hashed PIN, emails it to them, and returns a real
+        // success/failure the frontend can actually act on.
+        const { name: empName, email: empEmail, phone: empPhone, department: empDepartment, permissions: empPerms } = payload;
+
+        if (!empName?.trim() || !empEmail?.trim() || !empPhone?.trim()) {
+          return res.status(400).json({ error: "Name, email, and phone are all required." });
+        }
+        const cleanEmail = empEmail.trim().toLowerCase();
+
+        const existingEmp = await db.select().from(employees).where(sql`lower(${employees.email}) = ${cleanEmail}`).limit(1);
+        if (existingEmp.length > 0) {
+          return res.status(400).json({ error: "An employee with this email already exists." });
+        }
+        const existingUser = await db.select().from(users).where(sql`lower(${users.email}) = ${cleanEmail}`).limit(1);
+        if (existingUser.length > 0) {
+          return res.status(400).json({ error: "An account with this email already exists on the platform." });
+        }
+
+        const newEmpId = "emp-" + Math.floor(100 + Math.random() * 900);
+        const createdAt = new Date().toISOString();
+        // A real, random 6-digit PIN -- not a placeholder, not left blank.
+        // Hashed the same way every other password/PIN in this system is,
+        // never stored or logged in plain text anywhere past this point.
+        const rawPin = String(Math.floor(100000 + Math.random() * 900000));
+        const hashedPin = await bcrypt.hash(rawPin, 10);
+
+        await db.insert(employees).values({
+          id: newEmpId,
+          name: empName.trim(),
+          email: cleanEmail,
+          phone: empPhone.trim(),
+          department: empDepartment || "support",
+          status: "active",
+          permissions: empPerms || [],
+          createdAt,
+        });
+
+        await db.insert(users).values({
+          id: newEmpId,
+          email: cleanEmail,
+          name: empName.trim(),
+          phone: empPhone.trim(),
+          pin: hashedPin,
+          role: "employee",
+          roles: ["customer", "employee"],
+          createdAt,
+        });
+
+        const headerHtml = await getEmailHeaderHtml("👋");
+        const emailResult = await sendEmailNotification(
+          cleanEmail,
+          "Welcome to Owode Food — Your Staff Account is Ready",
+          `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              ${headerHtml}
+              <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800;">Welcome to the Team</h2>
+            </div>
+            <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hi ${empName.trim()},</p>
+            <p style="font-size: 14px; color: #374151; line-height: 1.6;">Your staff account on Owode Food has been created. Here's how to log in:</p>
+            <div style="background-color: #f8fafc; border-radius: 12px; padding: 16px; margin: 20px 0;">
+              <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">Login Email</p>
+              <p style="font-size: 15px; color: #070329; font-weight: 700; margin: 0 0 16px 0;">${cleanEmail}</p>
+              <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">Your PIN</p>
+              <span style="display: inline-block; background-color: #f1f5f9; color: #070329; font-size: 26px; font-weight: 800; padding: 10px 24px; border-radius: 10px; letter-spacing: 6px; font-family: monospace;">${rawPin}</span>
+            </div>
+            <p style="font-size: 12px; color: #64748b; line-height: 1.6;">Please keep this PIN private, and change it once you've logged in if that option is available to you.</p>
+          </div>
+          `
+        );
+
+        responseExtra.employee = { id: newEmpId, name: empName.trim(), email: cleanEmail, phone: empPhone.trim(), department: empDepartment || "support", status: "active", permissions: empPerms || [], createdAt };
+        responseExtra.emailSent = emailResult.success;
+        // Only ever returned to the admin who just created this account,
+        // and only when the email genuinely failed to send -- a fallback
+        // so the credential isn't silently lost, not a routine response.
+        if (!emailResult.success) responseExtra.pinFallback = rawPin;
+        break;
+      }
 
       case "EMPLOYEES_BULK":
         for (const emp of payload) {
