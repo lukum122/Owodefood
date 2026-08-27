@@ -37,6 +37,8 @@ export const AdminEmployees: React.FC = () => {
   const [empPermissions, setEmpPermissions] = useState<string[]>(["manage_orders"]);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
+  const [isCreatingEmp, setIsCreatingEmp] = useState(false);
+  const [pinFallbackToShow, setPinFallbackToShow] = useState("");
 
   // Edit State
   const [editingEmpId, setEditingEmpId] = useState<string | null>(null);
@@ -55,10 +57,12 @@ export const AdminEmployees: React.FC = () => {
     { id: "manage_employees", label: "Manage Employees", desc: "Add, modify and audit employee access rules" }
   ];
 
-  const handleCreateEmployee = (e: React.FormEvent) => {
+  const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCreatingEmp) return; // already submitting -- ignore repeat taps
     setFormError("");
     setFormSuccess("");
+    setPinFallbackToShow("");
 
     if (!empName.trim() || !empEmail.trim() || !empPhone.trim()) {
       setFormError("All fields are required.");
@@ -70,7 +74,8 @@ export const AdminEmployees: React.FC = () => {
       return;
     }
 
-    addEmployee({
+    setIsCreatingEmp(true);
+    const result = await addEmployee({
       name: empName.trim(),
       email: empEmail.trim().toLowerCase(),
       phone: empPhone.trim(),
@@ -78,18 +83,35 @@ export const AdminEmployees: React.FC = () => {
       status: "active",
       permissions: empPermissions,
     });
+    setIsCreatingEmp(false);
 
-    setFormSuccess("Employee registered successfully!");
+    if (!result.success) {
+      setFormError(result.error || "Failed to create employee. Please try again.");
+      return;
+    }
+
+    if (result.pinFallback) {
+      // The account was created successfully, but the welcome email
+      // couldn't be sent -- show the PIN here so it isn't silently lost,
+      // rather than leaving a new hire with no way to ever log in.
+      setFormSuccess("Employee registered! We couldn't send the welcome email, so share this PIN with them directly:");
+      setPinFallbackToShow(result.pinFallback);
+    } else {
+      setFormSuccess("Employee registered successfully! Their login PIN has been emailed to them.");
+    }
+
     setEmpName("");
     setEmpEmail("");
     setEmpPhone("");
     setEmpDept("support");
     setEmpPermissions(["manage_orders"]);
-    
-    setTimeout(() => {
-      setIsModalOpen(false);
-      setFormSuccess("");
-    }, 1500);
+
+    if (!result.pinFallback) {
+      setTimeout(() => {
+        setIsModalOpen(false);
+        setFormSuccess("");
+      }, 1500);
+    }
   };
 
   const handleStartEdit = (emp: Employee) => {
@@ -492,8 +514,20 @@ export const AdminEmployees: React.FC = () => {
             )}
 
             {formSuccess && (
-              <div className="p-3 bg-green-50 border border-green-100 text-green-600 text-xs rounded-xl font-semibold">
-                {formSuccess}
+              <div className="p-3 bg-green-50 border border-green-100 text-green-600 text-xs rounded-xl font-semibold space-y-2">
+                <p>{formSuccess}</p>
+                {pinFallbackToShow && (
+                  <div className="flex items-center justify-between bg-white border border-green-200 rounded-lg px-3 py-2">
+                    <span className="font-mono font-black text-base text-[#070329] tracking-widest">{pinFallbackToShow}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setIsModalOpen(false); setFormSuccess(""); setPinFallbackToShow(""); }}
+                      className="text-[10px] font-bold text-gray-500 hover:text-gray-700"
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -590,10 +624,11 @@ export const AdminEmployees: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="py-2.5 px-5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-xl shadow transition cursor-pointer flex items-center gap-1"
+                  disabled={isCreatingEmp}
+                  className={`py-2.5 px-5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1 ${isCreatingEmp ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                 >
                   <Plus className="w-4 h-4 text-teal-150" />
-                  Save & Activate Account
+                  {isCreatingEmp ? "Creating Account..." : "Save & Activate Account"}
                 </button>
               </div>
 
