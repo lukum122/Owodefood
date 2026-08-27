@@ -139,7 +139,7 @@ interface DatabaseContextType {
 
   // Employee Management
   employees: Employee[];
-  addEmployee: (employee: Omit<Employee, "id" | "createdAt">) => void;
+  addEmployee: (employee: Omit<Employee, "id" | "createdAt">) => Promise<{ success: boolean; error?: string; emailSent?: boolean; pinFallback?: string }>;
   updateEmployee: (id: string, updated: Partial<Employee>) => void;
   removeEmployee: (id: string) => void;
   
@@ -1351,15 +1351,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return baseFee + extremeSurcharge + totalSurge;
   };
 
-  const addEmployee = (newEmpData: Omit<Employee, "id" | "createdAt">) => {
-    const newEmp: Employee = {
-      ...newEmpData,
-      id: "emp-" + Math.floor(100 + Math.random() * 900),
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...employees, newEmp];
-    setEmployees(updated);
-    syncSave("EMPLOYEES_BULK", updated);
+  const addEmployee = async (newEmpData: Omit<Employee, "id" | "createdAt">) => {
+    // Calls a dedicated action rather than the old pattern of two separate,
+    // un-checked syncSave calls (EMPLOYEES_BULK + USER_UPSERT). That old
+    // pattern could silently fail (permission-denied, network error, etc.)
+    // while still showing "success" and adding the employee to local
+    // state -- meaning it would vanish the next time real data got
+    // fetched, since it was never actually saved. This waits for a real,
+    // confirmed result before touching local state at all.
+    const result = await syncSave("EMPLOYEE_CREATE", newEmpData);
+    if (!result?.success) {
+      return { success: false, error: result?.error || "Failed to create employee. Please check your connection and try again." };
+    }
+
+    const newEmp: Employee = result.employee;
+    setEmployees(prev => [...prev, newEmp]);
 
     const newEmpUser = {
       id: newEmp.id,
@@ -1370,8 +1376,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       roles: ["customer", "employee" as UserRole],
       createdAt: newEmp.createdAt
     };
-    syncSave("USER_UPSERT", newEmpUser);
     setUsers(prev => [...prev, newEmpUser as User]);
+
+    return { success: true, emailSent: result.emailSent, pinFallback: result.pinFallback };
   };
 
   const updateEmployee = (id: string, updatedFields: Partial<Employee>) => {
