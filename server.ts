@@ -1070,7 +1070,7 @@ app.get("/api/admin/orders-tab-counts", verifyTokenOptional, async (req: any, re
     const reqUser = req.user;
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
-    if (!isAdmin) {
+    if (!isAdmin && !(await hasPermission(reqUser, "manage_orders"))) {
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
@@ -1132,7 +1132,7 @@ app.get("/api/admin/orders-by-tab", verifyTokenOptional, async (req: any, res: a
     const reqUser = req.user;
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
-    if (!isAdmin) {
+    if (!isAdmin && !(await hasPermission(reqUser, "manage_orders"))) {
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
@@ -1484,7 +1484,7 @@ app.get("/api/admin/orders-delivered", verifyTokenOptional, async (req: any, res
     const reqUser = req.user;
     const superAdminEmails = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
     const isAdmin = reqUser && (reqUser.roles?.includes("admin") || reqUser.roles?.includes("super_admin") || reqUser.role === "admin" || reqUser.role === "super_admin" || superAdminEmails.includes(reqUser.email));
-    if (!isAdmin) {
+    if (!isAdmin && !(await hasPermission(reqUser, "manage_orders"))) {
       return res.status(403).json({ error: "Forbidden: Admin access required." });
     }
 
