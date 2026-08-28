@@ -1719,6 +1719,20 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       }
     }
 
+    // An employee's own session never receives the full employees list
+    // (that's admin-only, deliberately, so no employee can see everyone
+    // else's permissions/data). But the sidebar still needs to know THEIR
+    // OWN department/permissions to decide what to show them -- this is a
+    // narrow, safe self-lookup (only ever returns the requester's own
+    // record, never anyone else's), independent of the admin-only bulk list.
+    let myEmployeeProfile: any = null;
+    if (!isAdmin && reqUser && (reqUser.role === "employee" || reqUser.roles?.includes("employee"))) {
+      const ownRecord = await db.select().from(employees)
+        .where(sql`${employees.id} = ${reqUser.id} OR lower(${employees.email}) = ${String(reqUser.email || "").toLowerCase()}`)
+        .limit(1);
+      if (ownRecord.length > 0) myEmployeeProfile = ownRecord[0];
+    }
+
     res.json({
       users: allUsers,
       vendors: allVendors,
@@ -1734,6 +1748,7 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       extremeLocationTiers: allExtremeLocationTiers,
       extremeLocations: allExtremeLocations,
       employees: allEmployees,
+      myEmployeeProfile,
       reviews: allReviews,
       walletTransactions: allWalletTransactions,
       notifications: allAppNotifications,
