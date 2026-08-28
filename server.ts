@@ -1503,8 +1503,17 @@ app.get("/api/admin/dashboard-stats", verifyTokenOptional, async (req: any, res:
     if (!reqUser) {
       return res.status(401).json({ error: "Unauthorized: Please log in." });
     }
+    // Full admin sees everything unconditionally. An employee sees this
+    // overview if they manage at least one operational area (orders,
+    // vendors, riders) -- the dashboard is a landing page relevant to
+    // that work, not a separate, standalone permission of its own.
     if (!isAdmin) {
-      return res.status(403).json({ error: "Forbidden: Admin access required." });
+      const canView = (await hasPermission(reqUser, "manage_orders"))
+        || (await hasPermission(reqUser, "manage_vendors"))
+        || (await hasPermission(reqUser, "manage_riders"));
+      if (!canView) {
+        return res.status(403).json({ error: "Forbidden: Admin access required." });
+      }
     }
 
     const [
