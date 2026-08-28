@@ -139,6 +139,7 @@ interface DatabaseContextType {
 
   // Employee Management
   employees: Employee[];
+  myEmployeeProfile: Employee | null;
   addEmployee: (employee: Omit<Employee, "id" | "createdAt">) => Promise<{ success: boolean; error?: string; emailSent?: boolean; pinFallback?: string }>;
   updateEmployee: (id: string, updated: Partial<Employee>) => void;
   removeEmployee: (id: string) => void;
@@ -530,6 +531,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     instagram: ""
   });
   const [employees, setEmployees] = useState<Employee[]>([]);
+  // An employee's own permissions/department -- populated even though the
+  // full `employees` list above stays empty for their own session
+  // (that list is admin-only, so no employee can see everyone else's
+  // data). This is the one, safe way an employee's own session can know
+  // its own access level.
+  const [myEmployeeProfile, setMyEmployeeProfile] = useState<Employee | null>(null);
   const [currency, setCurrency] = useState<string>("₦");
   
   const [platformCommissionRate, setPlatformCommissionRate] = useState<number>(15);
@@ -630,6 +637,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setExtremeLocationTiers(data.extremeLocationTiers || []);
           setExtremeLocations(data.extremeLocations || []);
           setEmployees(data.employees || []);
+          setMyEmployeeProfile(data.myEmployeeProfile || null);
           setReviews(data.reviews || []);
 
           if (data.systemSettings) {
@@ -3769,6 +3777,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         // Employee Management
         employees,
+        myEmployeeProfile,
         addEmployee,
         updateEmployee,
         removeEmployee,
