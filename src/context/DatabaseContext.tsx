@@ -3381,7 +3381,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       localStorage.setItem("fd_session_user", JSON.stringify(updatedSession));
     }
 
-    syncSave("USER_UPSERT", updatedUser);
+    // This is the actual save -- everything below it (vendor/rider/employee
+    // auto-onboarding) is secondary and only makes sense if this succeeded.
+    // Previously this was fire-and-forget with its result never checked,
+    // so a failed save (permission issue, network error, anything) still
+    // showed "success" here and updated local state optimistically --
+    // meaning nothing was actually written to the database, and a fresh
+    // login for the affected user would correctly show their unchanged,
+    // original role, with no obvious explanation why.
+    const userSaveResult = await syncSave("USER_UPSERT", updatedUser);
+    if (!userSaveResult?.success) {
+      return { success: false, error: userSaveResult?.error || "Failed to save the user update. Please check your connection and try again." };
+    }
+
     setUsers(prev => prev.map(u => (u.id === userId ? updatedUser : u)));
 
     const targetRoles = fields.roles || [fields.role];
