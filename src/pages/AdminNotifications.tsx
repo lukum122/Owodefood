@@ -25,11 +25,21 @@ export const AdminNotifications: React.FC = () => {
     notifications = [], 
     addNotification, 
     deleteNotification,
-    fetchFullUsers
+    fetchFullUsers,
+    currentUser,
+    myEmployeeProfile
   } = useDatabase();
   useEffect(() => {
     fetchFullUsers();
   }, []);
+
+  // The sidebar already hides this page's link from employees without the
+  // right permission, but hiding a link isn't real access control -- this
+  // is what actually stops someone from reaching it directly by URL.
+  const isFullAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin" || currentUser?.roles?.includes("admin") || currentUser?.roles?.includes("super_admin");
+  const canAccess = isFullAdmin
+    || myEmployeeProfile?.permissions?.includes("manage_communications")
+    || myEmployeeProfile?.department === "admin";
 
   // Selected state
   const [targetType, setTargetType] = useState<"all" | "role" | "individual">("all");
@@ -161,6 +171,18 @@ export const AdminNotifications: React.FC = () => {
   const handleDeleteNotification = (notifId: string) => {
     deleteNotification(notifId);
   };
+
+  if (!canAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center">
+          <AlertTriangle className="w-7 h-7" />
+        </div>
+        <h2 className="font-extrabold text-gray-800 text-sm">Access Restricted</h2>
+        <p className="text-xs text-gray-500 max-w-xs">You don't have permission to view or send platform communications. Contact an admin if you need this access.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 font-sans text-xs text-left">

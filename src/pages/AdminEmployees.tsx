@@ -53,6 +53,7 @@ export const AdminEmployees: React.FC = () => {
     { id: "manage_orders", label: "Manage Orders", desc: "View, assign, and update status of customer orders" },
     { id: "manage_vendors", label: "Manage Vendors", desc: "Approve, suspend, and configure vendor commissions/fees" },
     { id: "manage_riders", label: "Manage Riders", desc: "Audit, approve, and track delivery riders" },
+    { id: "manage_communications", label: "Platform Communications", desc: "Send broadcast messages and notifications to users" },
     { id: "view_settings", label: "View Settings", desc: "Read and review global configurations" },
     { id: "manage_employees", label: "Manage Employees", desc: "Add, modify and audit employee access rules" }
   ];
