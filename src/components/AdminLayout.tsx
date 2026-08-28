@@ -127,7 +127,11 @@ export const AdminLayout: React.FC = () => {
         case "Payout Approvals":
           return perms.includes("view_rider_payouts") || perms.includes("view_vendor_payouts") || dept === "finance" || dept === "admin";
         case "Platform Communications":
-          return perms.includes("manage_orders") || dept === "support" || dept === "admin";
+          // No longer piggybacks on manage_orders or the "support"
+          // department -- those were implicit, unintended paths that
+          // granted this without anyone explicitly choosing to. Now
+          // requires its own dedicated permission, chosen on purpose.
+          return perms.includes("manage_communications") || dept === "admin";
         case "Homepage Engine":
           return perms.includes("view_settings") || dept === "admin";
         case "Global Settings":
