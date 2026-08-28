@@ -36,6 +36,7 @@ export const AdminLayout: React.FC = () => {
     markAllNotificationsAsRead,
     clearAllNotifications,
     employees = [],
+    myEmployeeProfile = null,
     switchRole,
   } = useDatabase();
   const location = useLocation();
@@ -90,7 +91,11 @@ export const AdminLayout: React.FC = () => {
     }
     
     if (currentUser?.role === "employee") {
-      const empProfile = employees.find(emp => emp.id === currentUser?.id || emp.email.toLowerCase() === currentUser?.email.toLowerCase());
+      // Uses the dedicated self-lookup, not the general `employees` list --
+      // that list is only ever populated for full admin sessions, so an
+      // employee looking for their own record in it would always come up
+      // empty, regardless of what permissions they actually have saved.
+      const empProfile = myEmployeeProfile;
       
       // If yet to be assigned a role under staff management (empProfile is undefined)
       if (!empProfile) {
