@@ -2157,7 +2157,7 @@ export const AdminOrders: React.FC = () => {
 
 /* 2. MERCHANT LICENSE MANAGER SCREEN */
 export const AdminVendors: React.FC = () => {
-  const { vendors, users, toggleVendorStatus, adminUpdateVendor, products, vendorCategories, currency, availableLocations = [], fetchFullUsers } = useDatabase();
+  const { vendors, users, toggleVendorStatus, adminUpdateVendor, createVendorDirectly, products, vendorCategories, currency, availableLocations = [], fetchFullUsers } = useDatabase();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   useEffect(() => {
@@ -2169,6 +2169,75 @@ export const AdminVendors: React.FC = () => {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // "Create Vendor" modal -- lets admin create a fully working, already
+  // approved vendor account directly, skipping the self-registration/OTP
+  // path entirely.
+  const [isCreateVendorOpen, setIsCreateVendorOpen] = useState(false);
+  const [newVendorBusinessName, setNewVendorBusinessName] = useState("");
+  const [newVendorOwnerName, setNewVendorOwnerName] = useState("");
+  const [newVendorCuisine, setNewVendorCuisine] = useState("");
+  const [newVendorEmail, setNewVendorEmail] = useState("");
+  const [newVendorPhone, setNewVendorPhone] = useState("");
+  const [newVendorAddress, setNewVendorAddress] = useState("");
+  const [isCreatingVendor, setIsCreatingVendor] = useState(false);
+  const [createVendorError, setCreateVendorError] = useState("");
+  const [createVendorSuccess, setCreateVendorSuccess] = useState("");
+  const [createVendorPinFallback, setCreateVendorPinFallback] = useState("");
+
+  const resetCreateVendorForm = () => {
+    setNewVendorBusinessName("");
+    setNewVendorOwnerName("");
+    setNewVendorCuisine("");
+    setNewVendorEmail("");
+    setNewVendorPhone("");
+    setNewVendorAddress("");
+    setCreateVendorError("");
+    setCreateVendorSuccess("");
+    setCreateVendorPinFallback("");
+  };
+
+  const handleCreateVendor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isCreatingVendor) return;
+    setCreateVendorError("");
+    setCreateVendorSuccess("");
+    setCreateVendorPinFallback("");
+
+    if (!newVendorBusinessName.trim() || !newVendorOwnerName.trim() || !newVendorEmail.trim() || !newVendorPhone.trim()) {
+      setCreateVendorError("Business name, owner name, email, and phone are all required.");
+      return;
+    }
+
+    setIsCreatingVendor(true);
+    const result = await createVendorDirectly({
+      businessName: newVendorBusinessName.trim(),
+      ownerName: newVendorOwnerName.trim(),
+      cuisine: newVendorCuisine.trim() || undefined,
+      email: newVendorEmail.trim().toLowerCase(),
+      phone: newVendorPhone.trim(),
+      address: newVendorAddress.trim() || undefined,
+    });
+    setIsCreatingVendor(false);
+
+    if (!result.success) {
+      setCreateVendorError(result.error || "Failed to create vendor. Please try again.");
+      return;
+    }
+
+    if (result.pinFallback) {
+      setCreateVendorSuccess("Vendor created and already live! We couldn't send the welcome email, so share this PIN with them directly:");
+      setCreateVendorPinFallback(result.pinFallback);
+    } else {
+      setCreateVendorSuccess("Vendor created and already live! Their login PIN has been emailed to them.");
+      setNewVendorBusinessName("");
+      setNewVendorOwnerName("");
+      setNewVendorCuisine("");
+      setNewVendorEmail("");
+      setNewVendorPhone("");
+      setNewVendorAddress("");
+    }
+  };
 
   // Filtering, search, and sort state for the vendor list
   const [searchTerm, setSearchTerm] = useState("");
@@ -2322,11 +2391,21 @@ export const AdminVendors: React.FC = () => {
 
   return (
     <div className="space-y-8 font-sans text-xs">
-      <div>
-        <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950">Merchant Partner Licensing</h1>
-        <p className="text-xs text-gray-400 mt-1 max-w-lg">
-          Manage physical outlets, adjust packing dispatch delay buffers, categorize brands, configure custom delivery prices, and view full catalogues.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-black text-gray-950 tracking-tight leading-none text-gray-950">Merchant Partner Licensing</h1>
+          <p className="text-xs text-gray-400 mt-1 max-w-lg">
+            Manage physical outlets, adjust packing dispatch delay buffers, categorize brands, configure custom delivery prices, and view full catalogues.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { resetCreateVendorForm(); setIsCreateVendorOpen(true); }}
+          className="shrink-0 flex items-center gap-1.5 py-2.5 px-4 bg-[#070329] hover:bg-opacity-90 text-white text-xs font-extrabold rounded-xl shadow transition cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          Create Vendor
+        </button>
       </div>
 
       {/* FILTERS & SEARCH */}
@@ -2927,6 +3006,132 @@ export const AdminVendors: React.FC = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Create Vendor modal -- creates a fully working, already-approved
+          vendor account directly, skipping the self-registration/OTP
+          path entirely. */}
+      {isCreateVendorOpen && (
+        <div
+          onClick={() => setIsCreateVendorOpen(false)}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-black text-[#070329] uppercase tracking-wider">Create Vendor</h3>
+              <button type="button" onClick={() => setIsCreateVendorOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {createVendorError && (
+              <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl font-semibold mb-4">
+                {createVendorError}
+              </div>
+            )}
+
+            {createVendorSuccess && (
+              <div className="p-3 bg-green-50 border border-green-100 text-green-600 text-xs rounded-xl font-semibold mb-4 space-y-2">
+                <p>{createVendorSuccess}</p>
+                {createVendorPinFallback && (
+                  <div className="flex items-center justify-between bg-white border border-green-200 rounded-lg px-3 py-2">
+                    <span className="font-mono font-black text-base text-[#070329] tracking-widest">{createVendorPinFallback}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setIsCreateVendorOpen(false); resetCreateVendorForm(); }}
+                      className="text-[10px] font-bold text-gray-500 hover:text-gray-700"
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!createVendorPinFallback && (
+              <form onSubmit={handleCreateVendor} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600">Business Name</label>
+                  <input
+                    type="text"
+                    value={newVendorBusinessName}
+                    onChange={(e) => setNewVendorBusinessName(e.target.value)}
+                    placeholder="e.g. Mama Cass Kitchen"
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600">Owner / Contact Name</label>
+                  <input
+                    type="text"
+                    value={newVendorOwnerName}
+                    onChange={(e) => setNewVendorOwnerName(e.target.value)}
+                    placeholder="e.g. Adaeze Okafor"
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-gray-600">Email</label>
+                    <input
+                      type="email"
+                      value={newVendorEmail}
+                      onChange={(e) => setNewVendorEmail(e.target.value)}
+                      placeholder="store@example.com"
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-gray-600">Phone</label>
+                    <input
+                      type="text"
+                      value={newVendorPhone}
+                      onChange={(e) => setNewVendorPhone(e.target.value)}
+                      placeholder="080..."
+                      className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600">Cuisine <span className="font-medium text-gray-400 normal-case">(optional)</span></label>
+                  <input
+                    type="text"
+                    value={newVendorCuisine}
+                    onChange={(e) => setNewVendorCuisine(e.target.value)}
+                    placeholder="e.g. Continental, Chinese..."
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600">Address <span className="font-medium text-gray-400 normal-case">(optional, can be set later)</span></label>
+                  <input
+                    type="text"
+                    value={newVendorAddress}
+                    onChange={(e) => setNewVendorAddress(e.target.value)}
+                    placeholder="Street address"
+                    className="w-full text-xs p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  This creates a fully working, already-approved vendor account. No email verification step is required to sign up -- a login PIN is generated and emailed to them directly.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={isCreatingVendor}
+                  className={`w-full py-2.5 px-5 bg-[#070329] hover:bg-opacity-90 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center justify-center gap-1.5 ${isCreatingVendor ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <Plus className="w-4 h-4" />
+                  {isCreatingVendor ? "Creating Vendor..." : "Create & Activate Vendor"}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
