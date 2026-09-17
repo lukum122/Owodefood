@@ -613,6 +613,115 @@ app.post("/api/auth/confirm-pin-reset", authLimiter, async (req, res) => {
   }
 });
 
+// New-device verification, shown after a correct email+PIN login when the
+// device hasn't been seen before (or it's been 30+ days). The screen has
+// always said "a code has been sent to your email" -- until now, that was
+// never actually true: the code was generated purely in the browser and
+// compared to itself, with no real delivery at all, meaning nobody could
+// legitimately complete this step. Mirrors the existing PIN-reset
+// endpoints' pattern exactly (server-generated code, stored with an
+// expiry, real email, brute-force protected).
+app.post("/api/auth/request-device-verification", authLimiter, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId." });
+    }
+    const userResult = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (userResult.length === 0) {
+      return res.status(400).json({ error: "Account not found." });
+    }
+    const user = userResult[0];
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+
+    await db.insert(systemSettings).values({
+      key: `device_verify_${user.id}`,
+      value: JSON.stringify({ code, expiresAt }),
+    }).onConflictDoUpdate({
+      target: systemSettings.key,
+      set: { value: JSON.stringify({ code, expiresAt }) },
+    });
+
+    const headerHtml = await getEmailHeaderHtml("🔒");
+    const result = await sendEmailNotification(
+      user.email,
+      `Owode Food - New Device Verification Code`,
+      `
+      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+        <div style="text-align: center; margin-bottom: 24px;">
+          ${headerHtml}
+          <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase;">Owode Food</h2>
+          <span style="font-size: 10px; color: #3b82f6; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">New Device Sign-In</span>
+        </div>
+        <p style="font-size: 14px; color: #374151; line-height: 1.6;">Hello ${user.name || "there"},</p>
+        <p style="font-size: 14px; color: #374151; line-height: 1.6;">We noticed a sign-in from a device we don't recognize. Enter this code to confirm it's really you:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <span style="display: inline-block; background-color: #f1f5f9; color: #070329; font-size: 32px; font-weight: 800; padding: 12px 30px; border-radius: 12px; letter-spacing: 8px; font-family: monospace; border: 1px solid #e2e8f0;">${code}</span>
+        </div>
+        <p style="font-size: 12px; color: #64748b; line-height: 1.6; text-align: center;">This code is valid for 10 minutes. If this wasn't you, please change your PIN immediately.</p>
+      </div>
+      `
+    );
+
+    if (!result.success) {
+      console.error(`[SECURE LOG] Device verification email delivery failed for ${user.email}`);
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Device verification request failed:", error);
+    res.status(500).json({ error: "Failed to send verification code. Please try again." });
+  }
+});
+
+app.post("/api/auth/confirm-device-verification", authLimiter, async (req, res) => {
+  try {
+    const { userId, code } = req.body;
+    if (!userId || !code) {
+      return res.status(400).json({ error: "Missing userId or code." });
+    }
+
+    // Same 5-attempt, 10-minute lock as PIN reset -- a 4-digit code is
+    // guessable in ~9,000 tries otherwise.
+    const lockCheck = await checkBruteForceLock(`deviceverify_${userId}`, 5, 10 * 60 * 1000);
+    if (lockCheck.locked) {
+      return res.status(429).json({ error: `Too many incorrect attempts. Please request a new code in ${lockCheck.retryAfterMinutes} minute(s).` });
+    }
+
+    const storedRows = await db.select().from(systemSettings).where(eq(systemSettings.key, `device_verify_${userId}`)).limit(1);
+    if (storedRows.length === 0) {
+      return res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
+    }
+
+    let stored: { code: string; expiresAt: number };
+    try {
+      stored = JSON.parse(storedRows[0].value);
+    } catch {
+      return res.status(400).json({ error: "Invalid or expired code. Please request a new one." });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      await db.delete(systemSettings).where(eq(systemSettings.key, `device_verify_${userId}`));
+      return res.status(400).json({ error: "This code has expired. Please request a new one." });
+    }
+
+    if (String(code).trim() !== stored.code) {
+      await recordFailedAttempt(`deviceverify_${userId}`, 10 * 60 * 1000);
+      return res.status(400).json({ error: "Incorrect verification code. Please check and try again." });
+    }
+
+    await clearBruteForceLock(`deviceverify_${userId}`);
+    // One-time use.
+    await db.delete(systemSettings).where(eq(systemSettings.key, `device_verify_${userId}`));
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Device verification confirmation failed:", error);
+    res.status(500).json({ error: "Failed to verify the code. Please try again." });
+  }
+});
+
 // Secure User Existence Check
 app.post("/api/auth/check-user", async (req, res) => {
   try {
@@ -1852,7 +1961,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       "EXTREME_LOCATIONS_BULK", "EMPLOYEES_BULK", "SYSTEM_SETTINGS_BULK",
       "USERS_BULK", "VENDORS_BULK", "ORDERS_BULK", "RIDERS_BULK", "PRODUCTS_BULK",
       "EXTREME_LOCATION_UPSERT", "EXTREME_LOCATION_DELETE", "EMPLOYEE_UPSERT", 
-      "EMPLOYEE_DELETE", "USER_DELETE", "EMPLOYEE_CREATE"
+      "EMPLOYEE_DELETE", "USER_DELETE", "EMPLOYEE_CREATE", "VENDOR_CREATE"
     ];
     
     let isTargetEmpty = false;
@@ -1907,6 +2016,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       "EMPLOYEE_UPSERT": "manage_employees",
       "EMPLOYEE_DELETE": "manage_employees",
       "EMPLOYEE_CREATE": "manage_employees",
+      "VENDOR_CREATE": "manage_vendors",
     };
 
     if (adminOnlyActions.includes(type) && !isAdmin && !isTargetEmpty) {
@@ -3068,6 +3178,89 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       case "EXTREME_LOCATION_DELETE":
         await db.delete(extremeLocations).where(eq(extremeLocations.id, payload.id));
         break;
+
+      case "VENDOR_CREATE": {
+        // Mirrors EMPLOYEE_CREATE exactly -- lets an admin create a fully
+        // working vendor account directly, in one step. Skips the normal
+        // self-registration path entirely (no email OTP at signup), since
+        // an admin creating the account directly is already vouching for
+        // it the same way a real registration's OTP would have. The
+        // vendor still goes through the one-time, per-device login
+        // verification like every other account -- that's a separate,
+        // ongoing security check, not a registration step, and applies
+        // uniformly regardless of how the account was created.
+        const { businessName: vBusinessName, ownerName: vOwnerName, cuisine: vCuisine, email: vEmail, phone: vPhone, address: vAddress } = payload;
+
+        if (!vBusinessName?.trim() || !vOwnerName?.trim() || !vEmail?.trim() || !vPhone?.trim()) {
+          return res.status(400).json({ error: "Business name, owner name, email, and phone are all required." });
+        }
+        const cleanVendorEmail = vEmail.trim().toLowerCase();
+
+        const existingVendorUser = await db.select().from(users).where(sql`lower(${users.email}) = ${cleanVendorEmail}`).limit(1);
+        if (existingVendorUser.length > 0) {
+          return res.status(400).json({ error: "An account with this email already exists on the platform." });
+        }
+
+        const newVendorUserId = "u-" + Math.floor(10000 + Math.random() * 90000);
+        const newVendorId = "v-" + Math.floor(10000 + Math.random() * 90000);
+        const createdAt = new Date().toISOString();
+        const rawVendorPin = String(Math.floor(1000 + Math.random() * 9000));
+        const hashedVendorPin = await bcrypt.hash(rawVendorPin, 10);
+
+        await db.insert(users).values({
+          id: newVendorUserId,
+          email: cleanVendorEmail,
+          name: vOwnerName.trim(),
+          phone: vPhone.trim(),
+          pin: hashedVendorPin,
+          role: "vendor",
+          roles: ["customer", "vendor"],
+          createdAt,
+        });
+
+        // Approved immediately, unlike the self-application path (which
+        // correctly starts "pending" for admin review) -- there's nothing
+        // to review here, since admin is creating it directly.
+        await db.insert(vendors).values({
+          id: newVendorId,
+          userId: newVendorUserId,
+          name: vBusinessName.trim(),
+          description: `Freshly prepared ${vCuisine || "delicious"} food.`,
+          cuisine: vCuisine || "Continental",
+          image: "/images/hero.jpg",
+          rating: 5.0,
+          address: vAddress?.trim() || "Address not yet set",
+          status: "approved",
+          createdAt,
+        });
+
+        const vendorHeaderHtml = await getEmailHeaderHtml("🏪");
+        const vendorEmailResult = await sendEmailNotification(
+          cleanVendorEmail,
+          "Welcome to Owode Food — Your Vendor Account is Ready",
+          `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 30px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              ${vendorHeaderHtml}
+              <h2 style="color: #070329; margin: 10px 0 0 0; font-size: 22px; font-weight: 800;">Welcome, ${vOwnerName.trim()}!</h2>
+            </div>
+            <p style="font-size: 14px; color: #374151; line-height: 1.6;">Your vendor account for <strong>${vBusinessName.trim()}</strong> on Owode Food has been created and is already live. Here's how to log in:</p>
+            <div style="background-color: #f8fafc; border-radius: 12px; padding: 16px; margin: 20px 0;">
+              <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">Login Email</p>
+              <p style="font-size: 15px; color: #070329; font-weight: 700; margin: 0 0 16px 0;">${cleanVendorEmail}</p>
+              <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">Your PIN</p>
+              <span style="display: inline-block; background-color: #f1f5f9; color: #070329; font-size: 26px; font-weight: 800; padding: 10px 24px; border-radius: 10px; letter-spacing: 6px; font-family: monospace;">${rawVendorPin}</span>
+            </div>
+            <p style="font-size: 12px; color: #64748b; line-height: 1.6;">Please keep this PIN private, and visit Settings once you've logged in to complete your store's address, hours, and menu.</p>
+          </div>
+          `
+        );
+
+        responseExtra.vendor = { id: newVendorId, userId: newVendorUserId, name: vBusinessName.trim(), cuisine: vCuisine || "Continental", status: "approved", createdAt };
+        responseExtra.emailSent = vendorEmailResult.success;
+        if (!vendorEmailResult.success) responseExtra.pinFallback = rawVendorPin;
+        break;
+      }
 
       case "EMPLOYEE_CREATE": {
         // Dedicated action for creating one new staff member, replacing the
