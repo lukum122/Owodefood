@@ -1469,7 +1469,7 @@ export const CustomerVendorMenu: React.FC = () => {
                                   <span className="font-extrabold text-xs">{addon.name}</span>
                                   {addon.price > 0 && (
                                     <span className="text-[10px] text-gray-400 font-mono mt-0.5">
-                                      +{currency}{(addon.price ?? 0).toLocaleString()}
+                                      +{currency}{((addon.price ?? 0) * (isSelected && group.allowMultipleQuantity ? quantity : 1)).toLocaleString()}
                                     </span>
                                   )}
                                 </div>
