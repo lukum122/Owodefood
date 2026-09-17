@@ -123,7 +123,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const [loginPin, setLoginPin] = useState("");
   const [deviceVerificationStep, setDeviceVerificationStep] = useState(false);
   const [deviceOtp, setDeviceOtp] = useState("");
-  const [generatedDeviceOtp, setGeneratedDeviceOtp] = useState("");
   const [pendingLoginData, setPendingLoginData] = useState<any>(null);
   
   // Forgot PIN state
@@ -153,7 +152,6 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
       setDeviceVerificationStep(false);
       setLoginPin("");
       setDeviceOtp("");
-      setGeneratedDeviceOtp("");
       setForgotPinStep(null);
     }
     setRegisterStep(1);
@@ -525,23 +523,25 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         const hasBeenLongTime = (Date.now() - lastLoginTime) > THIRTY_DAYS_MS;
 
         if (!isTrusted || hasBeenLongTime) {
-          // Trigger Device Verification
+          // Trigger Device Verification -- code is now generated and
+          // validated entirely server-side (see
+          // /api/auth/request-device-verification and
+          // /api/auth/confirm-device-verification), not just generated in
+          // the browser and compared to itself. That old approach did
+          // genuinely email a real code, but validated it with a plain
+          // client-side comparison -- anyone with dev tools open could
+          // read the expected value directly out of React state and
+          // bypass the check without ever seeing the email.
           setPendingLoginData(res);
-          const otp = Math.floor(1000 + Math.random() * 9000).toString();
-          setGeneratedDeviceOtp(otp);
           setDeviceVerificationStep(true);
           setDeviceOtp("");
           setError("");
           setSuccess("Sending verification code to your email...");
-          
-          fetch("/api/email/send-pin", {
+
+          fetch("/api/auth/request-device-verification", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              toEmail: foundUser.email,
-              name: foundUser.name,
-              pin: otp,
-            }),
+            body: JSON.stringify({ userId: foundUser.id }),
           }).then(r => r.json()).then(resJson => {
             if (resJson.success) {
               setSuccess(`A verification code has been sent to ${foundUser.email} for this new device.`);
@@ -561,15 +561,10 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         finalizeLogin(res.user, res.token, selectedRole);
         setSuccess("Success! Access granted...");
       } else {
-        // Step 3: Verify Device OTP
+        // Step 3: Verify Device OTP -- validated server-side now, not
+        // against a value sitting in browser state.
         if (deviceOtp.length < 4) {
           setError("Please enter the complete 4-digit verification code.");
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          return;
-        }
-
-        if (deviceOtp !== generatedDeviceOtp) {
-          setError("Incorrect verification code. Please check and try again.");
           window.scrollTo({ top: 0, behavior: 'smooth' });
           return;
         }
@@ -582,6 +577,25 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
         }
 
         const foundUser = pendingLoginData.user;
+
+        try {
+          const verifyRes = await fetch("/api/auth/confirm-device-verification", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: foundUser.id, code: deviceOtp }),
+          });
+          const verifyJson = await verifyRes.json();
+          if (!verifyJson.success) {
+            setError(verifyJson.error || "Incorrect verification code. Please check and try again.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+        } catch {
+          setError("Network error connecting to the server. Please try again later.");
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
         localStorage.setItem(`trusted_device_${foundUser.id}`, "true");
         localStorage.setItem(`last_login_${foundUser.id}`, Date.now().toString());
 
