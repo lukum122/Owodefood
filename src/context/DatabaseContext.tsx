@@ -1457,6 +1457,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
         console.error(`[syncSave] "${type}" failed with status ${res.status}: ${errText}`);
+
+        // A 401 here means the token itself is missing/expired/invalid --
+        // distinct from a 403 (logged in, but not allowed to do this).
+        // Previously this just surfaced as a confusing error on whatever
+        // form the person happened to be filling in, while the app still
+        // looked "logged in" (the session snapshot in localStorage has no
+        // expiry of its own, only the token does) -- someone could sit
+        // logged in for days, only to hit this the moment they tried to
+        // do something like apply as a vendor. Clear the stale session and
+        // send them to a real re-login instead of leaving them stuck.
+        if (res.status === 401 && type !== "USER_UPSERT") {
+          localStorage.removeItem("fd_jwt_token");
+          localStorage.removeItem("fd_session_user");
+          setCurrentUser(null);
+          window.location.href = "/login?sessionExpired=1";
+          return { success: false, error: "Your session has expired. Please log in again." };
+        }
+
         // The server sends a real, specific reason for most failures
         // (e.g. "This user has order history and cannot be permanently
         // deleted...") -- previously this was logged to the console but
@@ -1684,6 +1702,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Ensure the backend has this user before attempting login to get the JWT
     const syncResult = await syncSave("USER_UPSERT", newUser);
 
+    // Tracks whether the auto-login genuinely obtained a real token --
+    // previously this whole block was silently swallowed on any failure
+    // (a network hiccup, a timing issue), leaving the person's account
+    // correctly created but with no real token stored anywhere. The
+    // frontend still showed them as "logged in" (the session snapshot has
+    // no expiry of its own), so nothing looked wrong until the first time
+    // they tried to do something requiring real auth -- like applying to
+    // become a vendor or rider -- which would then fail with a confusing
+    // "please log in" error despite them never having logged out.
+    let autoLoginSucceeded = false;
     if (extra?.pin) {
       try {
         const response = await fetch("/api/auth/login", {
@@ -1692,8 +1720,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           body: JSON.stringify({ email: newUser.email, pin: extra.pin })
         });
         const data = await response.json();
-        if (data.success) {
+        if (data.success && data.token) {
           localStorage.setItem("fd_jwt_token", data.token);
+          autoLoginSucceeded = true;
         }
       } catch (e) {
         console.error("[register] Auto-login after registration failed:", e);
@@ -1704,6 +1733,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return {
         success: true,
         warning: "Your account was created on this device, but we couldn't confirm it saved to the server. If you can't log in from another device, please try registering again.",
+      };
+    }
+
+    if (!autoLoginSucceeded) {
+      // Don't leave them looking "logged in" with no real token behind it --
+      // that's exactly the confusing state that caused this bug in the
+      // first place. Clear the optimistic session so the app correctly
+      // shows them as logged out, and they go through the real login
+      // form (already proven to reliably obtain and store a token)
+      // instead of silently limping along on a session that looks valid
+      // but isn't.
+      setCurrentUser(null);
+      localStorage.removeItem("fd_session_user");
+      return {
+        success: true,
+        warning: "Your account was created, but we couldn't automatically sign you in. Please log in with your new PIN to continue.",
       };
     }
 
