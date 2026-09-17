@@ -3096,10 +3096,14 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 
         const newEmpId = "emp-" + Math.floor(100 + Math.random() * 900);
         const createdAt = new Date().toISOString();
-        // A real, random 6-digit PIN -- not a placeholder, not left blank.
-        // Hashed the same way every other password/PIN in this system is,
-        // never stored or logged in plain text anywhere past this point.
-        const rawPin = String(Math.floor(100000 + Math.random() * 900000));
+        // A real, random 4-digit PIN -- not a placeholder, not left blank.
+        // Matches the app-wide PIN length (the login screen's PIN entry
+        // is hard-coded to exactly 4 digits everywhere else); an earlier
+        // version of this generated 6 digits, which couldn't even be
+        // typed into that 4-digit input at all. Hashed the same way every
+        // other password/PIN in this system is, never stored or logged in
+        // plain text anywhere past this point.
+        const rawPin = String(Math.floor(1000 + Math.random() * 9000));
         const hashedPin = await bcrypt.hash(rawPin, 10);
 
         await db.insert(employees).values({
