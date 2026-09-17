@@ -100,6 +100,10 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
   const { login, finalizeLogin, checkUser, register, users, resetUserPin } = useDatabase();
   const navigate = useNavigate();
   const location = useLocation();
+  // Shown when syncSave detects an expired/invalid token and redirects
+  // here -- without this, someone would just land back on the login page
+  // with no explanation for why they were logged out.
+  const sessionExpired = new URLSearchParams(location.search).get("sessionExpired") === "1";
 
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -166,6 +170,22 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
     setError("");
     setSuccess("");
   }, [isRegisterMode]);
+
+  // Coming from a registration that succeeded but couldn't auto-login
+  // (see the `warning` case in register()) -- pre-fill their email and
+  // show the message explaining why they're being asked to log in right
+  // after just creating their account, instead of leaving them confused.
+  React.useEffect(() => {
+    const state = location.state as any;
+    if (state?.prefillEmail) {
+      setEmail(state.prefillEmail);
+      if (state.message) setSuccess(state.message);
+      // Clear the state so a later refresh/back-navigation doesn't keep
+      // re-showing this message.
+      window.history.replaceState({}, document.title);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEmailChange = (val: string) => {
     setEmail(val);
@@ -425,6 +445,18 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
 
         const res = await register(fullName, cleansedEmail, phone, selectedRole, gender, extraPayload);
         if (res.success) {
+          if (res.warning) {
+            // Account was genuinely created, but auto-login didn't -- tell
+            // them plainly and send them to the real login screen with
+            // their email carried over, rather than a generic
+            // "redirecting" message that doesn't explain why they're
+            // about to be asked to log in again immediately after
+            // "successfully" registering. isRegisterMode is a route-level
+            // prop here, not local state, so this is a real navigation to
+            // the login route rather than an in-place mode switch.
+            navigate("/login", { state: { prefillEmail: cleansedEmail, message: res.warning } });
+            return;
+          }
           setSuccess("Success! Your account is created & verified. Redirecting...");
           // Mark this initial device as trusted automatically!
           const registeredUser = users.find(u => u.email.toLowerCase() === cleansedEmail);
@@ -581,6 +613,12 @@ export const Login: React.FC<{ isRegisterMode?: boolean }> = ({ isRegisterMode =
           Multi-Vendor Food Delivery MVP Marketplace Pilot Platform
         </p>
       </div>
+
+      {sessionExpired && (
+        <div className="sm:mx-auto sm:w-full sm:max-w-md mb-4 p-3 bg-amber-50 border border-amber-150 text-amber-700 text-xs font-bold rounded-xl text-center">
+          Your session expired. Please log in again to continue.
+        </div>
+      )}
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md bg-white py-8 px-6 sm:px-10 rounded-2xl shadow-xl border border-gray-100">
         <h2 className="text-xl font-bold text-[#070329] tracking-tight mb-6 text-center">
