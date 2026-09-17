@@ -141,6 +141,7 @@ interface DatabaseContextType {
   employees: Employee[];
   myEmployeeProfile: Employee | null;
   addEmployee: (employee: Omit<Employee, "id" | "createdAt">) => Promise<{ success: boolean; error?: string; emailSent?: boolean; pinFallback?: string }>;
+  createVendorDirectly: (data: { businessName: string; ownerName: string; cuisine?: string; email: string; phone: string; address?: string }) => Promise<{ success: boolean; error?: string; emailSent?: boolean; pinFallback?: string }>;
   updateEmployee: (id: string, updated: Partial<Employee>) => void;
   removeEmployee: (id: string) => void;
   
@@ -1385,6 +1386,38 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: newEmp.createdAt
     };
     setUsers(prev => [...prev, newEmpUser as User]);
+
+    return { success: true, emailSent: result.emailSent, pinFallback: result.pinFallback };
+  };
+
+  const createVendorDirectly = async (data: { businessName: string; ownerName: string; cuisine?: string; email: string; phone: string; address?: string }) => {
+    // Mirrors addEmployee's pattern exactly -- one dedicated backend
+    // action that creates the user + vendor records atomically, waits
+    // for a real confirmed result, and only touches local state on
+    // genuine success. Skips the normal self-registration/OTP path
+    // entirely, since admin creating the account directly is already
+    // vouching for it.
+    const result = await syncSave("VENDOR_CREATE", data);
+    if (!result?.success) {
+      return { success: false, error: result?.error || "Failed to create vendor. Please check your connection and try again." };
+    }
+
+    const newVendor: Vendor = result.vendor;
+    setVendors(prev => [...prev, newVendor]);
+
+    const newVendorUser = {
+      id: newVendor.userId,
+      email: data.email.trim().toLowerCase(),
+      // The user's own name is the actual owner/contact person, not the
+      // business name -- matching how self-registration already keeps
+      // these two genuinely separate (firstName/surname vs businessName).
+      name: data.ownerName.trim(),
+      phone: data.phone.trim(),
+      role: "vendor" as UserRole,
+      roles: ["customer", "vendor" as UserRole],
+      createdAt: newVendor.createdAt
+    };
+    setUsers(prev => [...prev, newVendorUser as User]);
 
     return { success: true, emailSent: result.emailSent, pinFallback: result.pinFallback };
   };
@@ -3824,6 +3857,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         employees,
         myEmployeeProfile,
         addEmployee,
+        createVendorDirectly,
         updateEmployee,
         removeEmployee,
 
