@@ -2540,10 +2540,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                 name: item.name,
                 price: Math.round(item.price),
                 quantity: item.quantity,
+                selectedAddons: item.selectedAddons || null,
               }).onConflictDoUpdate({
                 target: orderItems.id,
                 set: {
                   quantity: item.quantity,
+                  selectedAddons: item.selectedAddons || null,
                 },
               });
             }
@@ -2716,10 +2718,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               name: item.name,
               price: Math.round(item.price),
               quantity: item.quantity,
+              selectedAddons: item.selectedAddons || null,
             }).onConflictDoUpdate({
               target: orderItems.id,
               set: {
                 quantity: item.quantity,
+                selectedAddons: item.selectedAddons || null,
               },
             });
           }
@@ -3887,7 +3891,8 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
           productId: item.productId,
           name: item.name,
           price: item.price, // Storing what they paid (we verified it above)
-          quantity: item.quantity
+          quantity: item.quantity,
+          selectedAddons: item.selectedAddons || null,
         });
       }
     }
