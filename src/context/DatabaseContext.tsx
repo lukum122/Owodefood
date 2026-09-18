@@ -163,6 +163,7 @@ interface DatabaseContextType {
   removeFromCart: (cartItemId: string) => void;
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
+  updateCartItemAddons: (cartItemId: string, newSelectedAddons: Addon[]) => void;
   
   // Checkout & Customer Actions
   placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
@@ -2146,6 +2147,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const clearCart = () => setCart([]);
 
+  // Replaces an existing cart item's addons in place, keeping the same
+  // cart entry (and its quantity) rather than adding a new, separate
+  // line -- used when a customer edits an item's customization from the
+  // Cart page instead of removing and re-adding it from scratch.
+  const updateCartItemAddons = (cartItemId: string, newSelectedAddons: Addon[]) => {
+    setCart(prev => prev.map(item => item.id === cartItemId ? { ...item, selectedAddons: newSelectedAddons } : item));
+  };
+
   // CHECKOUT & CUSTOMER ACTIONS
   const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string; specialInstructions?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
     let activeUser = currentUser;
@@ -3876,6 +3885,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         removeFromCart,
         updateCartQuantity,
         clearCart,
+        updateCartItemAddons,
         placeOrder,
         updateVendorOrder,
         resubmitOrderReceipt,
