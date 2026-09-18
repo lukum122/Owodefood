@@ -163,6 +163,7 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  selectedAddons?: Addon[]; // what the customer actually picked for this item; wasn't stored at all before, so absent on any order placed before this was added
 }
 
 export type RiderStatus = "pending" | "approved" | "suspended" | "rejected";
