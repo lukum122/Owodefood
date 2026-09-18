@@ -114,9 +114,20 @@ export const CustomerCart: React.FC = () => {
                       </div>
                     )}
 
-                    <span className="text-xs font-extrabold text-[#0ea5e9] font-mono mt-1.5 block">
-                      {currency}{(singleItemTotal ?? 0).toLocaleString()} each
-                    </span>
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <span className="text-xs font-extrabold text-[#0ea5e9] font-mono">
+                        {currency}{(singleItemTotal ?? 0).toLocaleString()} each
+                      </span>
+                      {item.product.addonGroups && item.product.addonGroups.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/vendor/${item.product.vendorId}`, { state: { editCartItemId: item.id } })}
+                          className="text-[10px] font-bold text-gray-500 hover:text-[#070329] underline decoration-dotted underline-offset-2"
+                        >
+                          Edit customization
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Adjust Quantities and trash action */}

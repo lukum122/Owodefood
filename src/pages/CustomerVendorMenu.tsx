@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
 import { compressImageToDataUrl } from "../imageUtils";
@@ -7,7 +7,8 @@ import { Star, MapPin, ArrowLeft, Plus, Minus, Check, ThumbsUp, Clock, Info, Shi
 
 export const CustomerVendorMenu: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [], placeOrder, orders, updateVendorOrder, coverageGuideText } = useDatabase();
+  const { vendors, products, addToCart, cart, updateCartQuantity, clearCart, currency, reviews, addReview, currentUser, savedAddresses, getUserWalletBalance, calculateDeliveryFee, paymentGateways, receiptPickupConfig, availableLocations = [], placeOrder, orders, updateVendorOrder, coverageGuideText, updateCartItemAddons } = useDatabase();
+  const location = useLocation();
   
   // Sync favorites
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -17,6 +18,36 @@ export const CustomerVendorMenu: React.FC = () => {
   });
 
   const vendorObj = vendors.find(v => v.id === id);
+
+  // Coming from Cart's "Edit customization" link -- reopen this exact
+  // item's customization modal, pre-filled with what's already selected,
+  // so the customer can change it in place instead of removing and
+  // re-adding the item from scratch.
+  useEffect(() => {
+    const editCartItemId = (location.state as any)?.editCartItemId;
+    if (!editCartItemId) return;
+    const cartItem = cart.find(ci => ci.id === editCartItemId);
+    if (!cartItem) return;
+    const product = products.find(p => p.id === cartItem.product.id);
+    if (!product) return;
+
+    const prefilled: Record<string, any> = {};
+    (cartItem.selectedAddons || []).forEach(sa => {
+      const group = (product.addonGroups || []).find(g => g.addons.some(a => a.id === sa.id));
+      if (group) {
+        prefilled[sa.id] = { addon: sa, quantity: sa.quantity || 1, groupId: group.id };
+      }
+    });
+
+    setAddonSelections(prefilled);
+    setCustomizingProduct(product);
+    setEditingCartItemId(editCartItemId);
+    // Clear the navigation state so refreshing or navigating back doesn't
+    // re-trigger this.
+    window.history.replaceState({}, document.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, products]);
+
 
   const isFavorite = vendorObj ? favorites.includes(vendorObj.id) : false;
 
@@ -50,6 +81,10 @@ export const CustomerVendorMenu: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"menu" | "reviews" | "info" | "pickup">("menu");
   const [productToOverwrite, setProductToOverwrite] = useState<any | null>(null);
   const [customizingProduct, setCustomizingProduct] = useState<any | null>(null);
+  // Tracks which existing Cart entry we're editing, if any -- when set,
+  // saving updates that cart item's addons in place instead of adding a
+  // new, separate line to the cart.
+  const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [selectedAddons, setSelectedAddons] = useState<any[]>([]);
   const [addonSelections, setAddonSelections] = useState<Record<string, any>>({});
 
@@ -169,6 +204,23 @@ export const CustomerVendorMenu: React.FC = () => {
     if (!isVendorOpen(vendorObj)) {
       return;
     }
+
+    if (editingCartItemId) {
+      // Editing an item already in the cart for this same vendor -- the
+      // different-vendor overwrite check below doesn't apply here, since
+      // this item is already correctly in the cart.
+      updateCartItemAddons(editingCartItemId, addons);
+      setAddedBanner(`${p.name} updated`);
+      setCustomizingProduct(null);
+      setSelectedAddons([]);
+      setAddonSelections({});
+      setEditingCartItemId(null);
+      setTimeout(() => {
+        setAddedBanner(null);
+      }, 2500);
+      return;
+    }
+
     if (cart.length > 0 && cart[0].product.vendorId !== vendorObj.id) {
       setProductToOverwrite({ product: p, addons });
       setCustomizingProduct(null);
@@ -1333,7 +1385,7 @@ export const CustomerVendorMenu: React.FC = () => {
                   referrerPolicy="no-referrer"
                 />
                 <button 
-                  onClick={() => setCustomizingProduct(null)}
+                  onClick={() => { setCustomizingProduct(null); setEditingCartItemId(null); }}
                   className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white cursor-pointer transition"
                 >
                   <X className="w-4 h-4" />
@@ -1534,7 +1586,7 @@ export const CustomerVendorMenu: React.FC = () => {
                   }`}
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Custom Basket</span>
+                  <span>{editingCartItemId ? "Update Basket Item" : "Add Custom Basket"}</span>
                 </button>
               </div>
 
