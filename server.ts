@@ -3961,13 +3961,30 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     // itself with the order details as the caption; everything else gets
     // the plain text alert.
     const escapeHtml = (str: string) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // Item list with addons, since admin's own order detail view was
+    // fixed to show these -- Telegram should carry the same information,
+    // not just the order total, so a vendor/rider can act on the alert
+    // without needing to open the admin panel first.
+    const itemsListText = (items || []).map((item: any) => {
+      let line = `• ${escapeHtml(item.name)} x${item.quantity}`;
+      if (item.selectedAddons && item.selectedAddons.length > 0) {
+        const addonsText = item.selectedAddons.map((a: any) => `${escapeHtml(a.name)}${a.quantity && a.quantity > 1 ? ` x${a.quantity}` : ""}`).join(", ");
+        line += ` (+ ${addonsText})`;
+      }
+      return line;
+    }).join("\n");
+
     const telegramCaption =
       `🔔 <b>New Order Received!</b>\n\n` +
       `<b>Order:</b> #${orderId}\n` +
       `<b>Vendor:</b> ${escapeHtml(vendorName)}\n` +
       `<b>Customer:</b> ${escapeHtml(customerName)}\n` +
+      `<b>Phone:</b> ${escapeHtml(customerPhone)}\n` +
+      (isReceiptPickup ? "" : `<b>Delivery Address:</b> ${escapeHtml(deliveryAddress)}\n`) +
       `<b>Amount:</b> ₦${finalTotal.toLocaleString()}\n` +
-      `<b>Payment:</b> ${escapeHtml(paymentMethod)}`;
+      `<b>Payment:</b> ${escapeHtml(paymentMethod)}` +
+      (itemsListText ? `\n\n<b>Items:</b>\n${itemsListText}` : "");
 
     if (isBankTransfer && receiptImage) {
       // Telegram gets the ORIGINAL raw image data, not the R2-converted
