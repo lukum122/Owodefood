@@ -85,7 +85,7 @@ export const CustomerCart: React.FC = () => {
 
           <div className="divide-y divide-gray-100 text-xs">
             {cart.map((item) => {
-              const itemAddonPrice = (item.selectedAddons || []).reduce((s, a) => s + (a.price ?? 0), 0);
+              const itemAddonPrice = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
               const singleItemTotal = item.product.price + itemAddonPrice;
 
               return (
@@ -100,7 +100,7 @@ export const CustomerCart: React.FC = () => {
                   </div>
 
                   <div className="flex-grow min-w-0">
-                    <h4 className="font-extrabold text-xs sm:text-sm text-gray-900 truncate">{item.product.name}</h4>
+                    <h4 className="font-extrabold text-xs sm:text-sm text-gray-900 leading-snug line-clamp-2">{item.product.name}</h4>
                     <p className="text-[11px] text-gray-400 leading-snug tracking-tight line-clamp-1">{item.product.description}</p>
                     
                     {/* Selected Extras list */}

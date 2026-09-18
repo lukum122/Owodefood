@@ -840,14 +840,29 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 text-xs text-gray-755">
-                    {selectedOrder.items.map((oi) => (
-                      <tr key={oi.id} className="hover:bg-gray-150/45 transition">
-                        <td className="py-3 px-4 font-sans font-bold text-gray-900">{oi.name}</td>
-                        <td className="py-3 px-4 font-mono text-center font-bold text-gray-600">{oi.quantity}</td>
-                        <td className="py-3 px-4 font-mono text-right text-gray-500">{currency}{(oi.price ?? 0).toLocaleString()}</td>
-                        <td className="py-3 px-4 font-mono text-right font-black text-gray-950">{currency}{((oi.price ?? 0) * oi.quantity).toLocaleString()}</td>
-                      </tr>
-                    ))}
+                    {selectedOrder.items.map((oi) => {
+                      const itemAddonTotal = (oi.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
+                      const itemUnitTotal = (oi.price ?? 0) + itemAddonTotal;
+                      return (
+                        <tr key={oi.id} className="hover:bg-gray-150/45 transition">
+                          <td className="py-3 px-4 font-sans font-bold text-gray-900">
+                            {oi.name}
+                            {oi.selectedAddons && oi.selectedAddons.length > 0 && (
+                              <div className="mt-1 flex flex-col gap-0.5">
+                                {oi.selectedAddons.map((addon, idx) => (
+                                  <span key={idx} className="text-[10px] text-gray-500 font-semibold font-mono">
+                                    + {addon.name}{addon.quantity && addon.quantity > 1 ? ` x${addon.quantity}` : ""} ({currency}{((addon.price ?? 0) * (addon.quantity ?? 1)).toLocaleString()})
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-center font-bold text-gray-600">{oi.quantity}</td>
+                          <td className="py-3 px-4 font-mono text-right text-gray-500">{currency}{itemUnitTotal.toLocaleString()}</td>
+                          <td className="py-3 px-4 font-mono text-right font-black text-gray-950">{currency}{(itemUnitTotal * oi.quantity).toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -856,7 +871,15 @@ export const AdminOrders: React.FC = () => {
             {/* Financial Summary Breakdown */}
             <div className="bg-gray-50 p-5 rounded-2xl border border-gray-150 text-xs space-y-2.5">
               {(() => {
-                const subTotal = selectedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                // Includes each item's addon cost -- without this, the
+                // "remainder" delivery-fee calculation below would
+                // silently absorb addon cost into what it labels as
+                // delivery, since it assumes subTotal + vat + svc +
+                // delivery accounts for the whole total.
+                const subTotal = selectedOrder.items.reduce((sum, item) => {
+                  const addonTotal = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
+                  return sum + ((item.price + addonTotal) * item.quantity);
+                }, 0);
                 const vat = selectedOrder.tax ?? (vatEnabled ? subTotal * (vatRate / 100) : 0);
                 const svc = selectedOrder.serviceFee ?? 0;
                 const del = Math.max(0, selectedOrder.totalAmount - subTotal - vat - svc);
