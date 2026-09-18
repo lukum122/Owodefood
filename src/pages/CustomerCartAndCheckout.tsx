@@ -100,7 +100,7 @@ export const CustomerCart: React.FC = () => {
                   </div>
 
                   <div className="flex-grow min-w-0">
-                    <h4 className="font-extrabold text-xs sm:text-sm text-gray-900 leading-snug line-clamp-2">{item.product.name}</h4>
+                    <h4 className="font-extrabold text-xs sm:text-sm text-gray-900 leading-snug">{item.product.name}</h4>
                     <p className="text-[11px] text-gray-400 leading-snug tracking-tight line-clamp-1">{item.product.description}</p>
                     
                     {/* Selected Extras list */}
@@ -178,9 +178,10 @@ export const CustomerCart: React.FC = () => {
               </div>
             )}
             <div className="flex justify-between">
-              <span>Standard Courier Delivery</span>
+              <span>Estimated Delivery Fee</span>
               <span>{currency}{deliveryFee.toLocaleString()}</span>
             </div>
+            <p className="text-[10px] text-gray-400 -mt-1.5">Final fee confirmed based on your delivery address.</p>
             <div className="flex justify-between">
               <span>Service Fee</span>
               <span>{currency}{serviceFee.toLocaleString()}</span>

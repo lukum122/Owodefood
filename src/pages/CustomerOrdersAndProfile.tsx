@@ -235,12 +235,27 @@ export const CustomerOrders: React.FC = () => {
                           )}
                         </div>
                       ) : (
-                        order.items.map((item, id) => (
-                          <div key={id} className="py-2 flex justify-between">
-                            <span className="text-gray-600">{item.name} <b className="text-gray-900">x{item.quantity}</b></span>
-                            <span className="font-bold text-gray-800 font-mono">{currency}{((item.price ?? 0) * item.quantity).toLocaleString()}</span>
-                          </div>
-                        ))
+                        order.items.map((item, id) => {
+                          const itemAddonTotal = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
+                          const itemUnitTotal = (item.price ?? 0) + itemAddonTotal;
+                          return (
+                            <div key={id} className="py-2 flex justify-between">
+                              <div className="min-w-0">
+                                <span className="text-gray-600">{item.name} <b className="text-gray-900">x{item.quantity}</b></span>
+                                {item.selectedAddons && item.selectedAddons.length > 0 && (
+                                  <div className="flex flex-col gap-0.5 mt-0.5">
+                                    {item.selectedAddons.map((addon, aIdx) => (
+                                      <span key={aIdx} className="text-[10px] text-gray-400 font-medium">
+                                        + {addon.name}{addon.quantity && addon.quantity > 1 ? ` x${addon.quantity}` : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="font-bold text-gray-800 font-mono shrink-0 ml-2">{currency}{(itemUnitTotal * item.quantity).toLocaleString()}</span>
+                            </div>
+                          );
+                        })
                       )}
                       {order.serviceFee !== undefined && order.serviceFee !== null && (
                         <div className="py-2 flex justify-between text-[11px] font-medium border-t border-dashed border-gray-200 mt-1 pt-2">
