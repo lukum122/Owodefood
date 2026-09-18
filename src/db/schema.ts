@@ -117,6 +117,12 @@ export const orderItems = pgTable("order_items", {
   name: text("name").notNull(),
   price: integer("price").notNull(),
   quantity: integer("quantity").notNull(),
+  // The addons a customer selected for this specific item (name, price,
+  // quantity for each). Previously this was sent by the frontend at
+  // checkout but silently dropped, since there was nowhere to store it --
+  // meaning it was never visible in admin, and its cost got miscounted as
+  // part of the delivery fee in any "remainder" calculation.
+  selectedAddons: jsonb("selected_addons"),
 }, (table) => ({
   orderIdIdx: index("order_items_order_id_idx").on(table.orderId),
 }));
