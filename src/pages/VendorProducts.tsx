@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { Product } from "../types";
-import { Plus, Trash2, Edit3, ArrowLeft, Heart, Sparkles, CheckCircle2, Check, X, Upload, Image } from "lucide-react";
+import { Plus, Trash2, Edit3, ArrowLeft, Heart, Sparkles, CheckCircle2, Check, X, Upload, Image, Copy } from "lucide-react";
 import { compressImageToDataUrl } from "../imageUtils";
 
 export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ mode = "list" }) => {
@@ -58,6 +58,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   // Get vendor's food items
   const myProducts = products.filter(p => p.vendorId === currentVendor.id);
   const editingProduct = id ? products.find(p => p.id === id) : null;
+  const location = useLocation();
 
   // Initialize fields on editing product load
   useEffect(() => {
@@ -73,6 +74,29 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setAddonGroups(editingProduct.addonGroups || []);
       setPriority(editingProduct.priority ?? 0);
     } else if (mode === "new") {
+      const duplicateFrom = (location.state as any)?.duplicateFrom;
+      if (duplicateFrom) {
+        // Pre-fill from the source product -- everything except name
+        // (gets a "(Copy)" suffix so it's obviously not the same item
+        // until the vendor renames it) and stock status (a fresh
+        // duplicate always starts in stock, regardless of whether the
+        // original was sold out).
+        setName(`${duplicateFrom.name} (Copy)`);
+        setDescription(duplicateFrom.description);
+        setPrice(duplicateFrom.price != null ? duplicateFrom.price.toString() : "");
+        setImage(duplicateFrom.image);
+        setCategory(duplicateFrom.category);
+        setIsAvailable(true);
+        setAddons(duplicateFrom.addons || []);
+        setMaxAddons(duplicateFrom.maxAddons != null ? duplicateFrom.maxAddons.toString() : "");
+        // Fresh group IDs for the duplicate, rather than reusing the
+        // source product's, to avoid any edit-state confusion between
+        // the two now-separate products.
+        setAddonGroups((duplicateFrom.addonGroups || []).map((g: any) => ({ ...g, id: "group-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) })));
+        setPriority(duplicateFrom.priority ?? 0);
+        window.history.replaceState({}, document.title);
+        return;
+      }
       setName("");
       setDescription("");
       setPrice("");
@@ -1153,6 +1177,13 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                       title="Edit dish characteristics"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => navigate("/vendor/products/new", { state: { duplicateFrom: p } })}
+                      className="p-1.5 bg-gray-100 hover:bg-gray-200 hover:text-[#0ea5e9] rounded-lg text-gray-600 cursor-pointer"
+                      title="Duplicate this dish as a new item"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(p.id)}
