@@ -2287,6 +2287,7 @@ export const AdminVendors: React.FC = () => {
   const [editImmediateDeliveryEnabled, setEditImmediateDeliveryEnabled] = useState<boolean>(true);
   const [editOpeningTime, setEditOpeningTime] = useState("08:00");
   const [editClosingTime, setEditClosingTime] = useState("22:00");
+  const [editAdminHoursOverrideActive, setEditAdminHoursOverrideActive] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -2336,6 +2337,7 @@ export const AdminVendors: React.FC = () => {
     setEditImmediateDeliveryEnabled(v.immediateDeliveryEnabled !== false);
     setEditOpeningTime(v.openingTime || "08:00");
     setEditClosingTime(v.closingTime || "22:00");
+    setEditAdminHoursOverrideActive(v.adminHoursOverrideActive || false);
     setEditDescription(v.description || "");
     setSuccessMsg("");
   };
@@ -2378,6 +2380,7 @@ export const AdminVendors: React.FC = () => {
       immediateDeliveryEnabled: editImmediateDeliveryEnabled,
       openingTime: editOpeningTime,
       closingTime: editClosingTime,
+      adminHoursOverrideActive: editAdminHoursOverrideActive,
       description: editDescription,
     });
 
@@ -2869,6 +2872,30 @@ export const AdminVendors: React.FC = () => {
                       onChange={(e) => setEditClosingTime(e.target.value)}
                       className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none focus:ring-4 focus:ring-sky-100 transition font-mono font-bold text-gray-900"
                     />
+                  </div>
+                </div>
+
+                {/* Admin Hours Override -- without this active, the vendor's
+                    own per-day schedule (set in their own Settings) always
+                    wins over the Opens At/Closes At fields above, which
+                    otherwise do nothing at all. Their own schedule is never
+                    touched by this -- just set aside while this is on, and
+                    only admin can turn it back off. */}
+                <div className="md:col-span-2 flex items-start gap-3 p-3.5 bg-amber-50/60 border border-amber-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setEditAdminHoursOverrideActive(!editAdminHoursOverrideActive)}
+                    className={`shrink-0 w-10 h-6 rounded-full transition relative cursor-pointer ${editAdminHoursOverrideActive ? "bg-amber-500" : "bg-gray-250"}`}
+                  >
+                    <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition ${editAdminHoursOverrideActive ? "left-[18px]" : "left-0.5"}`} />
+                  </button>
+                  <div>
+                    <p className="text-[11px] font-extrabold text-amber-800">Admin Hours Override {editAdminHoursOverrideActive ? "Active" : "Inactive"}</p>
+                    <p className="text-[10px] text-amber-700/80 leading-relaxed mt-0.5">
+                      {editAdminHoursOverrideActive
+                        ? "The Opens At / Closes At times above control this vendor's availability every day, overriding their own schedule. Their own schedule is untouched and resumes the instant this is switched off."
+                        : "Off by default: this vendor's own per-day schedule controls their availability, and Opens At / Closes At above have no effect. Turn this on to take direct control."}
+                    </p>
                   </div>
                 </div>
 
