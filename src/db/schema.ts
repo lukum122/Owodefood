@@ -29,6 +29,14 @@ export const vendors = pgTable("vendors", {
   closingTime: text("closing_time"),
   openingDays: jsonb("opening_days"),
   operatingHours: jsonb("operating_hours"),
+  // When true, openingTime/closingTime above take priority over the
+  // vendor's own per-day operatingHours (which normally wins). The
+  // vendor's operatingHours is never modified by this -- it's just set
+  // aside while this is active, and takes effect again immediately, with
+  // no data lost, the moment this is turned back off. Only admin can
+  // turn this off, by design -- a vendor editing their own hours again
+  // doesn't clear it, so it can't be silently undone.
+  adminHoursOverrideActive: boolean("admin_hours_override_active").default(false),
   isTemporarilyClosed: boolean("is_temporarily_closed").default(false),
   coverImage: text("cover_image"),
   category: text("category"),
