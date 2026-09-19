@@ -55,6 +55,7 @@ export interface Vendor {
   createdAt: string;
   openingTime?: string;
   closingTime?: string;
+  adminHoursOverrideActive?: boolean; // when true, openingTime/closingTime above override the vendor's own operatingHours; only admin can toggle this
   openingDays?: string[]; // e.g., ["Monday", "Tuesday", etc.]
   operatingHours?: Record<string, DailyHours>; // More detailed daily hours mapping
   isTemporarilyClosed?: boolean;
@@ -254,8 +255,13 @@ export function isVendorOpen(vendor: any): boolean {
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const currentDayName = daysOfWeek[now.getDay()];
 
-  // If operatingHours is present, use it as the authoritative source
-  if (vendor.operatingHours && typeof vendor.operatingHours === 'object' && Object.keys(vendor.operatingHours).length > 0) {
+  // If operatingHours is present, use it as the authoritative source --
+  // unless admin has explicitly activated an override, in which case the
+  // legacy openingTime/closingTime fields below take priority instead.
+  // The vendor's operatingHours is never touched by this; it's just
+  // skipped over while the override is active, and resumes controlling
+  // things immediately once admin turns it back off.
+  if (!vendor.adminHoursOverrideActive && vendor.operatingHours && typeof vendor.operatingHours === 'object' && Object.keys(vendor.operatingHours).length > 0) {
     const todayHours = vendor.operatingHours[currentDayName];
     if (!todayHours || !todayHours.isOpen) {
       return false;
