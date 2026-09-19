@@ -5,12 +5,23 @@ import { Product } from "../types";
 import { Plus, Trash2, Edit3, ArrowLeft, Heart, Sparkles, CheckCircle2, Check, X, Upload, Image, Copy } from "lucide-react";
 import { compressImageToDataUrl } from "../imageUtils";
 
-export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ mode = "list" }) => {
-  const { id } = useParams<{ id: string }>();
+export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit"; vendorIdOverride?: string }> = ({ mode = "list", vendorIdOverride }) => {
+  const { id, vendorId: vendorIdFromRoute } = useParams<{ id: string; vendorId: string }>();
   const navigate = useNavigate();
-  const { currentVendor, products, addProduct, updateProduct, deleteProduct, categories, currency } = useDatabase();
+  const { currentVendor, vendors, products, addProduct, updateProduct, deleteProduct, categories, currency } = useDatabase();
+  // Lets admin manage a specific vendor's products directly (viewing on
+  // that vendor's behalf) without needing to be logged in as them --
+  // everything below uses this instead of the logged-in vendor's own
+  // session whenever it's provided.
+  const effectiveVendorId = vendorIdOverride || vendorIdFromRoute;
+  const effectiveVendor = effectiveVendorId ? vendors.find(v => v.id === effectiveVendorId) : currentVendor;
+  // Every internal navigation below needs to stay within whichever
+  // context this is being used from -- a vendor managing their own menu
+  // stays on /vendor/products/..., while admin managing it on a vendor's
+  // behalf stays on the admin route, carrying the vendor id along.
+  const basePath = effectiveVendorId ? `/admin/vendor-products/${effectiveVendorId}` : "/vendor/products";
   
-  const filteredCategories = categories.filter(c => !c.vendorCategoryId || c.vendorCategoryId === currentVendor?.category || c.vendorCategoryId === "global");
+  const filteredCategories = categories.filter(c => !c.vendorCategoryId || c.vendorCategoryId === effectiveVendor?.category || c.vendorCategoryId === "global");
 
   // Selected state if editing
   const [name, setName] = useState("");
@@ -51,12 +62,12 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  if (!currentVendor) {
+  if (!effectiveVendor) {
     return <div className="text-gray-500 font-bold">No active restaurant brand linked.</div>;
   }
 
   // Get vendor's food items
-  const myProducts = products.filter(p => p.vendorId === currentVendor.id);
+  const myProducts = products.filter(p => p.vendorId === effectiveVendor.id);
   const editingProduct = id ? products.find(p => p.id === id) : null;
   const location = useLocation();
 
@@ -371,7 +382,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
 
     if (mode === "new") {
       const result = await addProduct({
-        vendorId: currentVendor.id,
+        vendorId: effectiveVendor.id,
         name,
         description,
         price: parsedPrice,
@@ -396,7 +407,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       // click from sneaking in during that window.
       setTimeout(() => {
         setIsSubmitting(false);
-        navigate("/vendor/products");
+        navigate(basePath);
       }, 1200);
     } else if (mode === "edit" && editingProduct) {
       const result = await updateProduct({
@@ -420,7 +431,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
       setSuccessStr("Success! Product details were hot-swapped and saved.");
       setTimeout(() => {
         setIsSubmitting(false);
-        navigate("/vendor/products");
+        navigate(basePath);
       }, 1200);
     } else {
       // Neither branch matched (shouldn't normally happen) — don't leave the button stuck disabled.
@@ -457,7 +468,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   if (mode === "new" || mode === "edit") {
     return (
       <div className="max-w-2xl mx-auto space-y-6 font-sans text-gray-900">
-        <Link to="/vendor/products" className="inline-flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-gray-950 transition">
+        <Link to={basePath} className="inline-flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-gray-950 transition">
           <ArrowLeft className="w-4 h-4" />
           Cancel and return to list
         </Link>
@@ -1059,7 +1070,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
             <div className="pt-4 border-t border-gray-50 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => navigate("/vendor/products")}
+                onClick={() => navigate(basePath)}
                 className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-extrabold rounded-xl transition"
               >
                 Abrupt Cancel
@@ -1121,7 +1132,7 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
         </div>
 
         <button
-          onClick={() => navigate("/vendor/products/new")}
+          onClick={() => navigate(`${basePath}/new`)}
           className="py-2.5 px-4.5 bg-[#070329] hover:bg-blue-900 border border-blue-950 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow cursor-pointer text-center"
         >
           <Plus className="w-4 h-4 text-green-300" />
@@ -1193,14 +1204,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
                   
                   <div className="flex gap-1">
                     <button
-                      onClick={() => navigate(`/vendor/products/edit/${p.id}`)}
+                      onClick={() => navigate(`${basePath}/edit/${p.id}`)}
                       className="p-1.5 bg-gray-100 hover:bg-gray-200 hover:text-blue-600 rounded-lg text-gray-600 cursor-pointer"
                       title="Edit dish characteristics"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => navigate("/vendor/products/new", { state: { duplicateFrom: p } })}
+                      onClick={() => navigate(`${basePath}/new`, { state: { duplicateFrom: p } })}
                       className="p-1.5 bg-gray-100 hover:bg-gray-200 hover:text-[#0ea5e9] rounded-lg text-gray-600 cursor-pointer"
                       title="Duplicate this dish as a new item"
                     >
