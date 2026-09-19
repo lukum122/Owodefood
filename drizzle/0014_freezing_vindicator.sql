@@ -1,0 +1,1 @@
+ALTER TABLE "vendors" ADD COLUMN "admin_hours_override_active" boolean DEFAULT false;
