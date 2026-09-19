@@ -2303,6 +2303,22 @@ export const AdminVendors: React.FC = () => {
     }
   };
 
+  // Separate from status (approved/suspended/rejected) -- this is a
+  // vendor-initiated-style pause, the same field they can already toggle
+  // themselves in their own Settings, just now reachable directly from
+  // here too. Useful when a vendor is unreachable and genuinely can't
+  // fulfill anything right now (no power, no staff), so no new orders
+  // reach them until either side turns it back on.
+  const [togglingClosedId, setTogglingClosedId] = useState<string | null>(null);
+  const handleToggleTemporaryClose = async (v: Vendor) => {
+    setTogglingClosedId(v.id);
+    const result = await adminUpdateVendor(v.id, { isTemporarilyClosed: !v.isTemporarilyClosed });
+    setTogglingClosedId(null);
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update this vendor's open status. Please check your connection and try again.");
+    }
+  };
+
   const openVendorDetails = (v: Vendor) => {
     setSelectedVendor(v);
     setEditName(v.name);
@@ -2592,12 +2608,28 @@ export const AdminVendors: React.FC = () => {
                                 </button>
                               </div>
                             ) : v.status === "approved" ? (
-                              <button
-                                onClick={() => handleApproval(v.id, "suspended")}
-                                className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-600 font-bold border border-red-100 rounded-lg cursor-pointer text-[10px] transition"
-                              >
-                                Suspend
-                              </button>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleApproval(v.id, "suspended")}
+                                  className="py-1 px-2.5 bg-red-50 hover:bg-red-105 text-red-600 font-bold border border-red-100 rounded-lg cursor-pointer text-[10px] transition"
+                                >
+                                  Suspend
+                                </button>
+                                <button
+                                  disabled={togglingClosedId === v.id}
+                                  onClick={() => handleToggleTemporaryClose(v)}
+                                  title={v.isTemporarilyClosed ? "Reopen this vendor -- they can start receiving orders again" : "Temporarily pause this vendor -- no new orders reach them until reopened"}
+                                  className={`py-1 px-2.5 font-bold border rounded-lg text-[10px] transition ${
+                                    togglingClosedId === v.id
+                                      ? "bg-gray-100 text-gray-400 border-gray-150 cursor-wait"
+                                      : v.isTemporarilyClosed
+                                        ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-100 cursor-pointer"
+                                        : "bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-150 cursor-pointer"
+                                  }`}
+                                >
+                                  {togglingClosedId === v.id ? "..." : v.isTemporarilyClosed ? "Reopen" : "Pause"}
+                                </button>
+                              </div>
                             ) : (
                               <button
                                 onClick={() => handleApproval(v.id, "approved")}
