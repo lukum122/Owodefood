@@ -2307,6 +2307,10 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             payload.commissionType = existingVendor[0].commissionType;
             payload.commissionValue = existingVendor[0].commissionValue;
             payload.userId = existingVendor[0].userId;
+            // Only admin can activate or release this -- a vendor saving
+            // their own settings (this same action) must never be able
+            // to change it themselves, whether by accident or on purpose.
+            payload.adminHoursOverrideActive = existingVendor[0].adminHoursOverrideActive;
           } else {
             payload.status = "pending";
             payload.rating = 5.0;
@@ -2341,6 +2345,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           createdAt: payload.createdAt || new Date().toISOString(),
           openingTime: payload.openingTime,
           closingTime: payload.closingTime,
+          adminHoursOverrideActive: payload.adminHoursOverrideActive,
           openingDays: payload.openingDays,
           operatingHours: payload.operatingHours,
           isTemporarilyClosed: payload.isTemporarilyClosed,
@@ -2370,6 +2375,7 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             status: payload.status,
             openingTime: payload.openingTime,
             closingTime: payload.closingTime,
+            adminHoursOverrideActive: payload.adminHoursOverrideActive,
             openingDays: payload.openingDays,
             operatingHours: payload.operatingHours,
             isTemporarilyClosed: payload.isTemporarilyClosed,
