@@ -218,6 +218,9 @@ function AppShell() {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="vendors" element={<AdminVendors />} />
+            <Route path="vendor-products/:vendorId" element={<VendorProducts mode="list" />} />
+            <Route path="vendor-products/:vendorId/new" element={<VendorProducts mode="new" />} />
+            <Route path="vendor-products/:vendorId/edit/:id" element={<VendorProducts mode="edit" />} />
             <Route path="riders" element={<AdminRiders />} />
             <Route path="customers" element={<AdminCustomers />} />
             <Route path="pos" element={<AdminPOS />} />
