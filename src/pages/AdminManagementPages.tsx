@@ -2180,7 +2180,7 @@ export const AdminOrders: React.FC = () => {
 
 /* 2. MERCHANT LICENSE MANAGER SCREEN */
 export const AdminVendors: React.FC = () => {
-  const { vendors, users, toggleVendorStatus, adminUpdateVendor, createVendorDirectly, products, vendorCategories, currency, availableLocations = [], fetchFullUsers } = useDatabase();
+  const { vendors, users, toggleVendorStatus, adminUpdateVendor, createVendorDirectly, products, updateProduct, vendorCategories, currency, availableLocations = [], fetchFullUsers } = useDatabase();
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   useEffect(() => {
@@ -2338,6 +2338,17 @@ export const AdminVendors: React.FC = () => {
     setEditClosingTime(v.closingTime || "22:00");
     setEditDescription(v.description || "");
     setSuccessMsg("");
+  };
+
+  const [togglingProductId, setTogglingProductId] = useState<string | null>(null);
+
+  const handleToggleProductStock = async (product: any) => {
+    setTogglingProductId(product.id);
+    const result = await updateProduct({ ...product, isAvailable: !product.isAvailable });
+    setTogglingProductId(null);
+    if (!result?.success) {
+      window.alert(result?.error || "Failed to update stock status. Please check your connection and try again.");
+    }
   };
 
   const handleSaveChanges = async () => {
@@ -3010,6 +3021,50 @@ export const AdminVendors: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Products stock management -- lets admin (or an employee
+                with manage_vendors permission) mark an item out of stock
+                on the vendor's behalf, e.g. when a vendor is unreachable
+                and something has genuinely run out. Reuses the exact
+                same save path a vendor's own product page uses. */}
+            <div className="p-6 border-t border-gray-100 space-y-4">
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="w-4 h-4 text-gray-400" />
+                <h4 className="text-sm font-black text-[#070329] uppercase tracking-wider">Menu Stock Status</h4>
+              </div>
+              {(() => {
+                const vendorProducts = products.filter(p => p.vendorId === selectedVendor.id);
+                if (vendorProducts.length === 0) {
+                  return <p className="text-xs text-gray-400">This vendor has no products yet.</p>;
+                }
+                return (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {vendorProducts.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50/70 border border-gray-100 rounded-xl">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-900 truncate">{p.name}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{currency}{(p.price ?? 0).toLocaleString()}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={togglingProductId === p.id}
+                          onClick={() => handleToggleProductStock(p)}
+                          className={`shrink-0 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase transition ${
+                            togglingProductId === p.id
+                              ? "bg-gray-200 text-gray-400 cursor-wait"
+                              : p.isAvailable
+                                ? "bg-green-500/90 hover:bg-green-600 text-white cursor-pointer"
+                                : "bg-red-600/90 hover:bg-red-700 text-white cursor-pointer"
+                          }`}
+                        >
+                          {togglingProductId === p.id ? "Saving..." : p.isAvailable ? "In Stock" : "Sold Out"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Footer */}
