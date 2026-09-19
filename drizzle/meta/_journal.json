@@ -99,6 +99,13 @@
       "when": 1789711213321,
       "tag": "0013_awesome_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789808922323,
+      "tag": "0014_freezing_vindicator",
+      "breakpoints": true
     }
   ]
 }
