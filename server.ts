@@ -2431,7 +2431,8 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "PRODUCT_UPSERT": {
-        if (!isAdmin) {
+        const canManageAnyVendor = isAdmin || (await hasPermission(reqUser, "manage_vendors"));
+        if (!canManageAnyVendor) {
           const userVendor = await db.select().from(vendors).where(eq(vendors.userId, reqUser.id)).limit(1);
           if (!userVendor.length || userVendor[0].id !== payload.vendorId) return res.status(403).json({ error: "Forbidden: Product does not belong to your vendor account." });
           
