@@ -238,6 +238,14 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
   const handleRemoveAddon = (addonId: string, e: React.MouseEvent) => {
     e.preventDefault();
     setAddons(addons.filter(a => a.id !== addonId));
+    // Same reasoning as the edit fix above -- without this, a deleted
+    // addon would still linger as a "ghost" inside any group that had
+    // already snapshotted it, still visible and selectable to customers
+    // even though it no longer exists in the product's own addon list.
+    setAddonGroups(addonGroups.map(g => ({
+      ...g,
+      addons: g.addons.filter(a => a.id !== addonId),
+    })));
     if (editingAddonId === addonId) {
       setEditingAddonId(null);
     }
@@ -255,8 +263,21 @@ export const VendorProducts: React.FC<{ mode?: "list" | "new" | "edit" }> = ({ m
     if (!editingAddonName.trim()) return;
     const parsed = parseFloat(editingAddonPrice);
     const finalPrice = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    const updatedAddon = { name: editingAddonName.trim(), price: finalPrice };
 
-    setAddons(addons.map(a => a.id === editingAddonId ? { ...a, name: editingAddonName.trim(), price: finalPrice } : a));
+    setAddons(addons.map(a => a.id === editingAddonId ? { ...a, ...updatedAddon } : a));
+
+    // Addon groups keep their own one-time snapshot copy of each addon's
+    // name/price, taken at the moment it was added to the group -- not a
+    // live link back to this master list. Without this, renaming an
+    // addon here would silently leave every group that already included
+    // it showing the old name/price forever, with no obvious way for a
+    // vendor to notice or fix it themselves.
+    setAddonGroups(addonGroups.map(g => ({
+      ...g,
+      addons: g.addons.map(a => a.id === editingAddonId ? { ...a, ...updatedAddon } : a),
+    })));
+
     setEditingAddonId(null);
   };
 
