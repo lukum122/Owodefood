@@ -1272,10 +1272,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     for (let dayOffset = 0; dayOffset <= 1 && results.length === 0; dayOffset++) {
       const targetDate = new Date(now);
       targetDate.setDate(targetDate.getDate() + dayOffset);
-      const dateStr = targetDate.toISOString().split("T")[0];
+      // Uses the browser's own local date fields (Nigeria time for a
+      // customer actually in Nigeria), not toISOString() -- that
+      // converts to UTC first, which can silently roll over to the
+      // wrong calendar date late at night or early in the morning.
+      const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
 
       for (const time of batchDeliveryTimes) {
-        const batchDateTime = new Date(`${dateStr}T${time}:00`);
+        // Explicitly West Africa Time (+01:00) -- matches the same fix
+        // on the backend's own version of this exact calculation, so
+        // both sides agree on the same absolute moment regardless of
+        // which timezone the browser or server happens to be running
+        // in.
+        const batchDateTime = new Date(`${dateStr}T${time}:00+01:00`);
         const cutoffTime = new Date(batchDateTime.getTime() - effectiveCutoffMinutes * 60000);
         if (now <= cutoffTime) {
           const label = dayOffset === 0 ? `Today, ${time}` : `Tomorrow, ${time}`;
