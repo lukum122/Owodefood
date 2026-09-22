@@ -3826,7 +3826,14 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
         return res.status(400).json({ error: "Batch delivery is not available for this delivery zone." });
       }
 
-      const batchDateTime = new Date(`${batchDate}T${batchTime}:00`);
+      // Explicitly West Africa Time (+01:00) -- without this, this string
+      // gets parsed using whatever timezone the server process happens
+      // to be running in (typically UTC on a cloud VPS), while the
+      // customer's own browser correctly parses the identical string as
+      // Nigeria time. That mismatch meant this check could reject a
+      // batch slot the frontend had just shown as open, regardless of
+      // how early the order was actually placed.
+      const batchDateTime = new Date(`${batchDate}T${batchTime}:00+01:00`);
       const cutoffTime = new Date(batchDateTime.getTime() - effectiveCutoffMinutes * 60000);
       if (isNaN(batchDateTime.getTime()) || new Date() > cutoffTime) {
         return res.status(400).json({ error: "That batch's ordering window has closed. Please choose a different batch or order now." });
