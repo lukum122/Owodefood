@@ -249,7 +249,12 @@ export interface Review {
 
 export function isVendorOpen(vendor: any): boolean {
   if (!vendor) return false;
-  if (vendor.isTemporarilyClosed) return false;
+  // Admin's explicit override means full control -- not "control, except
+  // for these other flags." Without this, a vendor marked temporarily
+  // closed (by themselves, or by admin's own Pause button) would keep
+  // showing closed even after admin turned this override on specifically
+  // to force them open, which defeats the entire point of it.
+  if (vendor.isTemporarilyClosed && !vendor.adminHoursOverrideActive) return false;
 
   const now = new Date();
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -288,8 +293,13 @@ export function isVendorOpen(vendor: any): boolean {
     return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
   }
 
-  // Fallback to legacy fields if operatingHours is missing
-  if (vendor.openingDays && Array.isArray(vendor.openingDays) && vendor.openingDays.length > 0) {
+  // Fallback to legacy fields if operatingHours is missing (or admin's
+  // override is active). openingDays is skipped here for the same
+  // reason isTemporarilyClosed is above -- while the override is
+  // active, admin's Opens/Closes At times are meant to be the sole,
+  // final word on availability, not filtered through an older field
+  // that might not even be set correctly.
+  if (!vendor.adminHoursOverrideActive && vendor.openingDays && Array.isArray(vendor.openingDays) && vendor.openingDays.length > 0) {
     if (!vendor.openingDays.includes(currentDayName)) {
       return false;
     }
