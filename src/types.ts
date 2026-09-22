@@ -249,12 +249,12 @@ export interface Review {
 
 export function isVendorOpen(vendor: any): boolean {
   if (!vendor) return false;
-  // Admin's explicit override means full control -- not "control, except
-  // for these other flags." Without this, a vendor marked temporarily
-  // closed (by themselves, or by admin's own Pause button) would keep
-  // showing closed even after admin turned this override on specifically
-  // to force them open, which defeats the entire point of it.
-  if (vendor.isTemporarilyClosed && !vendor.adminHoursOverrideActive) return false;
+  // Pause always wins, unconditionally -- it's a deliberate "shut
+  // everything down" action, and should never be silently overridden by
+  // anything else, including the hours override below. The hours
+  // override only ever controls open/close *times*; it was never meant
+  // to also override an explicit pause.
+  if (vendor.isTemporarilyClosed) return false;
 
   const now = new Date();
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
