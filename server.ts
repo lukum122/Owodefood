@@ -3996,6 +3996,9 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       `<b>Customer:</b> ${escapeHtml(customerName)}\n` +
       `<b>Phone:</b> ${escapeHtml(customerPhone)}\n` +
       (isReceiptPickup ? "" : `<b>Delivery Address:</b> ${escapeHtml(deliveryAddress)}\n`) +
+      (validatedBatchDate && validatedBatchTime
+        ? `<b>⏰ Batch Delivery:</b> Scheduled for ${escapeHtml(validatedBatchDate)} @ ${escapeHtml(validatedBatchTime)} (not immediate)\n`
+        : "") +
       `<b>Amount:</b> ₦${finalTotal.toLocaleString()}\n` +
       `<b>Payment:</b> ${escapeHtml(paymentMethod)}` +
       (itemsListText ? `\n\n<b>Items:</b>\n${itemsListText}` : "");
