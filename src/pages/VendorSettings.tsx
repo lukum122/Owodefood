@@ -117,6 +117,20 @@ export const VendorSettings: React.FC = () => {
     }
   }, [currentVendor, availableLocations]);
 
+  // isTemporarilyClosed specifically needs its own, separate sync --
+  // unlike the rest of this form (which only a vendor edits themselves,
+  // so it's protected from being overwritten mid-edit by a background
+  // refresh), this specific field can legitimately be changed by admin
+  // while the vendor already has this page open. Without this, the
+  // vendor's toggle would stay frozen at whatever it was when they first
+  // loaded the page, making it look like a single toggle "doesn't work"
+  // when it was actually just showing stale state.
+  useEffect(() => {
+    if (currentVendor && hasInitialized.current) {
+      setIsTemporarilyClosed(currentVendor.isTemporarilyClosed || false);
+    }
+  }, [currentVendor?.isTemporarilyClosed]);
+
   const handleVendorImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
