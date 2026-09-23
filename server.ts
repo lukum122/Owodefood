@@ -3981,11 +3981,14 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     // not just the order total, so a vendor/rider can act on the alert
     // without needing to open the admin panel first.
     const itemsListText = (items || []).map((item: any) => {
+      const addonTotal = (item.selectedAddons || []).reduce((s: number, a: any) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
+      const rowTotal = ((item.price ?? 0) + addonTotal) * item.quantity;
       let line = `• ${escapeHtml(item.name)} x${item.quantity}`;
       if (item.selectedAddons && item.selectedAddons.length > 0) {
         const addonsText = item.selectedAddons.map((a: any) => `${escapeHtml(a.name)}${a.quantity && a.quantity > 1 ? ` x${a.quantity}` : ""}`).join(", ");
         line += ` (+ ${addonsText})`;
       }
+      line += ` — ₦${rowTotal.toLocaleString()}`;
       return line;
     }).join("\n");
 
