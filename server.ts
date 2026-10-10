@@ -914,6 +914,63 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// 1a-bis. Silent token refresh. JWTs are signed for 7 days, but nothing
+// else in the app proactively renews one before it expires -- so a
+// customer who's had the app open for a while (very common right at
+// checkout, after sitting on a payment step) can have a perfectly valid
+// *account* but an expired token, with no clean way to get a fresh one
+// short of a full re-login. This re-issues a new token for anyone who can
+// present a token that WE signed, even if it's expired, as long as it
+// isn't impossibly old and the account is still real and not suspended --
+// so a long-dead, leaked token can't be used to mint sessions forever, but
+// an ordinary expired one can be silently renewed without interrupting
+// whatever the person was doing (e.g. submitting payment proof).
+app.post("/api/auth/refresh-token", async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: "No token provided" });
+    }
+
+    let decoded: any;
+    try {
+      // ignoreExpiration: this is deliberately allowed to decode an
+      // expired token -- the signature check below is what actually
+      // proves it's genuinely one we issued, expiry is just a freshness
+      // hint, not the security boundary here.
+      decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const maxRefreshWindowMs = 30 * 24 * 60 * 60 * 1000; // 30 days past its own expiry
+    if (decoded.exp && (Date.now() - decoded.exp * 1000) > maxRefreshWindowMs) {
+      return res.status(401).json({ error: "Session too old to refresh. Please log in again." });
+    }
+
+    const userResult = await db.select().from(users).where(eq(users.id, decoded.id)).limit(1);
+    if (userResult.length === 0) {
+      return res.status(401).json({ error: "Account not found" });
+    }
+    const user = userResult[0];
+
+    if (user.isSuspended) {
+      return res.status(403).json({ error: user.suspendedReason ? `Your account has been suspended: ${user.suspendedReason}` : "Your account has been suspended. Please contact support." });
+    }
+
+    const newToken = jwt.sign(
+      { id: user.id, role: user.role, roles: user.roles, email: user.email },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ success: true, token: newToken, user });
+  } catch (error: any) {
+    console.error("Token refresh error:", error);
+    res.status(500).json({ error: "Token refresh failed: " + (error.message || String(error)) });
+  }
+});
+
 // 1b. Registration Endpoint: server-authoritative. The frontend must treat this
 // response as the single source of truth — no local "success" before this
 // call actually confirms it, and no silent local-only fallback if it fails.
