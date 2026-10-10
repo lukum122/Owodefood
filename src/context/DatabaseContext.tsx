@@ -2219,35 +2219,65 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       let token = localStorage.getItem("fd_jwt_token");
-      
-      // Auto-recover JWT for old sessions if PIN is available
-      if (!token && activeUser?.pin && activeUser?.email) {
+
+      // JWTs are valid for 7 days, but nothing else in the app proactively
+      // refreshes one before it expires, so by this point in checkout it's
+      // common to have either a stale-but-present token, or no token at
+      // all (e.g. an earlier action in this same visit already hit a 401
+      // and cleared it). Try a silent refresh with whatever's there first,
+      // so an ordinary expired token keeps working without interrupting
+      // someone who may have already paid and is just submitting proof.
+      //
+      // NOTE: this deliberately no longer tries to "log back in" using
+      // activeUser.pin -- that field is the bcrypt HASH of the real PIN
+      // (that's all the backend ever sends back), never the actual PIN,
+      // so that old approach could never succeed and silently guaranteed
+      // this exact dead end every time a token went missing.
+      if (token) {
         try {
-          const loginRes = await fetch("/api/auth/login", {
+          const refreshRes = await fetch("/api/auth/refresh-token", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: activeUser.email, pin: activeUser.pin })
+            body: JSON.stringify({ token })
           });
-          const loginData = await loginRes.json();
-          if (loginData.success) {
-            token = loginData.token;
+          const refreshData = await refreshRes.json();
+          if (refreshData.success && refreshData.token) {
+            token = refreshData.token;
             localStorage.setItem("fd_jwt_token", token);
           }
         } catch (e) {
-          console.error("[checkout] Auto-recover token failed:", e);
+          console.error("[checkout] Token refresh failed:", e);
+        }
+      }
+
+      // Still nothing usable -- rather than a dead-end alert after the
+      // customer may have already paid, ask them to confirm their PIN
+      // right here so they can finish submitting THIS order. Nothing about
+      // their cart, delivery details or payment proof is lost, since we
+      // never navigate away.
+      if (!token && activeUser?.email) {
+        const reauthPin = window.prompt(
+          "Your session needs to be refreshed to finish this order. Please re-enter your login PIN to continue -- your order details are still here:"
+        );
+        if (reauthPin) {
+          const reauthResult = await login(activeUser.email, reauthPin, (activeUser.role as UserRole) || "customer");
+          if (reauthResult.success && reauthResult.token) {
+            token = reauthResult.token;
+          } else {
+            return { success: false, error: reauthResult.error || "That PIN didn't work. Please log out and back in, then try again." };
+          }
+        } else {
+          return { success: false, error: "Login is required to complete this order." };
         }
       }
 
       if (!token) {
-        alert("Your session does not have a secure token. Please log out completely and log back in to refresh your session.");
-        return { success: false, error: "No auth token" };
+        return { success: false, error: "Unable to verify your session. Please log out completely and log back in, then try again." };
       }
 
       const headers: any = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-        headers["X-Auth-Token"] = token;
-      }
+      headers["Authorization"] = `Bearer ${token}`;
+      headers["X-Auth-Token"] = token;
 
       const res = await fetch("/api/checkout", {
         method: "POST",
