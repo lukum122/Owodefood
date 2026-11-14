@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { EnableAlertsBanner } from "./EnableAlertsBanner";
+import { InstallAppBanner } from "./InstallAppBanner";
+import { SupportChatButton } from "../chat/SupportChat";
 import { 
   LayoutDashboard, 
   ShoppingBag, 
@@ -238,6 +241,9 @@ export const VendorLayout: React.FC = () => {
 
         {/* Content Container */}
         <main className="flex-grow p-4 sm:p-8 max-w-7xl w-full mx-auto">
+          <InstallAppBanner audience="vendor" />
+          <SupportChatButton role="vendor" floating />
+          <EnableAlertsBanner audience="vendor" />
           <Outlet />
         </main>
       </div>

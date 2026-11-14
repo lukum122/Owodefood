@@ -21,8 +21,11 @@ import {
   Lock,
   ShieldAlert,
   ChevronDown,
-  Layers
+  Layers,
+  Headphones,
+  MapPinned
 } from "lucide-react";
+import { useChatUnread } from "../chat/chatApi";
 import { UserRole } from "../types";
 
 export const AdminLayout: React.FC = () => {
@@ -83,6 +86,8 @@ export const AdminLayout: React.FC = () => {
   );
   const unreadCount = adminNotifications.filter(n => !n.read).length;
 
+  const chatUnread = useChatUnread();
+
   const myApprovedRoles = currentUser?.roles || (currentUser ? [currentUser.role] : []);
 
   const isItemAllowed = (itemName: string) => {
@@ -108,6 +113,10 @@ export const AdminLayout: React.FC = () => {
       const dept = empProfile.department;
 
       switch (itemName) {
+        case "Support Inbox":
+          return true; // every staff member can answer support chats
+        case "Delivery Map & Pricing":
+          return perms.includes("manage_orders") || perms.includes("manage_riders") || perms.includes("view_settings") || dept === "dispatcher" || dept === "manager" || dept === "admin";
         case "Analytics Dashboard":
           return true; // Always visible for employees
         case "POS Terminal":
@@ -148,6 +157,8 @@ export const AdminLayout: React.FC = () => {
     { name: "Analytics Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
     { name: "POS Terminal", path: "/admin/pos", icon: Receipt },
     { name: "Master Orders", path: "/admin/orders", icon: ShoppingBag },
+    { name: "Support Inbox", path: "/admin/support", icon: Headphones },
+    { name: "Delivery Map & Pricing", path: "/admin/delivery-map", icon: MapPinned },
     { name: "Manage Vendors", path: "/admin/vendors", icon: Store },
     { name: "Manage Riders", path: "/admin/riders", icon: Bike },
     { name: "Manage Users", path: "/admin/customers", icon: Users },
@@ -237,6 +248,11 @@ export const AdminLayout: React.FC = () => {
               </div>
               
               <div className="flex items-center gap-1.5">
+                {item.name === "Support Inbox" && chatUnread.inbox > 0 && (
+                  <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-bold rounded-full">
+                    {chatUnread.inbox}
+                  </span>
+                )}
                 {isOrders && pendingCount > 0 && (
                   <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[10px] font-bold rounded-full">
                     {pendingCount}

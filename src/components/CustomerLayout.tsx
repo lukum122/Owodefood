@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { InstallAppBanner } from "./InstallAppBanner";
+import { SupportChatButton, SupportDeepLink } from "../chat/SupportChat";
+import { LocationPicker, LatLng } from "../map/LocationPicker";
 import { Footer } from "./Footer";
 import { getUserAvatarUrl } from "../pages/CustomerOrdersAndProfile";
 import { 
@@ -63,7 +66,11 @@ export const CustomerLayout: React.FC = () => {
     switchRole,
     brandLogo,
     riders,
+    orders = [],
   } = useDatabase();
+  // Install prompt for customers only once they've ordered at least once --
+  // that's when the app is genuinely useful (delivery code, rider chat).
+  const hasOrdered = !!currentUser && orders.some((o: any) => o.customerId === currentUser.id);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -97,6 +104,7 @@ export const CustomerLayout: React.FC = () => {
   const [newStreetAddress, setNewStreetAddress] = useState<string>("");
   const [newAddressDistrict, setNewAddressDistrict] = useState<string>("");
   const [newLandmarkNote, setNewLandmarkNote] = useState<string>("");
+  const [newAddressPin, setNewAddressPin] = useState<LatLng | null>(null);
 
   useEffect(() => {
     if (availableLocations.length > 0 && !newAddressDistrict) {
@@ -170,10 +178,12 @@ export const CustomerLayout: React.FC = () => {
       addSavedAddress(
         newStreetAddress.trim(), 
         newAddressDistrict || (availableLocations[0] || "Tanke"), 
-        newLandmarkNote.trim()
+        newLandmarkNote.trim(),
+        newAddressPin
       );
       setNewStreetAddress("");
       setNewLandmarkNote("");
+      setNewAddressPin(null);
     }
   };
 
@@ -847,6 +857,8 @@ export const CustomerLayout: React.FC = () => {
 
         {/* Dynamic content rendering outlet */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-8">
+          {hasOrdered && <InstallAppBanner audience="customer" />}
+          <SupportDeepLink role="customer" />
           <Outlet />
         </main>
         <Footer />
@@ -1504,6 +1516,11 @@ export const CustomerLayout: React.FC = () => {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Pin on map (recommended)</label>
+                  <LocationPicker value={newAddressPin} onChange={setNewAddressPin} heightClass="h-48" />
+                </div>
+
                 <button 
                   type="submit" 
                   className="w-full py-3 bg-[#070329] hover:bg-[#120a61] text-white text-xs font-extrabold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
@@ -1635,6 +1652,11 @@ export const CustomerLayout: React.FC = () => {
               </div>
 
               <div className="space-y-2 pt-2">
+                {currentUser ? (
+                  <SupportChatButton role="customer" label="Chat with support (24/7)" />
+                ) : (
+                  <p className="text-[11px] text-center text-gray-500">Log in to chat with our support team.</p>
+                )}
                 <a href="tel:+234803000000" className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
                   <span className="text-xs font-bold text-[#070329]">Support Hotline:</span>
                   <span className="text-xs text-[#0ea5e9] font-bold font-mono ml-auto">+234 (0) 803 000 000</span>

@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
+import { EnableAlertsBanner } from "./EnableAlertsBanner";
+import { InstallAppBanner } from "./InstallAppBanner";
+import { SupportChatButton } from "../chat/SupportChat";
+import { RiderLocationSharer } from "../map/RiderLocationSharer";
 import { 
   Bike, 
   Compass, 
@@ -232,6 +236,10 @@ export const RiderLayout: React.FC = () => {
 
         {/* Content Area */}
         <main className="flex-grow p-4 sm:p-8 overflow-y-auto">
+          <RiderLocationSharer />
+          <InstallAppBanner audience="rider" />
+          <SupportChatButton role="rider" floating />
+          <EnableAlertsBanner audience="rider" />
           <Outlet />
         </main>
       </div>
