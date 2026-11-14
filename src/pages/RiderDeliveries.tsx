@@ -1,11 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
+import { ConfirmDeliveryModal } from "../components/ConfirmDeliveryModal";
+import { OrderChatButton } from "../chat/OrderChatButton";
+import { directionsUrl } from "../map/RiderLocationSharer";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus } from "../types";
 import { SecureImage } from "../components/SecureImage";
-import { Compass, Bike, Store, MapPin, Phone, CheckCircle2, User, Truck } from "lucide-react";
+import { Compass, Bike, Store, MapPin, Phone, CheckCircle2, User, Truck, Navigation } from "lucide-react";
 
 export const RiderDeliveries: React.FC = () => {
-  const { currentRider, orders, updateDeliveryStatus, currency } = useDatabase();
+  const { currentRider, orders, updateDeliveryStatus, currency, vendors } = useDatabase();
+  const [confirmingJob, setConfirmingJob] = useState<{ id: string; customerName: string; customerPhone?: string } | null>(null);
 
   if (!currentRider) {
     return <div className="text-gray-500 text-sm">Rider profile not synced.</div>;
@@ -32,6 +36,14 @@ export const RiderDeliveries: React.FC = () => {
 
   return (
     <div className="space-y-8 font-sans">
+      {confirmingJob && (
+        <ConfirmDeliveryModal
+          orderId={confirmingJob.id}
+          customerName={confirmingJob.customerName}
+          customerPhone={confirmingJob.customerPhone}
+          onClose={() => setConfirmingJob(null)}
+        />
+      )}
       <div>
         <h1 className="text-2xl font-black text-gray-950 tracking-tight">Active Deliveries In-Transit</h1>
         <p className="text-xs text-gray-500 mt-0.5">Maintain transit timeline speed and coordinates. Mark drop-offs upon physical delivery.</p>
@@ -98,13 +110,33 @@ export const RiderDeliveries: React.FC = () => {
               </div>
 
               {/* Actions details controllers */}
-              <div className="flex justify-end pt-2 border-t border-gray-50">
+              <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-gray-50">
+                {(() => {
+                  const shop = vendors.find(v => v.id === job.vendorId);
+                  const toShop = directionsUrl({ lat: shop?.latitude, lng: shop?.longitude, address: shop?.address });
+                  const toCustomer = directionsUrl({ lat: job.deliveryLat, lng: job.deliveryLng, address: job.deliveryAddress });
+                  return (
+                    <>
+                      {job.status !== "out_for_delivery" && (
+                        <a href={toShop} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 py-2.5 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 font-bold text-xs rounded-xl">
+                          <Navigation className="w-4 h-4 text-violet-600" /> To restaurant
+                        </a>
+                      )}
+                      <a href={toCustomer} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 py-2.5 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 font-bold text-xs rounded-xl">
+                        <Navigation className="w-4 h-4 text-red-500" /> {typeof job.deliveryLat === "number" ? "Navigate to customer" : "Directions (by address)"}
+                      </a>
+                    </>
+                  );
+                })()}
+                <OrderChatButton orderId={job.id} />
                 <button
-                  onClick={() => handleUpdateStatus(job.id, "delivered")}
+                  onClick={() => setConfirmingJob({ id: job.id, customerName: job.customerName, customerPhone: job.customerPhone })}
                   className="w-full sm:w-auto py-3 px-6 bg-[#070329] hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-2 cursor-pointer transition uppercase"
                 >
                   <CheckCircle2 className="w-4 h-4 text-green-300 fill-transparent" />
-                  Mark Route Completed / Delivered
+                  Complete Delivery (Code + Photo)
                 </button>
               </div>
 

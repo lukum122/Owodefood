@@ -5,6 +5,10 @@ import { OrderStatus, UserRole } from "../types";
 import { SecureImage } from "../components/SecureImage";
 import { ClipboardList, User, Phone, MapPin, CheckCircle2, ChevronRight, Clock, Star, Edit3, Save, Compass, LogOut, Upload, Image, Camera, RefreshCw, Briefcase, ShieldCheck, Bike, Store, HelpCircle, Heart, Trash2, ChevronDown, TrendingUp, Lock, CreditCard, ArrowLeftRight, UserX, DollarSign, XCircle, Download, X } from "lucide-react";
 import { compressImageToDataUrl } from "../imageUtils";
+import { DeliveryCodePanel } from "../components/DeliveryCodePanel";
+import { OrderChatButton } from "../chat/OrderChatButton";
+import { OrderTrackingMap } from "../map/OrderTrackingMap";
+import { EnableAlertsBanner } from "../components/EnableAlertsBanner";
 
 export const getUserAvatarUrl = (user: { gender?: string; profileImage?: string } | null | undefined) => {
   if (user?.profileImage) return user.profileImage;
@@ -89,6 +93,8 @@ export const CustomerOrders: React.FC = () => {
         <p className="text-xs text-gray-500 mt-0.5">Track kitchen acceptance, meal prep, courier dispatch, and history.</p>
       </div>
 
+      {customerOrders.some(o => !["delivered", "cancelled"].includes(o.status)) && <EnableAlertsBanner audience="customer" />}
+
       {customerOrders.length > 0 ? (
         <div className="space-y-6">
           {customerOrders.map((order) => {
@@ -113,6 +119,16 @@ export const CustomerOrders: React.FC = () => {
                     <span className="font-extrabold text-sm text-[#070329] font-mono">{currency}{(order.totalAmount ?? 0).toLocaleString()}</span>
                   </div>
                 </div>
+
+                <DeliveryCodePanel order={order} />
+                {order.status === "out_for_delivery" && order.orderType !== "receipt_pickup" && (
+                  <OrderTrackingMap orderId={order.id} status={order.status} />
+                )}
+                {order.status !== "awaiting_payment_verification" && (
+                  <div className="flex justify-end">
+                    <OrderChatButton orderId={order.id} />
+                  </div>
+                )}
 
                 {/* Tracking Progress Node (Only show if not cancelled) */}
                 {currentStep >= 0 ? (

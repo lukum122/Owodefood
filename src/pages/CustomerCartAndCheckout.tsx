@@ -4,6 +4,7 @@ import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
 import { CartItem } from "../context/DatabaseContext";
 import { compressImageToDataUrl } from "../imageUtils";
+import { LocationPicker, LatLng } from "../map/LocationPicker";
 import { Trash2, ArrowRight, ShoppingCart, MapPin, CreditCard, CheckCircle2, Landmark, ShieldCheck, ShieldAlert, Loader2, Phone, Layers, AlertTriangle, Wallet, Shield, Lock, KeyRound, Copy, AlertCircle, User, Mail } from "lucide-react";
 
 export const CustomerCart: React.FC = () => {
@@ -415,10 +416,56 @@ export const CustomerCheckout: React.FC = () => {
     const addonCost = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
     return sum + ((item.product.price + addonCost) * item.quantity);
   }, 0);
-  const tax = vatEnabled ? total * (vatRate / 100) : 0;
   const firstCartItem = cart[0];
   const cartVendor = firstCartItem ? vendors.find(v => v.id === firstCartItem.product.vendorId) : null;
-  const normalDeliveryFee = calculateDeliveryFee(cartVendor?.id, total, deliveryAddress);
+
+  // ---- Map pin + server price quote ----------------------------------
+  // The delivery fee can depend on distance, which only the server can
+  // work out, so the totals shown here come from the server's own quote
+  // (the exact calculation the real order uses). The old in-browser
+  // numbers are only shown for the split second before the quote arrives.
+  const [pin, setPin] = useState<LatLng | null>(null);
+  const [quote, setQuote] = useState<any>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteNonce, setQuoteNonce] = useState(0);
+  const quoteBatch = deliveryMode === "batch" && !!selectedBatch;
+  const cartKey = cart.map(i => `${i.product.id}x${i.quantity}:${(i.selectedAddons || []).map(a => `${a.id}x${a.quantity ?? 1}`).join("+")}`).join("|");
+
+  React.useEffect(() => {
+    if (!cartVendor || cart.length === 0) { setQuote(null); return; }
+    const t = setTimeout(async () => {
+      setQuoteLoading(true);
+      try {
+        const token = localStorage.getItem("fd_jwt_token") || "";
+        const res = await fetch("/api/checkout/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Auth-Token": token },
+          body: JSON.stringify({
+            vendorId: cartVendor.id,
+            deliveryAddress: deliveryAddress.trim(),
+            deliveryLat: pin?.lat,
+            deliveryLng: pin?.lng,
+            batch: quoteBatch,
+            items: cart.map(item => ({ productId: item.product.id, quantity: item.quantity, selectedAddons: item.selectedAddons })),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setQuoteError(data.error || "Couldn't calculate the price."); setQuote(null); }
+        else { setQuote(data); setQuoteError(null); }
+      } catch {
+        setQuoteError("Couldn't calculate the price. Check your connection.");
+      } finally {
+        setQuoteLoading(false);
+      }
+    }, 450);
+    return () => clearTimeout(t);
+  }, [cartVendor?.id, cartKey, deliveryAddress, pin?.lat, pin?.lng, quoteBatch, quoteNonce]);
+
+  const tax = quote ? quote.tax : (vatEnabled ? total * (vatRate / 100) : 0);
+  const normalDeliveryFee: number = quote ? quote.normalDeliveryFee : calculateDeliveryFee(cartVendor?.id, total, deliveryAddress);
+  const pinRequired = !!quote?.pinRequired;
+  const outOfRange = !!quote?.outOfRange;
   const availableBatchSlots = cartVendor ? getAvailableBatchSlots(cartVendor.id, deliveryAddress) : [];
   // Mirrors batchDeliveryEnabled's own default: undefined/missing means
   // allowed (true), only an explicit false actually turns it off -- so
@@ -445,7 +492,7 @@ export const CustomerCheckout: React.FC = () => {
   }, [immediateAllowed, cartVendor?.id]);
 
   const deliveryFee = (deliveryMode === "batch" && selectedBatch) ? applyBatchDiscount(normalDeliveryFee) : normalDeliveryFee;
-  const serviceFee = calculateServiceFee(cartVendor?.id, total);
+  const serviceFee = quote ? quote.serviceFee : calculateServiceFee(cartVendor?.id, total);
   const grandTotal = total + tax + deliveryFee + serviceFee;
 
   const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -502,6 +549,20 @@ export const CustomerCheckout: React.FC = () => {
     if (!hasRealPhoneNumber) {
       setErrorWord("Please state a real, active delivery phone number (not just a country code).");
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (pinRequired && !pin) {
+      setErrorWord("Please set your delivery location on the map (tap \"Use my current location\" or tap the map). Your delivery fee depends on the distance.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (outOfRange) {
+      setErrorWord(`Sorry, ${cartVendor?.name || "this restaurant"} doesn't deliver that far (${quote?.distanceKm} km away; limit ${quote?.maxKm} km).`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (quoteLoading || (!quote && !quoteError)) {
+      setErrorWord("Calculating your delivery fee... try again in a moment.");
       return;
     }
     if (vendorCurrentlyUnavailable) {
@@ -646,7 +707,14 @@ export const CustomerCheckout: React.FC = () => {
       if (specialInstructions.trim()) {
         orderOptions.specialInstructions = specialInstructions.trim();
       }
-      const { success, error } = await placeOrder(
+      if (pin) {
+        orderOptions.deliveryLat = pin.lat;
+        orderOptions.deliveryLng = pin.lng;
+      }
+      if (quote) {
+        orderOptions.quotedFees = { deliveryFee, serviceFee, tax: Math.round(tax) };
+      }
+      const { success, error, priceChanged } = await placeOrder(
         deliveryAddress.trim(),
         paymentMethod,
         deliveryPhone.trim(),
@@ -660,6 +728,7 @@ export const CustomerCheckout: React.FC = () => {
           navigate("/orders");
         }, 2000);
       } else {
+        if (priceChanged) setQuoteNonce(n => n + 1); // fetch the new total
         setErrorWord(error || "Could not complete checkout. Please check your network and try again.");
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -811,6 +880,9 @@ export const CustomerCheckout: React.FC = () => {
                     onClick={() => {
                       setStreetAddress(addr.streetAddress);
                       setSelectedDistrict(addr.district);
+                      if (typeof addr.latitude === "number" && typeof addr.longitude === "number") {
+                        setPin({ lat: addr.latitude, lng: addr.longitude });
+                      }
                       if (addr.landmarkNote) {
                         setStreetAddress(addr.streetAddress + ` (${addr.landmarkNote})`);
                       }
@@ -919,6 +991,22 @@ export const CustomerCheckout: React.FC = () => {
                   className="w-full text-xs p-3.5 border-2 border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:border-[#070329] focus:ring-4 focus:ring-blue-100 outline-none transition font-semibold"
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 leading-none">
+                  <MapPin className="w-4 h-4 text-red-500" />
+                  Pin your exact location {pinRequired ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-medium">(helps your rider find you)</span>}
+                </label>
+                <LocationPicker value={pin} onChange={setPin} />
+                {quote && quote.distanceKm !== null && quote.distanceKm !== undefined && (
+                  <p className={`text-[11px] font-bold px-3 py-2 rounded-xl ${outOfRange ? "bg-red-50 text-red-700" : "bg-sky-50 text-sky-800"}`}>
+                    {outOfRange
+                      ? `${quote.distanceKm} km away -- ${cartVendor?.name || "this restaurant"} only delivers up to ${quote.maxKm} km.`
+                      : `${quote.distanceKm} km from ${cartVendor?.name || "the restaurant"} · Delivery ${currency}${normalDeliveryFee.toLocaleString()}`}
+                  </p>
+                )}
+                {quoteError && <p className="text-[11px] font-semibold text-red-600">{quoteError}</p>}
               </div>
             </div>
 

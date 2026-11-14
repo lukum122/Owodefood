@@ -1159,7 +1159,7 @@ export const CustomerVendorMenu: React.FC = () => {
                           );
                         })()}
                         <p className="text-[10px] font-bold text-sky-700 bg-sky-50 p-2.5 rounded-xl border border-sky-100">
-                          Please transfer {currency}{(dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)).toLocaleString()} to the account details shown, then upload your proof of payment below. Your pickup will be dispatched once an admin verifies it.
+                          Please transfer {currency}{(dynamicDeliveryFee + Math.max(50, receiptPickupConfig?.flatServiceFee || 0)).toLocaleString()} to the account details shown, then upload your proof of payment below. Your pickup will be dispatched once an admin verifies it.
                         </p>
                         <label className="text-[10px] uppercase font-mono tracking-wider font-black text-gray-400 block">Proof of Payment</label>
                         {paymentProofImage ? (
@@ -1199,7 +1199,7 @@ export const CustomerVendorMenu: React.FC = () => {
                       </div>
                     )}
 
-                    {paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)) && (
+                    {paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + Math.max(50, receiptPickupConfig?.flatServiceFee || 0)) && (
                       <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2 rounded-xl border border-amber-100">
                         ⚠ Your wallet balance is too low to cover the total amount. Please choose another method or fund your wallet.
                       </p>
@@ -1214,26 +1214,26 @@ export const CustomerVendorMenu: React.FC = () => {
                       </div>
                       <span className="text-gray-900 font-bold font-mono">{currency}{(dynamicDeliveryFee).toLocaleString()}</span>
                     </div>
-                    {(receiptPickupConfig?.flatServiceFee || 0) > 0 && (
+                    {Math.max(50, receiptPickupConfig?.flatServiceFee || 0) > 0 && (
                       <div className="p-3 bg-gray-50 border-x border-b border-gray-100 flex justify-between items-center text-xs">
                         <div>
                           <span className="font-bold text-gray-600">Platform Service Fee</span>
                         </div>
-                        <span className="text-gray-900 font-bold font-mono">{currency}{(receiptPickupConfig.flatServiceFee).toLocaleString()}</span>
+                        <span className="text-gray-900 font-bold font-mono">{currency}{Math.max(50, receiptPickupConfig.flatServiceFee || 0).toLocaleString()}</span>
                       </div>
                     )}
                     <div className="p-4 bg-sky-50 rounded-b-2xl border-x border-b border-sky-100 flex justify-between items-center text-sm">
                       <span className="font-extrabold text-[#070329]">Total</span>
-                      <span className="text-[#070329] font-black">{currency}{(dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)).toLocaleString()}</span>
+                      <span className="text-[#070329] font-black">{currency}{(dynamicDeliveryFee + Math.max(50, receiptPickupConfig?.flatServiceFee || 0)).toLocaleString()}</span>
                     </div>
                   </div>
 
                   {/* Submit Button */}
                   <button
                     type="submit"
-                    disabled={!paymentMethod || isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)))}
+                    disabled={!paymentMethod || isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + Math.max(50, receiptPickupConfig?.flatServiceFee || 0)))}
                     className={`w-full text-white py-3 px-5 rounded-2xl text-xs font-bold shadow transition flex items-center justify-center gap-2 ${
-                      !paymentMethod || isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + (receiptPickupConfig?.flatServiceFee || 0)))
+                      !paymentMethod || isSubmittingPickup || (paymentMethod === "wallet" && getUserWalletBalance(currentUser.id) < (dynamicDeliveryFee + Math.max(50, receiptPickupConfig?.flatServiceFee || 0)))
                         ? "bg-gray-300 cursor-not-allowed text-gray-500 shadow-none"
                         : "bg-[#0ea5e9] hover:bg-[#0284c7] cursor-pointer"
                     }`}

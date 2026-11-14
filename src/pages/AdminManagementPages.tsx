@@ -5,6 +5,9 @@ import { OrderStatus, User, Vendor, Rider, PaymentGateway, VendorCategory, Order
 import { hasRole } from "../roleHelper";
 import { compressImageToDataUrl } from "../imageUtils";
 import { SecureImage } from "../components/SecureImage";
+import { DeliveryCodePanel } from "../components/DeliveryCodePanel";
+import { OrderChatButton } from "../chat/OrderChatButton";
+import { OrderTrackingMap } from "../map/OrderTrackingMap";
 import { Trash2, ShieldAlert, CheckCircle, XCircle, Store, Bike, Users, Shield, Save, Star, Smartphone, Compass, MapPin, Plus, CreditCard, Lock, Settings, Landmark, Eye, EyeOff, Clock, DollarSign, X, Edit, Pill, Apple, UtensilsCrossed, Truck, Layers, Coins, ClipboardList, Megaphone, Image as ImageIcon } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
@@ -710,6 +713,14 @@ export const AdminOrders: React.FC = () => {
                     {selectedOrder.deliveryAddress}
                   </p>
                 </div>
+                <DeliveryCodePanel order={selectedOrder} />
+                <OrderChatButton orderId={selectedOrder.id} observer compact />
+                {["accepted", "preparing", "ready", "out_for_delivery"].includes(selectedOrder.status) && (
+                  <OrderTrackingMap orderId={selectedOrder.id} status={selectedOrder.status} />
+                )}
+                {selectedOrder.status === "delivered" && selectedOrder.deliveryConfirmedBy && selectedOrder.deliveryConfirmedBy !== "code" && (
+                  <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded-lg font-semibold">Closed manually (no customer code) by {selectedOrder.deliveryConfirmedBy}</p>
+                )}
               </div>
 
               {/* Vendor & Operational State */}

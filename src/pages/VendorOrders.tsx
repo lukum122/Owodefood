@@ -1,4 +1,5 @@
 import React from "react";
+import { OrderChatButton } from "../chat/OrderChatButton";
 import { useDatabase } from "../context/DatabaseContext";
 import { OrderStatus } from "../types";
 import { Check, X, Flame, ShieldCheck, ShoppingBag, MapPin, Phone, User, Clock } from "lucide-react";
@@ -106,6 +107,7 @@ export const VendorOrders: React.FC = () => {
                           <User className="w-4 h-4 text-gray-400 shrink-0" />
                           {order.customerName} (Phone: <b className="text-gray-900">{order.customerPhone}</b>)
                         </p>
+                        <OrderChatButton orderId={order.id} compact />
                       </div>
 
                       <div className="space-y-1">

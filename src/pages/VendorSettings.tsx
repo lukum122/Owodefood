@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { LocationPicker, LatLng } from "../map/LocationPicker";
 import { useDatabase } from "../context/DatabaseContext";
 import { Save, Store, Sparkles, Check, Globe, Upload, Image as ImageIcon, Clock, Link as LinkIcon, Trash, DollarSign, Lock } from "lucide-react";
 import { VendorCategory, DailyHours } from "../types"; // imported DailyHours
@@ -52,6 +53,13 @@ export const VendorSettings: React.FC = () => {
   const [immediateDeliveryEnabled, setImmediateDeliveryEnabled] = useState<boolean>(currentVendor?.immediateDeliveryEnabled !== false);
   const [batchCutoffOverride, setBatchCutoffOverride] = useState<string>(currentVendor?.batchCutoffOverrideMinutes != null ? String(currentVendor.batchCutoffOverrideMinutes) : "");
   const [isTemporarilyClosed, setIsTemporarilyClosed] = useState<boolean>(currentVendor?.isTemporarilyClosed || false);
+  // Shop location on the map: used for distance-based delivery fees and
+  // to give riders directions to pick up.
+  const [shopPin, setShopPin] = useState<LatLng | null>(
+    typeof currentVendor?.latitude === "number" && typeof currentVendor?.longitude === "number"
+      ? { lat: currentVendor.latitude, lng: currentVendor.longitude } : null
+  );
+  const [maxDeliveryKm, setMaxDeliveryKm] = useState<string>(currentVendor?.maxDeliveryKm != null ? String(currentVendor.maxDeliveryKm) : "");
 
   const [errorStr, setErrorStr] = useState("");
   const [successStr, setSuccessStr] = useState("");
@@ -97,6 +105,10 @@ export const VendorSettings: React.FC = () => {
       setImmediateDeliveryEnabled(currentVendor.immediateDeliveryEnabled !== false);
       setBatchCutoffOverride(currentVendor.batchCutoffOverrideMinutes != null ? String(currentVendor.batchCutoffOverrideMinutes) : "");
       setIsTemporarilyClosed(currentVendor.isTemporarilyClosed || false);
+      if (typeof currentVendor.latitude === "number" && typeof currentVendor.longitude === "number") {
+        setShopPin({ lat: currentVendor.latitude, lng: currentVendor.longitude });
+      }
+      setMaxDeliveryKm(currentVendor.maxDeliveryKm != null ? String(currentVendor.maxDeliveryKm) : "");
       hasInitialized.current = true;
       const dist = availableLocations.find(loc => {
         const distName = loc.split(",")[0].trim().toLowerCase();
@@ -205,6 +217,9 @@ export const VendorSettings: React.FC = () => {
         immediateDeliveryEnabled,
         batchCutoffOverrideMinutes: batchCutoffOverride === "" ? null : Math.max(0, Number(batchCutoffOverride) || 0),
         isTemporarilyClosed,
+        latitude: shopPin ? shopPin.lat : null,
+        longitude: shopPin ? shopPin.lng : null,
+        maxDeliveryKm: maxDeliveryKm.trim() === "" ? null : Math.min(100, Math.max(0.5, Number(maxDeliveryKm) || 0)),
       });
 
       if (!result?.success) {
@@ -683,6 +698,29 @@ export const VendorSettings: React.FC = () => {
                 required
               />
               <span className="text-[10px] text-gray-400 block">Enter street number, building or shop name</span>
+            </div>
+          </div>
+
+          <div className="space-y-2 bg-sky-50/40 border border-sky-100 rounded-2xl p-4">
+            <label className="text-xs font-bold text-gray-700 block">Shop location on the map</label>
+            <span className="text-[10px] text-gray-500 block">
+              Riders use this pin to find your shop, and delivery fees are worked out from here to the customer.
+              Best set while you're standing at the shop.
+            </span>
+            <LocationPicker value={shopPin} onChange={setShopPin} kind="vendor" hint="Drag the pin onto your shop's entrance." heightClass="h-56" />
+            {!shopPin && <p className="text-[10px] font-bold text-amber-700">No pin yet: customers are charged by area until you set one.</p>}
+            <div className="space-y-1.5 pt-2">
+              <label className="text-xs font-bold text-gray-600 block">Maximum delivery distance (km)</label>
+              <input
+                type="number"
+                min={0.5}
+                max={100}
+                step={0.5}
+                value={maxDeliveryKm}
+                onChange={(e) => setMaxDeliveryKm(e.target.value)}
+                placeholder="Leave empty to use the platform default"
+                className="w-full text-xs p-3 border border-gray-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-100"
+              />
             </div>
           </div>
 
