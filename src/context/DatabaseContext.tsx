@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import { syncPushSubscription, removePushSubscription } from "../pushClient";
 import { io, Socket } from "socket.io-client";
 import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
 import { hasRole } from "../roleHelper";
@@ -166,7 +167,7 @@ interface DatabaseContextType {
   updateCartItemAddons: (cartItemId: string, newSelectedAddons: Addon[]) => void;
   
   // Checkout & Customer Actions
-  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  placeOrder: (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string; specialInstructions?: string; deliveryLat?: number; deliveryLng?: number; quotedFees?: { deliveryFee: number; serviceFee: number; tax: number } }) => Promise<{ success: boolean; orderId?: string; error?: string; priceChanged?: boolean }>;
   
   // Vendor Actions
   updateVendorOrder: (orderId: string, status: OrderStatus, extra?: { verifiedBy?: string; verifiedAt?: string; rejectedBy?: string; rejectedAt?: string; rejectionReason?: string }) => Promise<{ success: boolean; error?: string }>;
@@ -179,6 +180,8 @@ interface DatabaseContextType {
   // Rider Actions
   acceptDelivery: (orderId: string, riderId: string) => Promise<{ success: boolean; error?: string }>;
   updateDeliveryStatus: (orderId: string, status: OrderStatus) => Promise<{ success: boolean; error?: string }>;
+  confirmDeliveryWithCode: (orderId: string, code: string, photoDataUrl: string) => Promise<{ success: boolean; error?: string; attemptsLeft?: number; locked?: boolean }>;
+  getDeliveryCode: (orderId: string) => Promise<string | null>;
   mergeOrdersIntoContext: (incomingOrders: Order[]) => void;
   fetchFullOrders: () => Promise<{ success: boolean; error?: string }>;
   fetchMyOrders: () => Promise<{ success: boolean; error?: string }>;
@@ -210,7 +213,7 @@ interface DatabaseContextType {
   removeExtremeLocation: (id: string) => Promise<{ success: boolean; error?: string }>;
   updateExtremeLocations: (locations: ExtremeLocation[]) => void;
   savedAddresses: UserSavedAddress[];
-  addSavedAddress: (streetAddress: string, district: string, landmarkNote: string) => void;
+  addSavedAddress: (streetAddress: string, district: string, landmarkNote: string, pin?: { lat: number; lng: number } | null) => void;
   removeSavedAddress: (id: string) => void;
 
   // Reviews System
@@ -940,18 +943,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     syncSave("EXTREME_LOCATIONS_BULK", locations);
   };
 
-  const addSavedAddress = (streetAddress: string, district: string, landmarkNote: string) => {
+  const addSavedAddress = (streetAddress: string, district: string, landmarkNote: string, pin?: { lat: number; lng: number } | null) => {
     if (!currentUser) return;
     const newAddress: UserSavedAddress = {
       id: "sa-" + generateId(),
       userId: currentUser.id,
       streetAddress,
       district,
-      landmarkNote
+      landmarkNote,
+      ...(pin ? { latitude: pin.lat, longitude: pin.lng } : {}),
     };
     const updated = [...savedAddresses, newAddress];
     setSavedAddresses(updated);
-    syncSave("USER_SAVED_ADDRESSES_BULK", updated);
+    // Saves just this one address (the old bulk save re-sent every address).
+    syncSave("USER_SAVED_ADDRESS_UPSERT", newAddress);
   };
 
   const removeSavedAddress = (id: string) => {
@@ -1799,6 +1804,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const logout = () => {
+    // Stop this phone receiving the logged-out account's alerts.
+    removePushSubscription();
     setCurrentUser(null);
     setCurrentVendor(null);
     setCurrentRider(null);
@@ -2165,7 +2172,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   // CHECKOUT & CUSTOMER ACTIONS
-  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string; specialInstructions?: string }): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+  const placeOrder = async (deliveryAddress: string, paymentMethod: string, deliveryPhone?: string, receiptImage?: string, options?: { orderType?: "receipt_pickup"; vendorId?: string; receiptImageOrQr?: string; receiptNote?: string; batchDate?: string; batchTime?: string; specialInstructions?: string; deliveryLat?: number; deliveryLng?: number; quotedFees?: { deliveryFee: number; serviceFee: number; tax: number } }): Promise<{ success: boolean; orderId?: string; error?: string; priceChanged?: boolean }> => {
     let activeUser = currentUser;
     if (!activeUser) {
       const savedSession = localStorage.getItem("fd_session_user");
@@ -2202,7 +2209,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, 0);
     const tax = vatEnabled ? Math.round(total * (vatRate / 100)) : 0;
     let deliveryFee = calculateDeliveryFee(vendorObj.id, total, deliveryAddress, isReceiptPickup);
-    const serviceFee = isReceiptPickup ? (receiptPickupConfig.flatServiceFee || 0) : calculateServiceFee(vendorObj.id, total);
+    // Receipt pickups: the server has always enforced a ₦50 minimum.
+    const serviceFee = isReceiptPickup ? Math.max(50, receiptPickupConfig.flatServiceFee || 0) : calculateServiceFee(vendorObj.id, total);
 
     // Batch delivery: re-validate the selection is still actually open right
     // now (the customer may have sat on the checkout page long enough for
@@ -2215,6 +2223,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return { success: false, error: "That batch is no longer available. Please choose a different one or order now." };
       }
       deliveryFee = applyBatchDiscount(deliveryFee);
+    }
+
+    // The checkout screen shows the SERVER's price (distance-based fees
+    // can only be worked out there). Send exactly what the customer saw;
+    // the server re-checks it and refuses if it no longer matches.
+    let sentTax = tax;
+    let sentServiceFee = serviceFee;
+    if (options?.quotedFees) {
+      deliveryFee = options.quotedFees.deliveryFee;
+      sentServiceFee = options.quotedFees.serviceFee;
+      sentTax = options.quotedFees.tax;
     }
 
     try {
@@ -2290,9 +2309,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           vendorName: vendorObj.name,
           deliveryAddress,
           paymentMethod,
-          serviceFee,
+          serviceFee: sentServiceFee,
           deliveryFee,
-          tax,
+          tax: sentTax,
+          deliveryLat: options?.deliveryLat,
+          deliveryLng: options?.deliveryLng,
           orderType: options?.orderType,
           receiptImage,
           receiptImageOrQr: options?.receiptImageOrQr,
@@ -2311,6 +2332,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
 
       const data = await res.json();
+      if (res.status === 409 && data.priceChanged) {
+        // Fees changed between showing the total and placing the order --
+        // the checkout screen refreshes its total and the customer confirms.
+        return { success: false, error: data.error, priceChanged: true };
+      }
       if (!data.success || res.status === 401 || res.status === 403) {
         if (res.status === 401 || res.status === 403) {
           localStorage.removeItem("fd_jwt_token");
@@ -2902,6 +2928,69 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ));
 
     return { success: true };
+  };
+
+  // Proof of delivery: the rider types the customer's code and attaches a
+  // photo. The server checks the code -- the rider's app never sees it.
+  const confirmDeliveryWithCode = async (orderId: string, code: string, photoDataUrl: string): Promise<{ success: boolean; error?: string; attemptsLeft?: number; locked?: boolean }> => {
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    const token = localStorage.getItem("fd_jwt_token");
+    if (!token) return { success: false, error: "Your session has expired. Please log in again." };
+
+    // Best-effort drop-off location for the audit log (never blocks).
+    const coords = await new Promise<{ lat?: number; lng?: number }>((resolve) => {
+      if (!("geolocation" in navigator)) return resolve({});
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve({}),
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+      );
+    });
+
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/confirm-delivery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Auth-Token": token },
+        body: JSON.stringify({ code, photo: photoDataUrl, ...coords }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || "Could not confirm the delivery.", attemptsLeft: data.attemptsLeft, locked: data.locked };
+      }
+
+      const confirmed = data.order ? { ...(orderToUpdate || {}), ...data.order } : { ...(orderToUpdate as Order), status: "delivered" as OrderStatus };
+      setOrders(prev => prev.map(o => (o.id === orderId ? confirmed : o)));
+
+      if (orderToUpdate && !data.alreadyDelivered) {
+        addNotification(orderToUpdate.customerId, "Order Delivered! 🍲🎉", `Your order #${orderId} from ${orderToUpdate.vendorName} has been delivered. Enjoy your meal!`, "delivery", orderId);
+        const vObj = vendors.find(v => v.id === orderToUpdate.vendorId);
+        if (vObj && vObj.userId) {
+          addNotification(vObj.userId, "Delivery Confirmed! 💸", `Order #${orderId} was delivered by ${orderToUpdate.riderName || "Rider"} and confirmed with the customer's code.`, "delivery", orderId);
+        }
+        users.filter(u => u.roles?.includes("admin") || u.roles?.includes("super_admin")).forEach(admin =>
+          addNotification(admin.id, "Order Completed", `Order #${orderId} from ${orderToUpdate.vendorName} was delivered by ${orderToUpdate.riderName || "Rider"} (code confirmed).`, "delivery", orderId)
+        );
+      }
+      return { success: true };
+    } catch {
+      return { success: false, error: "Network problem. Check your data connection and try again." };
+    }
+  };
+
+  // Customer side: fetch the 4-digit code to give the rider at the door.
+  const getDeliveryCode = async (orderId: string): Promise<string | null> => {
+    const token = localStorage.getItem("fd_jwt_token");
+    if (!token) return null;
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/delivery-code`, {
+        headers: { Authorization: `Bearer ${token}`, "X-Auth-Token": token },
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.code || null;
+    } catch {
+      return null;
+    }
   };
 
   const updateDeliveryStatus = async (orderId: string, status: OrderStatus): Promise<{ success: boolean; error?: string }> => {
@@ -3618,23 +3707,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const socketRef = useRef<Socket | null>(null);
 
-  const publicVapidKey = "BPEg3-o75k9oT_P58tN3X8w3D0aC7CgT8Qd2lE_244FqL9c-859ZpA34A_R-V9t-V7h48x3Yp8M06xR61O4hXwI";
-  
-  function urlBase64ToUint8Array(base64String: string) {
-    const padding = "=".repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  }
-
   useEffect(() => {
     if (currentUser) {
       // 1. Connect Socket.io
-      socketRef.current = io({ path: "/socket.io" });
+      // The server now decides which private rooms this connection gets,
+      // based on this token -- without it, only public broadcasts arrive.
+      socketRef.current = io({
+        path: "/socket.io",
+        auth: (cb: (data: object) => void) => cb({ token: localStorage.getItem("fd_jwt_token") || "" }),
+      });
       socketRef.current.emit("join", currentUser.id);
       
       if (currentVendor) {
@@ -3664,6 +3745,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             return [data.order, ...prev];
           });
         }
+      });
+
+      // Chat: hand live messages to whichever chat screen/badge is open.
+      socketRef.current.on("chat_message", (data: any) => {
+        window.dispatchEvent(new CustomEvent("fd-chat-message", { detail: data }));
+      });
+      // Live rider position for tracking maps.
+      socketRef.current.on("rider_location", (data: any) => {
+        window.dispatchEvent(new CustomEvent("fd-rider-location", { detail: data }));
+      });
+      socketRef.current.on("rider_position", (data: any) => {
+        window.dispatchEvent(new CustomEvent("fd-rider-position", { detail: data }));
+      });
+      socketRef.current.on("chat_thread_update", (data: any) => {
+        window.dispatchEvent(new CustomEvent("fd-chat-thread-update", { detail: data }));
       });
 
       socketRef.current.on("new_delivery_job", (data) => {
@@ -3757,29 +3853,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         window.dispatchEvent(new Event("sync_update_event"));
       });
 
-      // 2. Request Web Push Subscription if PWA/ServiceWorker is ready
-      if ("serviceWorker" in navigator && "PushManager" in window) {
-        navigator.serviceWorker.ready.then((registration) => {
-          registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-          }).then((subscription) => {
-            // Send subscription to backend
-            const token = localStorage.getItem("fd_jwt_token");
-            if (token) {
-              fetch("/api/push/subscribe", {
-                method: "POST",
-                body: JSON.stringify({ subscription }),
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}`,
-                  "X-Auth-Token": token
-                }
-              });
-            }
-          }).catch(console.error);
-        });
-      }
+      // 2. Phone notifications: if the user has already allowed them on
+      // this device, (re)register it for this account. Never prompts by
+      // itself -- the prompt comes from the "Turn on alerts" banner tap.
+      syncPushSubscription();
     }
 
     return () => {
@@ -3934,6 +4011,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateVendorProfile,
         acceptDelivery,
         updateDeliveryStatus,
+        confirmDeliveryWithCode,
+        getDeliveryCode,
         mergeOrdersIntoContext,
         fetchFullOrders,
         fetchMyOrders,
