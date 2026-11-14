@@ -24,24 +24,90 @@ import {
   appNotifications,
   pushSubscriptions,
   auditLogs,
+  deliveryCodes,
+  chatThreads,
+  chatMessages,
+  chatReads,
   payoutLogs,
 } from "./src/db/schema.ts";
+import { registerChatRoutes } from "./src/server/chat.ts";
+import { quoteOrder, validCoord, loadPricingSettings, DEFAULT_DELIVERY_PRICING } from "./src/server/pricing.ts";
 import { uploadPublicImage, uploadPrivateImage, getSignedPrivateUrl, isPublicR2Configured, isPrivateR2Configured } from "./src/server/r2.ts";
-import { eq, sql, inArray, count, sum, and, or, ilike, gte, lte, desc } from "drizzle-orm";
+import { eq, sql, inArray, count, sum, and, or, ilike, gte, lte, desc, isNull, asc, gt } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import webpush from "web-push";
+import crypto from "crypto";
 
 // Web Push setup
-const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "BPEg3-o75k9oT_P58tN3X8w3D0aC7CgT8Qd2lE_244FqL9c-859ZpA34A_R-V9t-V7h48x3Yp8M06xR61O4hXwI";
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "J8YgXo1Qz64H9Q8x-6yR-3rF2t5Y8_4wD3zF0_6z5K8";
-webpush.setVapidDetails(
-  "mailto:support@owodefood.com",
-  vapidPublicKey,
-  vapidPrivateKey
-);
+// Keys come ONLY from the environment now. The old hardcoded fallback pair
+// sat in this public repo (so anyone could have signed pushes with it), and
+// the app's copy of the public key was hardcoded separately -- if the two
+// ever differed, every push silently failed. The app now fetches the public
+// key from /api/push/public-key, so there is exactly one source of truth.
+// Generate a pair once on the server with:  npx web-push generate-vapid-keys
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
+let pushEnabled = false;
+if (vapidPublicKey && vapidPrivateKey) {
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || "mailto:support@owodefood.com",
+      vapidPublicKey,
+      vapidPrivateKey
+    );
+    pushEnabled = true;
+  } catch (e) {
+    console.error("[PUSH] Invalid VAPID keys -- push notifications disabled:", e);
+  }
+} else {
+  console.warn("[PUSH] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY not set -- push notifications disabled.");
+}
+
+// Sends a phone/desktop notification to every device a user has
+// registered. Never throws -- a failed push must never break the request
+// that triggered it. Dead subscriptions (uninstalled app, revoked
+// permission) are cleaned up automatically.
+async function sendPushToUsers(userIds: string[], data: { title: string; body: string; url?: string; tag?: string; urgent?: boolean }) {
+  if (!pushEnabled) return;
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return;
+  try {
+    const subs = await db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.userId, ids));
+    const payload = JSON.stringify({ title: data.title, body: data.body, message: data.body, url: data.url || "/", tag: data.tag, urgent: !!data.urgent });
+    await Promise.all(subs.map(async (sub: any) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload,
+          { TTL: 60 * 60, urgency: data.urgent ? "high" : "normal" }
+        );
+      } catch (e: any) {
+        if (e?.statusCode === 410 || e?.statusCode === 404 || e?.statusCode === 403) {
+          // 403 = subscription was made with a different (e.g. the old
+          // hardcoded) key -- useless now; the app will re-subscribe.
+          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+        }
+      }
+    }));
+  } catch (e) {
+    console.error("[PUSH] send failed:", e);
+  }
+}
+
+// The user ID behind a rider record ("r-...") or vendor record.
+async function riderUserId(riderId?: string | null): Promise<string | null> {
+  if (!riderId) return null;
+  const rows = await db.select({ userId: riders.userId }).from(riders).where(eq(riders.id, riderId)).limit(1);
+  return rows[0]?.userId || null;
+}
+async function vendorUserId(vendorId?: string | null): Promise<string | null> {
+  if (!vendorId) return null;
+  const rows = await db.select({ userId: vendors.userId }).from(vendors).where(eq(vendors.id, vendorId)).limit(1);
+  return rows[0]?.userId || null;
+}
 
 // FATAL if missing -- deliberately no fallback value. The previous
 // hardcoded fallback ("secure_fallback_secret_xyz123") sat in this public
@@ -103,10 +169,76 @@ const io = new SocketIOServer(server, {
   }
 });
 
-io.on("connection", (socket) => {
-  // Client can join a room matching their user ID
-  socket.on("join", (userId) => {
-    socket.join(userId);
+// SECURED LIVE-UPDATE ROOMS
+// Previously any browser could emit "join" with ANY room name ("admin", a
+// vendor's ID, another customer's ID) and the server joined it blindly --
+// so anyone could silently receive every new order (names, phones,
+// addresses) meant for admins. Now the socket must present the same JWT
+// the REST API uses, and the server itself works out which rooms that
+// user is actually entitled to, from the database. A "join" request for
+// anything outside that set is ignored. A socket with no/invalid token
+// still connects (so public config broadcasts keep working) but joins no
+// private rooms at all.
+const SUPER_ADMIN_EMAILS_SOCKET = ["azeezlukman122@gmail.com", "omotayo111111@gmail.com", "ptrcrwlnd@gmail.com"];
+
+// Any employee account (not marked inactive in Manage Staff). Used for the
+// support inbox, which every staff member may answer.
+async function isActiveEmployee(u: any): Promise<boolean> {
+  const roles: string[] = Array.isArray(u?.roles) ? u.roles : [];
+  if (!(roles.includes("employee") || u?.role === "employee")) return false;
+  if (!u.email) return true;
+  const rows = await db.select({ status: employees.status }).from(employees).where(eq(employees.email, String(u.email).toLowerCase())).limit(1);
+  return rows.length === 0 || rows[0].status !== "inactive";
+}
+
+async function getAllowedSocketRooms(tokenUser: any): Promise<Set<string>> {
+  const rooms = new Set<string>();
+  if (!tokenUser?.id) return rooms;
+
+  const userRows = await db.select().from(users).where(eq(users.id, tokenUser.id)).limit(1);
+  if (userRows.length === 0 || userRows[0].isSuspended) return rooms;
+  const u: any = userRows[0];
+  const roles: string[] = Array.isArray(u.roles) ? u.roles : [];
+
+  rooms.add(u.id);
+
+  const isAdminUser = roles.includes("admin") || roles.includes("super_admin") || u.role === "admin" || u.role === "super_admin" || SUPER_ADMIN_EMAILS_SOCKET.includes(u.email);
+  if (isAdminUser) rooms.add("admin");
+  // Support inbox: every admin AND every active employee.
+  if (isAdminUser || await isActiveEmployee(u)) rooms.add("staff");
+
+  const ownedVendors = await db.select({ id: vendors.id }).from(vendors).where(eq(vendors.userId, u.id));
+  for (const v of ownedVendors) rooms.add(v.id);
+
+  const ownedRiders = await db.select({ id: riders.id, status: riders.status }).from(riders).where(eq(riders.userId, u.id));
+  for (const r of ownedRiders) {
+    // Rider-ID room: lets order updates addressed to payload.riderId
+    // (which is the "r-..." rider ID, not the user ID) actually arrive.
+    rooms.add(r.id);
+    if (r.status === "approved") rooms.add("riders");
+  }
+  return rooms;
+}
+
+io.on("connection", async (socket) => {
+  let allowed = new Set<string>();
+  try {
+    const token = (socket.handshake.auth as any)?.token;
+    if (token) {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      allowed = await getAllowedSocketRooms(decoded);
+    }
+  } catch {
+    allowed = new Set();
+  }
+  (socket.data as any).allowedRooms = allowed;
+  for (const room of allowed) socket.join(room);
+
+  // Kept for compatibility with older cached app versions that still ask
+  // to join rooms by name -- only honoured if the room is in the set the
+  // server already worked out for this user.
+  socket.on("join", (room) => {
+    if (typeof room === "string" && allowed.has(room)) socket.join(room);
   });
 });
 
@@ -119,6 +251,20 @@ io.on("connection", (socket) => {
 // -- this reads the actual configured domain at startup, rather than
 // hardcoding one specific deployment's domain, so it stays correct if the
 // custom domain is ever changed.
+// MAP TILES. Default is OpenStreetMap's own tile server, which is fine
+// for testing and light use. For a live app, get a free key from a tile
+// provider (e.g. MapTiler) and set MAP_TILE_URL in .env, for example:
+//   MAP_TILE_URL=https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=YOUR_KEY
+//   MAP_TILE_ATTRIBUTION=© MapTiler © OpenStreetMap contributors
+const MAP_TILE_URL = process.env.MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const MAP_TILE_ATTRIBUTION = process.env.MAP_TILE_ATTRIBUTION || "© OpenStreetMap contributors";
+let mapTileOrigin: string | null = null;
+try {
+  mapTileOrigin = new URL(MAP_TILE_URL.replace(/\{[a-z]\}/g, "a").replace(/\{[a-z]\}/g, "0")).origin;
+} catch {
+  console.error("[CSP] MAP_TILE_URL isn't a valid URL -- maps will not load.");
+}
+
 let r2PublicOrigin: string | null = null;
 try {
   if (process.env.R2_PUBLIC_BASE_URL) r2PublicOrigin = new URL(process.env.R2_PUBLIC_BASE_URL).origin;
@@ -155,7 +301,7 @@ app.use(helmet({
       // begin with. This is a fixed browser-generated scheme, not a
       // domain, so it doesn't widen what's allowed the way adding a real
       // external domain would.
-      imgSrc: ["'self'", "data:", "blob:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : [])],
+      imgSrc: ["'self'", "data:", "blob:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : []), ...(mapTileOrigin ? [mapTileOrigin] : [])],
       connectSrc: ["'self'", "ws:", "wss:"], // ws/wss for the Socket.io connection
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],
@@ -1786,6 +1932,22 @@ app.get("/api/sync/version", verifyTokenOptional, async (req: any, res: any) => 
   }
 });
 
+// Settings-table rows that hold secrets/one-time codes and must never
+// leave the server.
+const PRIVATE_SETTING_PREFIXES = ["pin_reset_", "device_verify_", "bf_"];
+function isPrivateSettingKey(key: string): boolean {
+  return PRIVATE_SETTING_PREFIXES.some(p => key.startsWith(p));
+}
+
+// Payment gateway secret keys were also sent to every visitor. Only full
+// admins (who edit them) get the secret; everyone else gets the public
+// bank/transfer details they actually need at checkout.
+function publicGatewayView(gw: any, isAdmin: boolean) {
+  if (isAdmin) return gw;
+  const { secretKey, ...rest } = gw;
+  return { ...rest, secretKey: null };
+}
+
 // 2. Database Synchronization Endpoint: LOAD
 app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
   try {
@@ -1879,6 +2041,28 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id)),
       ]);
 
+      // RIDERS: this load never included any rider orders, so the rider
+      // portal had no job board, no active deliveries and no history. Add
+      // (a) every order assigned to this rider and (b) open jobs waiting
+      // for a rider -- with the customer's phone removed wherever the
+      // rider has no current need for it (unclaimed jobs, finished ones).
+      const myRiderRecords = await db.select({ id: riders.id, status: riders.status }).from(riders).where(eq(riders.userId, reqUser.id));
+      const myApprovedRiderIds = myRiderRecords.filter((r: any) => r.status === "approved").map((r: any) => r.id);
+      if (myApprovedRiderIds.length > 0) {
+        const riderOrders = await db.select().from(orders).where(
+          or(
+            inArray(orders.riderId, myApprovedRiderIds),
+            and(isNull(orders.riderId), inArray(orders.status, ["accepted", "preparing", "ready"]))
+          )
+        ).orderBy(desc(orders.createdAt)).limit(400);
+        const seen = new Set(allOrders.map((o: any) => o.id));
+        for (const ro of riderOrders) {
+          if (seen.has(ro.id)) continue;
+          const active = ro.riderId && !["delivered", "cancelled"].includes(ro.status);
+          allOrders.push(active ? ro : { ...ro, customerPhone: "" });
+        }
+      }
+
       if (allOrders.length > 0) {
         const orderIds = allOrders.map(o => o.id);
         allOrderItems = await db.select().from(orderItems).where(sql`${orderItems.orderId} IN (${sql.join(orderIds, sql`, `)})`);
@@ -1909,7 +2093,7 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         return { ...o, items };
       }),
       riders: allRiders,
-      paymentGateways: allPaymentGateways,
+      paymentGateways: allPaymentGateways.map((gw: any) => publicGatewayView(gw, !!isAdmin)),
       savedAddresses: allSavedAddresses,
       extremeLocationTiers: allExtremeLocationTiers,
       extremeLocations: allExtremeLocations,
@@ -1918,7 +2102,13 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       reviews: allReviews,
       walletTransactions: allWalletTransactions,
       notifications: allAppNotifications,
+      // PRIVATE rows (PIN-reset codes, device-verification codes,
+      // brute-force counters) live in this same table and were being sent
+      // to EVERY visitor, logged in or not -- anyone could request a PIN
+      // reset for any account and read the code straight out of this
+      // response. They are never sent to any browser now, admins included.
       systemSettings: allSystemSettings.reduce((acc, setting) => {
+        if (isPrivateSettingKey(setting.key)) return acc;
         acc[setting.key] = setting.value;
         return acc;
       }, {} as Record<string, string>),
@@ -2389,6 +2579,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         if (payload.batchDeliveryEnabled === false && payload.immediateDeliveryEnabled === false) {
           return res.status(400).json({ error: "At least one delivery mode (Deliver Now or Batch Delivery) must stay enabled." });
         }
+        // Shop map pin. `undefined` (older app versions that don't send it)
+        // leaves the saved pin untouched; null clears it.
+        const vLat = payload.latitude === undefined ? undefined : (validCoord(payload.latitude, payload.longitude) ? payload.latitude : null);
+        const vLng = payload.longitude === undefined ? undefined : (validCoord(payload.latitude, payload.longitude) ? payload.longitude : null);
+        const vMaxKm = payload.maxDeliveryKm === undefined ? undefined
+          : (typeof payload.maxDeliveryKm === "number" && payload.maxDeliveryKm > 0 && payload.maxDeliveryKm <= 100 ? payload.maxDeliveryKm : null);
         await db.insert(vendors).values({
           id: payload.id,
           userId: payload.userId,
@@ -2419,6 +2615,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           batchDeliveryEnabled: payload.batchDeliveryEnabled,
           immediateDeliveryEnabled: payload.immediateDeliveryEnabled,
           batchCutoffOverrideMinutes: payload.batchCutoffOverrideMinutes,
+          latitude: vLat ?? null,
+          longitude: vLng ?? null,
+          maxDeliveryKm: vMaxKm ?? null,
         }).onConflictDoUpdate({
           target: vendors.id,
           set: {
@@ -2449,6 +2648,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             batchDeliveryEnabled: payload.batchDeliveryEnabled,
             immediateDeliveryEnabled: payload.immediateDeliveryEnabled,
             batchCutoffOverrideMinutes: payload.batchCutoffOverrideMinutes,
+            latitude: vLat,
+            longitude: vLng,
+            maxDeliveryKm: vMaxKm,
           },
         });
 
@@ -2662,9 +2864,29 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             
             const isCustomer = order.customerId === reqUser.id;
             const isVendor = order.vendorId === userVendorId;
-            const isRider = order.riderId === reqUser.id || payload.riderId === reqUser.id;
-            
+            // order.riderId holds the RIDER record's ID ("r-..."), not the
+            // user ID -- so look up which rider records this user owns.
+            // Comparing against reqUser.id directly (as before) never
+            // matched, which locked real riders out of their own jobs.
+            const myRiderRows = await db.select({ id: riders.id, status: riders.status }).from(riders).where(eq(riders.userId, reqUser.id));
+            const myRiderIds = myRiderRows.map((r: any) => r.id);
+            const myApprovedRiderIds = myRiderRows.filter((r: any) => r.status === "approved").map((r: any) => r.id);
+            const isAssignedRider = !!order.riderId && (myRiderIds.includes(order.riderId) || order.riderId === reqUser.id);
+            // Claiming an unassigned job: only an APPROVED rider, only for
+            // themselves, and only while nobody else has it. Previously any
+            // logged-in user could put their own ID in riderId and take over
+            // any order (and see the customer's name, phone and address).
+            const isClaimingRider = !order.riderId && !!payload.riderId && myApprovedRiderIds.includes(payload.riderId);
+            const isRider = isAssignedRider || isClaimingRider;
+
             if (!isCustomer && !isVendor && !isRider) return res.status(403).json({ error: "Forbidden" });
+
+            // Riders can't close an order through this generic route any
+            // more -- delivery must go through /api/orders/:id/confirm-delivery,
+            // which checks the customer's delivery code and saves the proof.
+            if (isRider && !isVendor && payload.status === "delivered" && order.status !== "delivered" && order.orderType !== "receipt_pickup") {
+              return res.status(403).json({ error: "Enter the customer's delivery code to complete this delivery." });
+            }
             
             // Field-level locks
             payload.customerId = order.customerId;
@@ -2685,7 +2907,11 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
               }
               payload.riderId = order.riderId;
             } else if (isRider && !isVendor) {
-              if (order.riderId && order.riderId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
+              // A rider can only ever set themselves as the rider -- never
+              // reassign the job to someone else.
+              if (isAssignedRider) {
+                payload.riderId = order.riderId;
+              }
             }
           } else {
             if (payload.customerId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
@@ -2733,6 +2959,22 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             vendorPayoutStatus: payload.vendorPayoutStatus,
           },
         });
+
+        // DELIVERY CODE: created the moment the order is on its way. Only
+        // the customer can see it (GET /api/orders/:id/delivery-code).
+        const savedOrderType = isNew ? payload.orderType : existingOrder[0].orderType;
+        if (payload.status === "out_for_delivery" && savedOrderType !== "receipt_pickup") {
+          await ensureDeliveryCode(payload.id);
+        }
+        // Delivered through this route = an admin (or vendor) closing it
+        // manually, e.g. the customer couldn't give the code. Record who.
+        if (statusChanged && payload.status === "delivered") {
+          await db.update(orders).set({
+            deliveredAt: new Date().toISOString(),
+            deliveryConfirmedBy: isAdmin ? `admin:${reqUser.id}` : `manual:${reqUser.id}`,
+          }).where(eq(orders.id, payload.id));
+          await db.delete(deliveryCodes).where(eq(deliveryCodes.orderId, payload.id));
+        }
 
         if (statusChanged && payload.status === "cancelled") {
           await db.insert(auditLogs).values({
@@ -2964,27 +3206,44 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           io.to("riders").emit("new_delivery_job", { orderId: payload.id, vendorName: payload.vendorName });
           
           try {
-            const activeRiders = await db.select().from(riders).where(eq(riders.isAvailable, true));
-            const riderUserIds = activeRiders.map((r: any) => r.userId);
-            if (riderUserIds.length > 0) {
-              const subs = await db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.userId, riderUserIds));
-              for (const sub of subs) {
-                try {
-                  await webpush.sendNotification({
-                    endpoint: sub.endpoint,
-                    keys: { p256dh: sub.p256dh, auth: sub.auth }
-                  }, JSON.stringify({ 
-                    title: "New Delivery Job! ≡ƒ¢╡", 
-                    message: `Order #${payload.id.substring(0,8)} from ${payload.vendorName} is available.` 
-                  }));
-                } catch (e: any) {
-                  if (e.statusCode === 410 || e.statusCode === 404) {
-                    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
-                  }
-                }
-              }
-            }
+            const activeRiders = await db.select().from(riders).where(and(eq(riders.isAvailable, true), eq(riders.status, "approved")));
+            const riderUserIds = activeRiders.map((r: any) => r.userId).filter(Boolean);
+            sendPushToUsers(riderUserIds, {
+              title: "New delivery job 🛵",
+              body: `Order #${payload.id.substring(0, 8)} from ${payload.vendorName} is waiting for a rider.`,
+              url: "/rider/dashboard",
+              tag: `job-${payload.id}`,
+              urgent: true,
+            });
           } catch(e) { console.error("Rider push failed", e); }
+        }
+
+        // Rider assigned (by admin, or a rider claiming the job): tell the
+        // rider -- important when an admin assigns it and the rider's app
+        // is closed.
+        const previousRiderId = isNew ? null : existingOrder[0].riderId;
+        if (payload.riderId && payload.riderId !== previousRiderId) {
+          const rUser = await riderUserId(payload.riderId);
+          if (rUser && rUser !== reqUser?.id) {
+            sendPushToUsers([rUser], {
+              title: "You have a delivery 📦",
+              body: `Pick up order #${payload.id.substring(0, 8)} at ${payload.vendorName}.`,
+              url: "/rider/deliveries",
+              tag: `assigned-${payload.id}`,
+              urgent: true,
+            });
+          }
+        }
+
+        // Customer: rider on the way -- includes a reminder that they'll
+        // need their delivery code.
+        if (statusChanged && payload.status === "out_for_delivery" && savedOrderType !== "receipt_pickup") {
+          sendPushToUsers([existingOrder[0]?.customerId || payload.customerId], {
+            title: "Your food is on the way 🛵",
+            body: `${payload.riderName || "Your rider"} is heading to you. Open the app to see your delivery code -- only give it to the rider when you receive your order.`,
+            url: "/orders",
+            tag: `order-${payload.id}`,
+          });
         }
 
         // Log a payout release whenever an admin actually transitions a
@@ -3146,19 +3405,31 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         break;
 
       case "USER_SAVED_ADDRESSES_BULK":
-        for (const sa of payload) {
+        // Used to accept any user's addresses from anyone logged in. Now a
+        // non-admin can only save their OWN addresses, and can't touch a
+        // row that belongs to someone else.
+        for (const sa of Array.isArray(payload) ? payload : []) {
+          if (!isAdmin && sa.userId !== reqUser.id) continue;
+          if (!isAdmin) {
+            const owner = await db.select({ userId: userSavedAddresses.userId }).from(userSavedAddresses).where(eq(userSavedAddresses.id, sa.id)).limit(1);
+            if (owner.length > 0 && owner[0].userId !== reqUser.id) continue;
+          }
+          const hasPin = validCoord(sa.latitude, sa.longitude);
           await db.insert(userSavedAddresses).values({
             id: sa.id,
             userId: sa.userId,
             streetAddress: sa.streetAddress,
             district: sa.district,
             landmarkNote: sa.landmarkNote,
+            latitude: hasPin ? sa.latitude : null,
+            longitude: hasPin ? sa.longitude : null,
           }).onConflictDoUpdate({
             target: userSavedAddresses.id,
             set: {
               streetAddress: sa.streetAddress,
               district: sa.district,
               landmarkNote: sa.landmarkNote,
+              ...(sa.latitude !== undefined ? { latitude: hasPin ? sa.latitude : null, longitude: hasPin ? sa.longitude : null } : {}),
             },
           });
         }
@@ -3172,18 +3443,22 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         if (!isAdmin && existingAddress.length > 0 && existingAddress[0].userId !== reqUser.id) {
           return res.status(403).json({ error: "Forbidden: Cannot alter another user's saved address" });
         }
+        const addrHasPin = validCoord(payload.latitude, payload.longitude);
         await db.insert(userSavedAddresses).values({
           id: payload.id,
           userId: payload.userId,
           streetAddress: payload.streetAddress,
           district: payload.district,
           landmarkNote: payload.landmarkNote,
+          latitude: addrHasPin ? payload.latitude : null,
+          longitude: addrHasPin ? payload.longitude : null,
         }).onConflictDoUpdate({
           target: userSavedAddresses.id,
           set: {
             streetAddress: payload.streetAddress,
             district: payload.district,
             landmarkNote: payload.landmarkNote,
+            ...(payload.latitude !== undefined ? { latitude: addrHasPin ? payload.latitude : null, longitude: addrHasPin ? payload.longitude : null } : {}),
           },
         });
       }
@@ -3723,6 +3998,33 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       for (const room of notifyRooms) {
         io.to(room).emit("sync_update", { type, payload: confirmedData });
       }
+
+      // Rider job board: every approved rider sees open jobs appear (and
+      // disappear once someone claims one) instantly. Customer phone is
+      // stripped -- riders only get it once the job is theirs. The
+      // assigned rider is excluded here because they already received the
+      // full record through their own room above.
+      if (type === "ORDER_UPSERT" && confirmedData?.id) {
+        const isOpenJob = !confirmedData.riderId && ["accepted", "preparing", "ready"].includes(confirmedData.status);
+        if (isOpenJob) {
+          const keepFullOpen = [confirmedData.vendorId, confirmedData.customerId, "admin"].filter(Boolean) as string[];
+          io.to("riders").except(keepFullOpen).emit("sync_update", { type, payload: { ...confirmedData, customerPhone: "" } });
+        } else if (confirmedData.riderId || confirmedData.status === "cancelled") {
+          // Taken or cancelled: other riders only need to know it's gone
+          // from the board -- not the customer's name or address.
+          const gone = {
+            id: confirmedData.id, status: confirmedData.status, riderId: confirmedData.riderId || null,
+            orderType: confirmedData.orderType, vendorId: confirmedData.vendorId, vendorName: confirmedData.vendorName,
+            createdAt: confirmedData.createdAt, customerId: "", customerName: "", customerPhone: "", deliveryAddress: "",
+            totalAmount: 0, deliveryFee: 0, items: [],
+          };
+          // Skip anyone who legitimately has the full record (assigned
+          // rider, the vendor, the customer, admins) so the stub never
+          // overwrites their copy.
+          const keepFull = [confirmedData.riderId, confirmedData.vendorId, confirmedData.customerId, "admin"].filter(Boolean) as string[];
+          io.to("riders").except(keepFull).emit("sync_update", { type, payload: gone });
+        }
+      }
     }
 
     // Bump a general-purpose "has anything changed" version on every write,
@@ -3760,9 +4062,171 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 });
 
 // 4. Secure Checkout API
+app.get("/api/map/config", (req: any, res: any) => {
+  res.json({ tileUrl: MAP_TILE_URL, attribution: MAP_TILE_ATTRIBUTION, maxZoom: 19, defaultCenter: { lat: 8.4966, lng: 4.5421 } });
+});
+
+// Price preview for the checkout screen -- the exact same calculation the
+// real checkout uses, so what the customer sees is what they pay.
+app.post("/api/checkout/quote", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const { vendorId, items, deliveryAddress, orderType, deliveryLat, deliveryLng, batch } = req.body || {};
+    if (!vendorId) return res.status(400).json({ error: "Missing vendor." });
+    const isReceiptPickup = orderType === "receipt_pickup";
+    const hasPin = validCoord(deliveryLat, deliveryLng);
+    const q = await quoteOrder({
+      vendorId, items: Array.isArray(items) ? items : [], deliveryAddress: deliveryAddress || "", isReceiptPickup,
+      lat: hasPin ? deliveryLat : null, lng: hasPin ? deliveryLng : null, batch: !!batch,
+    });
+    if ("error" in q) return res.status(400).json({ error: q.error });
+    res.json({
+      subtotal: q.subtotal, deliveryFee: q.deliveryFee, normalDeliveryFee: q.normalDeliveryFee, serviceFee: q.serviceFee, tax: q.tax, total: q.total,
+      distanceKm: q.distanceKm, usedDistance: q.usedDistance, pricingMode: q.pricingMode, outOfRange: q.outOfRange, maxKm: q.maxKm,
+      vendorHasLocation: q.vendorHasLocation,
+      pinRequired: !isReceiptPickup && q.pricingMode !== "zones" && q.vendorHasLocation,
+    });
+  } catch (e) {
+    console.error("Quote failed:", e);
+    res.status(500).json({ error: "Couldn't calculate the price. Please try again." });
+  }
+});
+
+// -------------------------------------------------------------
+// LIVE RIDER TRACKING
+// -------------------------------------------------------------
+const lastLocationWrite = new Map<string, number>();
+
+// Rider's phone reports its position (every ~10-15 s while delivering).
+app.post("/api/rider/location", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    if (!reqUser) return res.status(401).json({ error: "Please log in." });
+    const { lat, lng } = req.body || {};
+    if (!validCoord(lat, lng)) return res.status(400).json({ error: "Bad location." });
+    const myRiders = await db.select({ id: riders.id, status: riders.status }).from(riders).where(eq(riders.userId, reqUser.id));
+    const approved = myRiders.filter((r: any) => r.status === "approved").map((r: any) => r.id);
+    if (approved.length === 0) return res.status(403).json({ error: "Riders only." });
+
+    const now = Date.now();
+    if (now - (lastLocationWrite.get(reqUser.id) || 0) < 4000) return res.json({ success: true, throttled: true });
+    lastLocationWrite.set(reqUser.id, now);
+
+    const at = new Date(now).toISOString();
+    await db.update(riders).set({ lastLat: lat, lastLng: lng, lastLocationAt: at } as any).where(inArray(riders.id, approved));
+
+    // Forward only to the customers whose food this rider is carrying now.
+    const active = await db.select({ id: orders.id, customerId: orders.customerId, riderId: orders.riderId }).from(orders)
+      .where(and(inArray(orders.riderId, approved), eq(orders.status, "out_for_delivery")));
+    for (const o of active as any[]) {
+      const evt = { orderId: o.id, lat, lng, at };
+      io.to(o.customerId).emit("rider_location", evt);
+      io.to("admin").emit("rider_location", evt);
+    }
+    io.to("admin").emit("rider_position", { riderId: approved[0], lat, lng, at });
+    res.json({ success: true, activeDeliveries: active.length });
+  } catch (e) {
+    console.error("Rider location failed:", e);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// Map data for one order: restaurant pin, drop-off pin, and -- while it's
+// on the way -- the rider's latest position. Customer of the order,
+// its vendor, its rider, or admin/staff with manage_orders only.
+app.get("/api/orders/:id/tracking", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    if (!reqUser) return res.status(401).json({ error: "Please log in." });
+    const order: any = (await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1))[0];
+    if (!order) return res.status(404).json({ error: "Order not found." });
+    const vendor: any = (await db.select().from(vendors).where(eq(vendors.id, order.vendorId)).limit(1))[0];
+    const rider: any = order.riderId ? (await db.select().from(riders).where(eq(riders.id, order.riderId)).limit(1))[0] : null;
+    const allowed = order.customerId === reqUser.id || vendor?.userId === reqUser.id || rider?.userId === reqUser.id
+      || isAdminUser(reqUser) || (await hasPermission(reqUser, "manage_orders"));
+    if (!allowed) return res.status(403).json({ error: "Forbidden" });
+
+    const showRider = order.status === "out_for_delivery" && rider && validCoord(rider.lastLat, rider.lastLng);
+    res.json({
+      status: order.status,
+      vendor: vendor && validCoord(vendor.latitude, vendor.longitude) ? { lat: vendor.latitude, lng: vendor.longitude, name: vendor.name } : null,
+      dropoff: validCoord(order.deliveryLat, order.deliveryLng) ? { lat: order.deliveryLat, lng: order.deliveryLng, address: order.deliveryAddress } : null,
+      rider: showRider ? { lat: rider.lastLat, lng: rider.lastLng, at: rider.lastLocationAt, name: rider.name } : null,
+      distanceKm: order.deliveryDistanceKm,
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// Delivery pricing settings (admins, or staff with the settings permission).
+app.get("/api/admin/delivery-pricing", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    if (!req.user || !(isAdminUser(req.user) || (await hasPermission(req.user, "view_settings")))) return res.status(403).json({ error: "Forbidden" });
+    const settings = await loadPricingSettings();
+    const missingPins = await db.select({ id: vendors.id, name: vendors.name }).from(vendors).where(and(eq(vendors.status, "approved"), isNull(vendors.latitude)));
+    res.json({ pricing: settings.pricing, defaults: DEFAULT_DELIVERY_PRICING, vendorsWithoutPin: missingPins });
+  } catch (e) {
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+app.post("/api/admin/delivery-pricing", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    if (!req.user || !(isAdminUser(req.user) || (await hasPermission(req.user, "view_settings")))) return res.status(403).json({ error: "Forbidden" });
+    const b = req.body || {};
+    const num = (v: any, min: number, max: number) => { const n = Number(v); return isFinite(n) && n >= min && n <= max ? n : null; };
+    const mode = ["zones", "distance", "distance_zones"].includes(b.mode) ? b.mode : null;
+    const cfg = {
+      mode,
+      baseFee: num(b.baseFee, 0, 100000),
+      baseKm: num(b.baseKm, 0, 50),
+      perKm: num(b.perKm, 0, 20000),
+      minFee: num(b.minFee, 0, 100000),
+      roadFactor: num(b.roadFactor, 1, 3),
+      roundTo: num(b.roundTo, 0, 1000),
+      defaultMaxKm: num(b.defaultMaxKm, 0.5, 200),
+    };
+    const bad = Object.entries(cfg).filter(([, v]) => v === null).map(([k]) => k);
+    if (bad.length) return res.status(400).json({ error: `Check these values: ${bad.join(", ")}` });
+    await db.insert(systemSettings).values({ key: "deliveryPricing", value: JSON.stringify(cfg) })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value: JSON.stringify(cfg) } });
+    await db.insert(auditLogs).values({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      userId: req.user.id, action: "DELIVERY_PRICING_UPDATED", resource: "deliveryPricing",
+      details: JSON.stringify(cfg), createdAt: new Date().toISOString(),
+    });
+    res.json({ success: true, pricing: cfg });
+  } catch (e) {
+    console.error("Save delivery pricing failed:", e);
+    res.status(500).json({ error: "Failed to save." });
+  }
+});
+
+// Admin map: every rider who reported a position in the last 30 minutes.
+app.get("/api/admin/rider-locations", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    if (!reqUser || !(isAdminUser(reqUser) || (await hasPermission(reqUser, "manage_orders")) || (await hasPermission(reqUser, "manage_riders")))) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const since = new Date(Date.now() - 30 * 60000).toISOString();
+    const rows: any[] = await db.select().from(riders).where(gt(riders.lastLocationAt, since));
+    const active: any[] = rows.length ? await db.select({ id: orders.id, riderId: orders.riderId, vendorName: orders.vendorName, customerName: orders.customerName, status: orders.status })
+      .from(orders).where(and(inArray(orders.riderId, rows.map((r) => r.id)), inArray(orders.status, ["accepted", "preparing", "ready", "out_for_delivery"]))) : [];
+    res.json({
+      riders: rows.filter((r) => validCoord(r.lastLat, r.lastLng)).map((r) => ({
+        id: r.id, name: r.name, phone: r.phone, lat: r.lastLat, lng: r.lastLng, at: r.lastLocationAt, isAvailable: r.isAvailable,
+        orders: active.filter((o) => o.riderId === r.id),
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
-    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage: rawReceiptImage, orderType, receiptImageOrQr: rawReceiptImageOrQr, receiptNote, batchDate, batchTime, specialInstructions } = req.body;
+    const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage: rawReceiptImage, orderType, receiptImageOrQr: rawReceiptImageOrQr, receiptNote, batchDate, batchTime, specialInstructions, deliveryLat, deliveryLng } = req.body;
 
     const isReceiptPickup = orderType === "receipt_pickup";
     // Free-text from the customer -- trim and cap length defensively,
@@ -3810,37 +4274,6 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     }
 
     const orderId = "owf-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    // 1. Validate prices server-side
-    let calculatedTotal = 0;
-    
-    if (!isReceiptPickup && items) {
-      const dbProducts = await db.select().from(products).where(eq(products.vendorId, vendorId));
-      for (const item of items) {
-        const dbProduct = dbProducts.find((p) => p.id === item.productId);
-        if (!dbProduct) {
-          return res.status(400).json({ error: `Product ${item.productId} not found` });
-        }
-        
-        let itemPrice = dbProduct.price;
-        // Add addons price if any
-        if (item.selectedAddons && Array.isArray(item.selectedAddons)) {
-          for (const addon of item.selectedAddons) {
-            itemPrice += (addon.price * (addon.quantity || 1));
-          }
-        }
-        calculatedTotal += (itemPrice * item.quantity);
-      }
-    }
-    
-    let validServiceFee = Math.max(0, serviceFee || 0);
-    let validDeliveryFee = Math.max(0, deliveryFee || 0);
-    let validTax = Math.max(0, tax || 0);
-
-    // Enforce base minimums for receipt pickup
-    if (isReceiptPickup && validServiceFee < 50) {
-      validServiceFee = 50;
-    }
 
     // Validate batch delivery selection server-side. A client could try to
     // claim a batch discount for a time that's fictional or already past
@@ -3900,6 +4333,48 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       validatedBatchTime = batchTime;
     }
 
+    // 1. PRICE THE ORDER ON THE SERVER. Item prices, add-on prices,
+    // quantities, delivery fee, service fee and VAT all come from the
+    // database + admin settings -- never from the browser. (Before, the
+    // fees and add-on prices were accepted exactly as the phone sent them,
+    // so a modified request could pay ₦0 delivery/service.)
+    const hasPin = validCoord(deliveryLat, deliveryLng);
+    const quote = await quoteOrder({
+      vendorId,
+      items: isReceiptPickup ? [] : items,
+      deliveryAddress: deliveryAddress || "",
+      isReceiptPickup,
+      lat: hasPin ? deliveryLat : null,
+      lng: hasPin ? deliveryLng : null,
+      batch: !!(validatedBatchDate && validatedBatchTime),
+    });
+    if ("error" in quote) {
+      return res.status(400).json({ error: quote.error });
+    }
+    if (quote.outOfRange) {
+      return res.status(400).json({ error: `Sorry, ${quote.vendor.name} doesn't deliver that far (${quote.distanceKm} km; limit ${quote.maxKm} km).` });
+    }
+    if (!isReceiptPickup && quote.pricingMode !== "zones" && quote.vendorHasLocation && !hasPin) {
+      return res.status(400).json({ error: "Please set your delivery location on the map so we can calculate your delivery fee." });
+    }
+    // If what the customer saw differs from the real price (settings
+    // changed, surge switched on, stale app), don't silently charge a
+    // different amount -- send the fresh quote back for them to confirm.
+    const clientFees = Math.round(Number(serviceFee || 0) + Number(deliveryFee || 0) + Number(tax || 0));
+    const serverFees = quote.serviceFee + quote.deliveryFee + quote.tax;
+    if (Math.abs(clientFees - serverFees) > 1 && !req.body?.acceptServerQuote) {
+      return res.status(409).json({
+        error: "Prices have just been updated. Please check the new total and place your order again.",
+        priceChanged: true,
+        quote: { subtotal: quote.subtotal, deliveryFee: quote.deliveryFee, serviceFee: quote.serviceFee, tax: quote.tax, total: quote.total, distanceKm: quote.distanceKm },
+      });
+    }
+
+    const calculatedTotal = quote.subtotal;
+    const validServiceFee = quote.serviceFee;
+    const validDeliveryFee = quote.deliveryFee;
+    const validTax = quote.tax;
+    const serverLines = quote.lines;
     const finalTotal = calculatedTotal + validServiceFee + validDeliveryFee + validTax;
 
     // 2. Wallet Deductions if paymentMethod is wallet
@@ -3941,9 +4416,12 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       totalAmount: finalTotal,
       deliveryAddress,
       paymentMethod,
-      serviceFee,
-      deliveryFee,
-      tax,
+      serviceFee: validServiceFee,
+      deliveryFee: validDeliveryFee,
+      tax: validTax,
+      deliveryLat: hasPin ? deliveryLat : null,
+      deliveryLng: hasPin ? deliveryLng : null,
+      deliveryDistanceKm: quote.distanceKm,
       paymentReceiptUrl: receiptImage || null,
       orderType: orderType || "standard",
       receiptImageOrQr: receiptImageOrQr || null,
@@ -3954,16 +4432,16 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       createdAt: new Date().toISOString()
     });
 
-    if (!isReceiptPickup && items) {
-      for (const item of items) {
+    if (!isReceiptPickup) {
+      for (const item of serverLines) {
         await db.insert(orderItems).values({
           id: Math.random().toString(36).substring(2, 11),
           orderId,
           productId: item.productId,
           name: item.name,
-          price: item.price, // Storing what they paid (we verified it above)
+          price: item.price, // database price, not the browser's
           quantity: item.quantity,
-          selectedAddons: item.selectedAddons || null,
+          selectedAddons: item.selectedAddons?.length ? item.selectedAddons : null,
         });
       }
     }
@@ -3979,9 +4457,12 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       totalAmount: finalTotal,
       deliveryAddress,
       paymentMethod,
-      serviceFee,
-      deliveryFee,
-      tax,
+      serviceFee: validServiceFee,
+      deliveryFee: validDeliveryFee,
+      tax: validTax,
+      deliveryLat: hasPin ? deliveryLat : null,
+      deliveryLng: hasPin ? deliveryLng : null,
+      deliveryDistanceKm: quote.distanceKm,
       paymentReceiptUrl: receiptImage || null,
       orderType: orderType || "standard",
       receiptImageOrQr: receiptImageOrQr || null,
@@ -3990,7 +4471,7 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
       batchTime: validatedBatchTime,
       specialInstructions: sanitizedSpecialInstructions,
       createdAt: new Date().toISOString(),
-      items: isReceiptPickup ? [] : items.map((item: any) => ({
+      items: isReceiptPickup ? [] : serverLines.map((item: any) => ({
         id: Math.random().toString(36).substring(2, 11),
         orderId,
         productId: item.productId,
@@ -4005,27 +4486,12 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     io.to("admin").emit("new_order", { orderId, vendorId, order: newOrderPayload });
 
     // Web Push Notification to Vendor and Admin
-    const sendPush = async (targetId: string, title: string, message: string) => {
-      try {
-        const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, targetId));
-        for (const sub of subs) {
-          try {
-            await webpush.sendNotification({
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.p256dh, auth: sub.auth }
-            }, JSON.stringify({ title, message }));
-          } catch (e: any) {
-            if (e.statusCode === 410 || e.statusCode === 404) {
-              await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Push failed for", targetId, e);
-      }
-    };
-    sendPush(vendorId, "New Order Received!", `Order #${orderId} for ?${finalTotal.toLocaleString()}`);
-    sendPush("admin", "New Platform Order!", `Order #${orderId} placed at ${vendorName}`);
+    // (Subscriptions are stored under USER IDs -- this used to send to the
+    // vendor record's ID, which never matched, so vendors got nothing.)
+    vendorUserId(vendorId).then(vUser => {
+      if (vUser) sendPushToUsers([vUser], { title: "New order received! 🔔", body: `Order #${orderId} for ₦${finalTotal.toLocaleString()}`, url: "/vendor/orders", tag: `neworder-${orderId}`, urgent: true });
+    }).catch(() => {});
+    sendPushToUsers(["admin"], { title: "New platform order", body: `Order #${orderId} placed at ${vendorName}`, url: "/admin/orders", tag: `neworder-admin-${orderId}` });
 
     // Telegram order alert -- fire-and-forget, never blocks the response.
     // Bank-transfer orders with a receipt attached get the receipt image
@@ -4176,41 +4642,46 @@ app.post("/api/wallet/fund", verifyTokenOptional, async (req: any, res: any) => 
 });
 
 // 6. Web Push Subscription API
+// The app asks for the public key instead of hardcoding it, so the key the
+// browser subscribes with always matches the one the server signs with.
+app.get("/api/push/public-key", (req: any, res: any) => {
+  if (!pushEnabled) return res.json({ enabled: false, publicKey: null });
+  res.json({ enabled: true, publicKey: vapidPublicKey });
+});
+
 app.post("/api/push/subscribe", verifyTokenOptional, async (req: any, res: any) => {
   try {
     const { subscription } = req.body;
-    if (!req.user || !subscription) return res.status(400).json({ error: "Invalid request" });
-    
-    // Add super admin role ID so they can receive "admin" notifications
-    if (req.user.roles?.includes("super_admin")) {
-      const adminExists = await db.select().from(pushSubscriptions).where(
-        sql`${pushSubscriptions.userId} = 'admin' AND ${pushSubscriptions.endpoint} = ${subscription.endpoint}`
-      );
-      if (adminExists.length === 0) {
+    if (!req.user || !subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return res.status(400).json({ error: "Invalid request" });
+    }
+    const endpoint = String(subscription.endpoint);
+    const isSuperAdmin = req.user.roles?.includes("super_admin") || req.user.roles?.includes("admin");
+
+    // A device belongs to whoever is logged in on it NOW. If a rider logs
+    // out and a customer logs in on the same phone, the rider's job alerts
+    // must stop arriving there.
+    await db.delete(pushSubscriptions).where(
+      and(eq(pushSubscriptions.endpoint, endpoint), sql`${pushSubscriptions.userId} <> ${req.user.id}`)
+    );
+
+    const rowsToEnsure = [req.user.id, ...(isSuperAdmin ? ["admin"] : [])];
+    for (const uid of rowsToEnsure) {
+      const exists = await db.select().from(pushSubscriptions).where(
+        and(eq(pushSubscriptions.userId, uid), eq(pushSubscriptions.endpoint, endpoint))
+      ).limit(1);
+      if (exists.length === 0) {
         await db.insert(pushSubscriptions).values({
-          id: Math.random().toString(36).substring(2, 11),
-          userId: "admin",
-          endpoint: subscription.endpoint,
+          id: "ps_" + crypto.randomBytes(8).toString("hex"),
+          userId: uid,
+          endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
           createdAt: new Date().toISOString()
         });
+      } else if (exists[0].p256dh !== subscription.keys.p256dh || exists[0].auth !== subscription.keys.auth) {
+        await db.update(pushSubscriptions).set({ p256dh: subscription.keys.p256dh, auth: subscription.keys.auth }).where(eq(pushSubscriptions.id, exists[0].id));
       }
-    }
-
-    const exists = await db.select().from(pushSubscriptions).where(
-      sql`${pushSubscriptions.userId} = ${req.user.id} AND ${pushSubscriptions.endpoint} = ${subscription.endpoint}`
-    );
-    
-    if (exists.length === 0) {
-      await db.insert(pushSubscriptions).values({
-        id: Math.random().toString(36).substring(2, 11),
-        userId: req.user.id,
-        endpoint: subscription.endpoint,
-        p256dh: subscription.keys.p256dh,
-        auth: subscription.keys.auth,
-        createdAt: new Date().toISOString()
-      });
     }
     res.json({ success: true });
   } catch (error) {
@@ -4219,6 +4690,155 @@ app.post("/api/push/subscribe", verifyTokenOptional, async (req: any, res: any) 
   }
 });
 
+// -------------------------------------------------------------
+// DELIVERY CODE + PROOF OF DELIVERY
+// -------------------------------------------------------------
+const MAX_DELIVERY_CODE_ATTEMPTS = 5;
+
+async function ensureDeliveryCode(orderId: string): Promise<string> {
+  const existing = await db.select().from(deliveryCodes).where(eq(deliveryCodes.orderId, orderId)).limit(1);
+  if (existing.length > 0) return existing[0].code;
+  const code = crypto.randomInt(1000, 10000).toString();
+  await db.insert(deliveryCodes).values({ orderId, code, attempts: 0, createdAt: new Date().toISOString() }).onConflictDoNothing();
+  const saved = await db.select().from(deliveryCodes).where(eq(deliveryCodes.orderId, orderId)).limit(1);
+  return saved[0]?.code || code;
+}
+
+function isAdminUser(u: any): boolean {
+  return !!u && (u.roles?.includes("admin") || u.roles?.includes("super_admin") || u.role === "admin" || u.role === "super_admin" || SUPER_ADMIN_EMAILS_SOCKET.includes(u.email));
+}
+
+// Customer (or admin) reads their code. Never available to riders/vendors.
+app.get("/api/orders/:id/delivery-code", verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: "Please log in." });
+    const rows = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
+    if (rows.length === 0) return res.status(404).json({ error: "Order not found." });
+    const order: any = rows[0];
+    const allowed = order.customerId === req.user.id || isAdminUser(req.user) || (await hasPermission(req.user, "manage_orders"));
+    if (!allowed) return res.status(403).json({ error: "Forbidden" });
+
+    if (order.status !== "out_for_delivery" || order.orderType === "receipt_pickup") {
+      return res.json({ code: null, status: order.status });
+    }
+    const code = await ensureDeliveryCode(order.id);
+    res.json({ code, status: order.status });
+  } catch (error) {
+    console.error("Delivery code lookup failed:", error);
+    res.status(500).json({ error: "Could not load the delivery code." });
+  }
+});
+
+// Rider completes a delivery: must give the customer's code + a photo.
+app.post("/api/orders/:id/confirm-delivery", authLimiter, verifyTokenOptional, async (req: any, res: any) => {
+  try {
+    const reqUser = req.user;
+    if (!reqUser) return res.status(401).json({ error: "Please log in." });
+    const { code, photo, lat, lng } = req.body || {};
+
+    const rows = await db.select().from(orders).where(eq(orders.id, req.params.id)).limit(1);
+    if (rows.length === 0) return res.status(404).json({ error: "Order not found." });
+    const order: any = rows[0];
+
+    const myRiderRows = await db.select({ id: riders.id }).from(riders).where(eq(riders.userId, reqUser.id));
+    const isAssignedRider = !!order.riderId && (myRiderRows.some((r: any) => r.id === order.riderId) || order.riderId === reqUser.id);
+    if (!isAssignedRider) return res.status(403).json({ error: "This delivery isn't assigned to you." });
+    if (order.status === "delivered") return res.json({ success: true, alreadyDelivered: true });
+    if (order.status !== "out_for_delivery") return res.status(400).json({ error: "This order isn't out for delivery." });
+
+    if (typeof photo !== "string" || !photo.startsWith("data:image/")) {
+      return res.status(400).json({ error: "Please take a photo of the delivered order." });
+    }
+
+    const codeRow = (await db.select().from(deliveryCodes).where(eq(deliveryCodes.orderId, order.id)).limit(1))[0];
+    const expected = codeRow?.code || (await ensureDeliveryCode(order.id));
+    const attempts = codeRow?.attempts || 0;
+    if (attempts >= MAX_DELIVERY_CODE_ATTEMPTS) {
+      return res.status(429).json({ error: "Too many wrong codes. Please call support/admin to complete this delivery.", locked: true });
+    }
+
+    const given = String(code || "").replace(/\D/g, "");
+    const a = Buffer.from(given.padEnd(4, "x"));
+    const b = Buffer.from(expected.padEnd(4, "x"));
+    const matches = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!matches) {
+      await db.update(deliveryCodes).set({ attempts: attempts + 1 }).where(eq(deliveryCodes.orderId, order.id));
+      const left = MAX_DELIVERY_CODE_ATTEMPTS - (attempts + 1);
+      return res.status(400).json({
+        error: left > 0 ? `Wrong code. ${left} attempt${left === 1 ? "" : "s"} left. Ask the customer to check their OwodeFood app.` : "Wrong code. This delivery is now locked -- please call support/admin.",
+        attemptsLeft: Math.max(0, left),
+        locked: left <= 0,
+      });
+    }
+
+    // Code is right -- save the photo (private bucket: only viewable
+    // through the logged-in proxy). A storage hiccup must not stop a real,
+    // code-verified delivery from completing, so failure is logged only.
+    let proofUrl: string | null = null;
+    try {
+      proofUrl = await uploadPrivateImage(photo, `delivery-proofs/${order.id}`);
+    } catch (e) {
+      console.error("Delivery proof upload failed:", e);
+    }
+
+    const deliveredAt = new Date().toISOString();
+    await db.update(orders).set({
+      status: "delivered",
+      deliveredAt,
+      deliveryProofUrl: proofUrl,
+      deliveryConfirmedBy: "code",
+    }).where(eq(orders.id, order.id));
+    await db.delete(deliveryCodes).where(eq(deliveryCodes.orderId, order.id));
+
+    await db.insert(auditLogs).values({
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      userId: reqUser.id,
+      action: "ORDER_DELIVERED_WITH_CODE",
+      resource: order.id,
+      details: JSON.stringify({
+        riderId: order.riderId,
+        riderName: order.riderName,
+        proofSaved: !!proofUrl,
+        location: typeof lat === "number" && typeof lng === "number" ? { lat, lng } : null,
+      }),
+      createdAt: deliveredAt,
+    });
+
+    const updated = (await db.select().from(orders).where(eq(orders.id, order.id)).limit(1))[0];
+
+    // Live update to everyone involved.
+    const rooms = new Set<string>(["admin", order.customerId, order.vendorId, order.riderId].filter(Boolean));
+    for (const room of rooms) io.to(room).emit("sync_update", { type: "ORDER_UPSERT", payload: updated });
+    await db.insert(systemSettings).values({ key: "dataVersion", value: Date.now().toString() })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value: Date.now().toString() } });
+
+    const vUser = await vendorUserId(order.vendorId);
+    sendPushToUsers([order.customerId], { title: "Order delivered 🎉", body: `Your order from ${order.vendorName} has been delivered. Enjoy your meal!`, url: "/orders", tag: `order-${order.id}` });
+    if (vUser) sendPushToUsers([vUser], { title: "Delivery confirmed ✅", body: `Order #${order.id.substring(0, 8)} was delivered and confirmed with the customer's code.`, url: "/vendor/orders", tag: `delivered-${order.id}` });
+
+    res.json({ success: true, order: updated });
+  } catch (error) {
+    console.error("Confirm delivery failed:", error);
+    res.status(500).json({ error: "Could not confirm the delivery. Please try again." });
+  }
+});
+
+// Called on logout so a shared phone stops getting this account's alerts.
+app.post("/api/push/unsubscribe", async (req: any, res: any) => {
+  try {
+    const endpoint = req.body?.endpoint;
+    if (typeof endpoint === "string" && endpoint) {
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+    }
+    res.json({ success: true });
+  } catch {
+    res.json({ success: false });
+  }
+});
+
+
+// In-app chat (order chats + 24/7 support inbox) -- see src/server/chat.ts
+registerChatRoutes(app, { io, verifyTokenOptional, sendPushToUsers, isAdminUser, isActiveEmployee });
 
 // Structured logger
 const logger = {

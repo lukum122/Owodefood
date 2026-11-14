@@ -12,14 +12,23 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         workbox: {
           clientsClaim: true,
-          skipWaiting: true
+          skipWaiting: true,
+          // Adds the push + notification-tap handlers (public/push-sw.js)
+          // to the generated service worker.
+          importScripts: ['/push-sw.js'],
+          // Never let the service worker answer API calls from cache.
+          navigateFallbackDenylist: [/^\/api\//, /^\/socket\.io\//],
         },
         devOptions: { enabled: true },
         manifest: {
-          name: 'OwodeFood Vendor & Rider',
+          name: 'OwodeFood',
           short_name: 'OwodeFood',
-          description: 'OwodeFood Order Management',
-          theme_color: '#ffffff',
+          description: 'Order food, track your rider and manage deliveries',
+          theme_color: '#070329',
+          background_color: '#ffffff',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
           icons: [
             {
               src: '/icon-192.png',
