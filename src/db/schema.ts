@@ -56,6 +56,10 @@ export const vendors = pgTable("vendors", {
   // changes just from this column existing.
   immediateDeliveryEnabled: boolean("immediate_delivery_enabled").default(true),
   batchCutoffOverrideMinutes: integer("batch_cutoff_override_minutes"), // null = inherit category/platform default
+  // Shop pin on the map (for distance pricing + rider directions).
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  maxDeliveryKm: doublePrecision("max_delivery_km"), // null = platform default
 }, (table) => ({
   userIdIdx: index("vendors_user_id_idx").on(table.userId),
 }));
@@ -113,6 +117,15 @@ export const orders = pgTable("orders", {
   batchDate: text("batch_date"), // e.g. "2026-08-10" -- set only for batch-delivery orders
   batchTime: text("batch_time"), // e.g. "13:00" -- the batch slot the customer chose
   specialInstructions: text("special_instructions"), // optional note from the customer, e.g. "call on arrival, leave with the gateman"
+  // Proof of delivery (the code itself lives in delivery_codes below, so
+  // no order query anywhere can accidentally send it to a rider/vendor).
+  deliveredAt: text("delivered_at"),
+  // Customer's drop-off pin + the distance used for pricing.
+  deliveryLat: doublePrecision("delivery_lat"),
+  deliveryLng: doublePrecision("delivery_lng"),
+  deliveryDistanceKm: doublePrecision("delivery_distance_km"),
+  deliveryProofUrl: text("delivery_proof_url"), // private R2 URL of the drop-off photo
+  deliveryConfirmedBy: text("delivery_confirmed_by"), // "code" | "admin:<userId>"
 }, (table) => ({
   customerIdIdx: index("orders_customer_id_idx").on(table.customerId),
   vendorIdIdx: index("orders_vendor_id_idx").on(table.vendorId),
@@ -144,6 +157,10 @@ export const riders = pgTable("riders", {
   status: text("status").notNull(), // pending | approved | suspended
   isAvailable: boolean("is_available").notNull().default(true),
   createdAt: text("created_at").notNull(),
+  // Live tracking: last position sent while delivering.
+  lastLat: doublePrecision("last_lat"),
+  lastLng: doublePrecision("last_lng"),
+  lastLocationAt: text("last_location_at"),
 }, (table) => ({
   userIdIdx: index("riders_user_id_idx").on(table.userId),
 }));
@@ -181,6 +198,8 @@ export const userSavedAddresses = pgTable("user_saved_addresses", {
   streetAddress: text("street_address").notNull(),
   district: text("district").notNull(),
   landmarkNote: text("landmark_note").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
 }, (table) => ({
   userIdIdx: index("user_saved_addresses_user_id_idx").on(table.userId),
 }));
@@ -302,4 +321,67 @@ export const payoutLogs = pgTable("payout_logs", {
 }, (table) => ({
   orderIdIdx: index("payout_logs_order_id_idx").on(table.orderId),
   recipientIdIdx: index("payout_logs_recipient_id_idx").on(table.recipientId),
+}));
+
+// One row per order once a rider picks it up. The code is shown ONLY to the
+// customer (and admins); the rider must type it in to complete delivery.
+// Kept out of the orders table on purpose -- orders are sent to vendors and
+// riders through many routes, this table never is.
+export const deliveryCodes = pgTable("delivery_codes", {
+  orderId: text("order_id").primaryKey(),
+  code: text("code").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+// -------------------------------------------------------------
+// IN-APP CHAT
+// -------------------------------------------------------------
+// kind "order": one thread per pair per order (pair = customer_vendor |
+// customer_rider | rider_vendor). Who belongs to it is always worked out
+// live from the order itself, so if a rider is swapped the old rider
+// loses access automatically.
+// kind "support": one thread per (user, role) -- e.g. someone who is both
+// a customer and a vendor has two separate support conversations.
+export const chatThreads = pgTable("chat_threads", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(), // order | support
+  orderId: text("order_id"),
+  pair: text("pair"),
+  ownerUserId: text("owner_user_id"),
+  ownerRole: text("owner_role"), // customer | rider | vendor (support only)
+  status: text("status").notNull().default("open"), // support: new | open | resolved
+  assignedTo: text("assigned_to"),
+  assignedName: text("assigned_name"),
+  attachedOrderId: text("attached_order_id"),
+  lastMessageAt: text("last_message_at"),
+  lastMessagePreview: text("last_message_preview"),
+  createdAt: text("created_at").notNull(),
+}, (table) => ({
+  orderIdx: index("chat_threads_order_idx").on(table.orderId),
+  ownerIdx: index("chat_threads_owner_idx").on(table.ownerUserId),
+  lastMsgIdx: index("chat_threads_last_msg_idx").on(table.lastMessageAt),
+}));
+
+export const chatMessages = pgTable("chat_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  senderId: text("sender_id").notNull(),
+  senderRole: text("sender_role").notNull(), // customer | vendor | rider | support | system
+  senderName: text("sender_name").notNull(),
+  body: text("body"),
+  imageUrl: text("image_url"),
+  orderRef: text("order_ref"),
+  createdAt: text("created_at").notNull(),
+}, (table) => ({
+  threadIdx: index("chat_messages_thread_idx").on(table.threadId, table.createdAt),
+}));
+
+export const chatReads = pgTable("chat_reads", {
+  id: text("id").primaryKey(), // `${threadId}:${userId}`
+  threadId: text("thread_id").notNull(),
+  userId: text("user_id").notNull(),
+  lastReadAt: text("last_read_at").notNull(),
+}, (table) => ({
+  userIdx: index("chat_reads_user_idx").on(table.userId),
 }));
