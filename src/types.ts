@@ -76,6 +76,9 @@ export interface Vendor {
   batchDeliveryEnabled?: boolean; // vendor's own opt-out toggle for batch delivery, defaults to true
   immediateDeliveryEnabled?: boolean; // vendor's own opt-out toggle for "Deliver Now", defaults to true -- together with batchDeliveryEnabled, gives immediate-only / batch-only / both
   batchCutoffOverrideMinutes?: number; // vendor's own lead-time override, null = inherit category/platform default
+  latitude?: number | null;  // shop pin on the map
+  longitude?: number | null;
+  maxDeliveryKm?: number | null; // how far this shop delivers (null = platform default)
 }
 
 export interface Addon {
@@ -155,6 +158,12 @@ export interface Order {
   batchDate?: string; // e.g. "2026-08-10"
   batchTime?: string; // e.g. "13:00"
   specialInstructions?: string; // optional note from the customer for the rider/vendor
+  deliveredAt?: string;
+  deliveryProofUrl?: string | null; // private photo, shown via SecureImage
+  deliveryConfirmedBy?: string | null; // "code" | "admin:<id>" | "manual:<id>"
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
+  deliveryDistanceKm?: number | null;
 }
 
 export interface OrderItem {
@@ -223,6 +232,8 @@ export interface UserSavedAddress {
   streetAddress: string;
   district: string;
   landmarkNote: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface ExtremeLocationTier {

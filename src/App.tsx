@@ -46,6 +46,8 @@ import {
   AdminCustomers, 
   AdminSettings 
 } from "./pages/AdminManagementPages";
+import AdminSupportInbox from "./pages/AdminSupportInbox";
+import AdminDeliveryMap from "./pages/AdminDeliveryMap";
 import { AdminPOS } from "./pages/AdminPOS";
 import { AdminEmployees } from "./pages/AdminEmployees";
 import { AdminWallets } from "./pages/AdminWallets";
@@ -217,6 +219,8 @@ function AppShell() {
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
+            <Route path="support" element={<AdminSupportInbox />} />
+            <Route path="delivery-map" element={<AdminDeliveryMap />} />
             <Route path="vendors" element={<AdminVendors />} />
             <Route path="vendor-products/:vendorId" element={<VendorProducts mode="list" />} />
             <Route path="vendor-products/:vendorId/new" element={<VendorProducts mode="new" />} />
