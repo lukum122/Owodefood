@@ -16,7 +16,8 @@ import {
   AlertCircle, 
   Menu, 
   X,
-  ChevronDown
+  ChevronDown,
+  Banknote
 } from "lucide-react";
 import { UserRole } from "../types";
 
@@ -37,6 +38,7 @@ export const VendorLayout: React.FC = () => {
     { name: "Dashboard", path: "/vendor/dashboard", icon: LayoutDashboard },
     { name: "Active Orders", path: "/vendor/orders", icon: ShoppingBag },
     { name: "Menu Products", path: "/vendor/products", icon: UtensilsCrossed },
+    { name: "Earnings & Payouts", path: "/vendor/earnings", icon: Banknote },
     { name: "Vendor Settings", path: "/vendor/settings", icon: Settings },
   ];
 

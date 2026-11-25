@@ -23,7 +23,10 @@ import {
   ChevronDown,
   Layers,
   Headphones,
-  MapPinned
+  MapPinned,
+  Banknote,
+  ShoppingCart,
+  Map as MapIcon
 } from "lucide-react";
 import { useChatUnread } from "../chat/chatApi";
 import { UserRole } from "../types";
@@ -82,7 +85,9 @@ export const AdminLayout: React.FC = () => {
   };
 
   const adminNotifications = notifications.filter(
-    n => n.userId === "admin-1" || n.userId === "all" || n.userId === "admin"
+    // Admin alerts are addressed to each admin's own user id -- those were
+    // missing from the bell before.
+    n => n.userId === currentUser?.id || n.userId === "admin-1" || n.userId === "all" || n.userId === "admin"
   );
   const unreadCount = adminNotifications.filter(n => !n.read).length;
 
@@ -134,7 +139,12 @@ export const AdminLayout: React.FC = () => {
         case "Wallet Management":
           return dept === "finance" || dept === "admin";
         case "Payout Approvals":
+        case "Payout Requests":
           return perms.includes("view_rider_payouts") || perms.includes("view_vendor_payouts") || dept === "finance" || dept === "admin";
+        case "Active Carts":
+          return perms.includes("manage_orders") || dept === "manager" || dept === "admin";
+        case "Map & Coverage":
+          return perms.includes("view_settings") || dept === "admin";
         case "Platform Communications":
           // No longer piggybacks on manage_orders or the "support"
           // department -- those were implicit, unintended paths that
@@ -164,7 +174,10 @@ export const AdminLayout: React.FC = () => {
     { name: "Manage Users", path: "/admin/customers", icon: Users },
     { name: "Manage Staff", path: "/admin/employees", icon: ShieldCheck },
     { name: "Wallet Management", path: "/admin/wallets", icon: Coins },
+    { name: "Payout Requests", path: "/admin/payout-requests", icon: Banknote },
     { name: "Payout Approvals", path: "/admin/payouts", icon: Receipt },
+    { name: "Active Carts", path: "/admin/carts", icon: ShoppingCart },
+    { name: "Map & Coverage", path: "/admin/map-settings", icon: MapIcon },
     { name: "Platform Communications", path: "/admin/notifications", icon: Bell },
     { name: "Audit Trail", path: "/admin/audit-log", icon: Activity },
     { name: "Homepage Engine", path: "/admin/discovery", icon: Layers },

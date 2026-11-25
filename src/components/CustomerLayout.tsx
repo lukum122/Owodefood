@@ -67,7 +67,14 @@ export const CustomerLayout: React.FC = () => {
     brandLogo,
     riders,
     orders = [],
+    contactInfo,
   } = useDatabase();
+  // The customer's delivery that's on the way right now (if any), so the
+  // support panel can name the real rider instead of placeholder text.
+  const activeDelivery = currentUser
+    ? orders.find((o: any) => o.customerId === currentUser.id && o.riderId && ["accepted", "preparing", "ready", "out_for_delivery"].includes(o.status))
+    : null;
+  const supportPhone = (contactInfo?.phone || "").trim();
   // Install prompt for customers only once they've ordered at least once --
   // that's when the app is genuinely useful (delivery code, rider chat).
   const hasOrdered = !!currentUser && orders.some((o: any) => o.customerId === currentUser.id);
@@ -858,7 +865,16 @@ export const CustomerLayout: React.FC = () => {
         {/* Dynamic content rendering outlet */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-8">
           {hasOrdered && <InstallAppBanner audience="customer" />}
-          <SupportDeepLink role="customer" />
+          {/* Floating support button, same as the rider app (also opens
+              support when arriving from a support notification). Sits
+              above the floating cart bar when that's showing. */}
+          <SupportChatButton
+            role="customer"
+            floating
+            className={`fixed z-40 right-4 w-12 h-12 rounded-full bg-[#070329] text-white shadow-lg flex items-center justify-center cursor-pointer ${
+              cartTotalItems > 0 && location.pathname !== "/cart" && location.pathname !== "/checkout" ? "bottom-40 lg:bottom-28" : "bottom-20 lg:bottom-6"
+            }`}
+          />
           <Outlet />
         </main>
         <Footer />
@@ -1657,14 +1673,31 @@ export const CustomerLayout: React.FC = () => {
                 ) : (
                   <p className="text-[11px] text-center text-gray-500">Log in to chat with our support team.</p>
                 )}
-                <a href="tel:+234803000000" className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
-                  <span className="text-xs font-bold text-[#070329]">Support Hotline:</span>
-                  <span className="text-xs text-[#0ea5e9] font-bold font-mono ml-auto">+234 (0) 803 000 000</span>
-                </a>
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-500/10 text-amber-800 text-[11px] leading-normal flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
-                  <span>Your current delivery agent **Rider Daniel** can be contacted directly inside your active delivery status cards!</span>
-                </div>
+                {/* Hotline comes from Admin > Global Settings > contact info. */}
+                {supportPhone && (
+                  <a href={`tel:${supportPhone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
+                    <span className="text-xs font-bold text-[#070329]">Support Hotline:</span>
+                    <span className="text-xs text-[#0ea5e9] font-bold font-mono ml-auto">{supportPhone}</span>
+                  </a>
+                )}
+                {contactInfo?.email && (
+                  <a href={`mailto:${contactInfo.email}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
+                    <span className="text-xs font-bold text-[#070329]">Email:</span>
+                    <span className="text-xs text-[#0ea5e9] font-bold ml-auto break-all">{contactInfo.email}</span>
+                  </a>
+                )}
+                {activeDelivery && (
+                  <Link
+                    to="/orders"
+                    onClick={() => setActiveModal(null)}
+                    className="p-3 bg-amber-50 rounded-xl border border-amber-500/10 text-amber-800 text-[11px] leading-normal flex items-start gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>
+                      Your rider <strong>{(activeDelivery as any).riderName || "for this order"}</strong> can be reached from your order card on the My Orders page (order #{activeDelivery.id}).
+                    </span>
+                  </Link>
+                )}
               </div>
 
             </div>

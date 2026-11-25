@@ -17,7 +17,8 @@ import {
   Menu, 
   X, 
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  Banknote
 } from "lucide-react";
 import { UserRole } from "../types";
 
@@ -45,6 +46,7 @@ export const RiderLayout: React.FC = () => {
   const menuItems = [
     { name: "Discover Jobs", path: "/rider/dashboard", icon: Compass },
     { name: "My Active Jobs", path: "/rider/deliveries", icon: Briefcase },
+    { name: "Earnings & Payouts", path: "/rider/earnings", icon: Banknote },
     { name: "Rider Payout History", path: "/rider/history", icon: History },
     { name: "Courier Profile", path: "/rider/profile", icon: User },
   ];
