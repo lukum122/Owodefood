@@ -15,6 +15,12 @@ import { PwaUpdater } from "./components/PwaUpdater";
 import { LoadErrorBanner } from "./components/LoadErrorBanner";
 import { MaintenanceScreen } from "./components/MaintenanceScreen";
 import { AnnouncementPopup } from "./components/AnnouncementPopup";
+import { ToastHost } from "./components/ToastHost";
+import { EarningsPage } from "./pages/EarningsPage";
+import { AdminPayoutRequests } from "./pages/AdminPayoutRequests";
+import { AdminCarts } from "./pages/AdminCarts";
+import { AdminMapSettings } from "./pages/AdminMapSettings";
+import { GetAppPage } from "./pages/GetAppPage";
 
 // Customer Pages
 import { CustomerHome } from "./pages/CustomerHome";
@@ -126,6 +132,7 @@ function AppShell() {
           <PwaUpdater />
           <LoadErrorBanner />
           <AnnouncementPopup />
+          <ToastHost />
 
         <Routes>
           
@@ -152,6 +159,7 @@ function AppShell() {
             <Route path="cart" element={<CustomerCart />} />
             <Route path="checkout" element={<CustomerCheckout />} />
             <Route path="legal/:pageId" element={<LegalPage />} />
+            <Route path="get-app" element={<GetAppPage />} />
 
             {/* Customer Protected Pages */}
             <Route path="orders" element={
@@ -191,6 +199,7 @@ function AppShell() {
             <Route path="products/new" element={<VendorProducts mode="new" />} />
             <Route path="products/edit/:id" element={<VendorProducts mode="edit" />} />
             <Route path="settings" element={<VendorSettings />} />
+            <Route path="earnings" element={<EarningsPage role="vendor" />} />
           </Route>
 
           {/* ================================================= */}
@@ -206,6 +215,7 @@ function AppShell() {
             <Route path="deliveries" element={<RiderDeliveries />} />
             <Route path="history" element={<RiderHistory />} />
             <Route path="profile" element={<RiderProfile />} />
+            <Route path="earnings" element={<EarningsPage role="rider" />} />
           </Route>
 
           {/* ================================================= */}
@@ -231,6 +241,9 @@ function AppShell() {
             <Route path="employees" element={<AdminEmployees />} />
             <Route path="wallets" element={<AdminWallets />} />
             <Route path="payouts" element={<AdminPayouts />} />
+            <Route path="payout-requests" element={<AdminPayoutRequests />} />
+            <Route path="carts" element={<AdminCarts />} />
+            <Route path="map-settings" element={<AdminMapSettings />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="audit-log" element={<AdminAuditLog />} />
             {/* Tighter than the parent /admin guard on purpose: this page

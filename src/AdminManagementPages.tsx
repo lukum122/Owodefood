@@ -841,7 +841,7 @@ export const AdminOrders: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 text-xs text-gray-755">
-                    {selectedOrder.items.map((oi) => {
+                    {(selectedOrder.items || []).map((oi) => {
                       const itemAddonTotal = (oi.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
                       const itemUnitTotal = (oi.price ?? 0) + itemAddonTotal;
                       return (
@@ -877,7 +877,7 @@ export const AdminOrders: React.FC = () => {
                 // silently absorb addon cost into what it labels as
                 // delivery, since it assumes subTotal + vat + svc +
                 // delivery accounts for the whole total.
-                const subTotal = selectedOrder.items.reduce((sum, item) => {
+                const subTotal = (selectedOrder.items || []).reduce((sum, item) => {
                   const addonTotal = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
                   return sum + ((item.price + addonTotal) * item.quantity);
                 }, 0);
