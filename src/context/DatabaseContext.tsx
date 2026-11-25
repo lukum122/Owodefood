@@ -20,9 +20,54 @@ function apiHeaders(): Record<string, string> {
   const token = localStorage.getItem("fd_jwt_token") || "";
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Auth-Token": token };
 }
+// Login tokens last 7 days, but nothing renewed them except checkout. After
+// that the app still LOOKED logged in while the server treated the person
+// as a stranger: empty bell, "mark as read" silently failing, no live
+// updates or beeps, riders' jobs vanishing on reload. Renew early instead.
+export function tokenSecondsLeft(token: string): number | null {
+  try {
+    const part = token.split(".")[1];
+    const json = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof json.exp === "number" ? json.exp - Date.now() / 1000 : null;
+  } catch {
+    return null;
+  }
+}
+let renewInFlight: Promise<"ok" | "renewed" | "expired" | "none"> | null = null;
+/** Renews the login token if it has under 2 days left (or has expired). */
+export function ensureFreshToken(force = false): Promise<"ok" | "renewed" | "expired" | "none"> {
+  const token = localStorage.getItem("fd_jwt_token") || "";
+  if (!token) return Promise.resolve("none");
+  const left = tokenSecondsLeft(token);
+  if (!force && left !== null && left > 2 * 86400) return Promise.resolve("ok");
+  if (renewInFlight) return renewInFlight;
+  renewInFlight = fetch("/api/auth/refresh-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  })
+    .then(async (r) => {
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d?.token) {
+        localStorage.setItem("fd_jwt_token", d.token);
+        window.dispatchEvent(new Event("fd-token-renewed"));
+        return "renewed" as const;
+      }
+      // 401/403 = too old, account gone or suspended: a real log-in is needed.
+      return r.status === 401 || r.status === 403 ? ("expired" as const) : ("ok" as const);
+    })
+    .catch(() => "ok" as const) // offline: try again later
+    .finally(() => { renewInFlight = null; });
+  return renewInFlight;
+}
+
 function postJson(url: string, body: any, method = "POST") {
-  return fetch(url, { method, headers: apiHeaders(), body: JSON.stringify(body) })
-    .then((r) => r.ok)
+  const send = () => fetch(url, { method, headers: apiHeaders(), body: JSON.stringify(body) });
+  return send()
+    .then(async (r) => {
+      if (r.status === 401 && (await ensureFreshToken(true)) === "renewed") r = await send();
+      return r.ok;
+    })
     .catch(() => false);
 }
 
@@ -411,6 +456,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [reviews, setReviews] = useState<Review[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const notificationsCreatedHere = useRef<Set<string>>(new Set());
+  const notificationsReadHere = useRef<Set<string>>(new Set());
+  const notificationsClearedHere = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -610,6 +657,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const loadFromCloudSQL = async () => {
       try {
         setInitialLoadError(null);
+        const renewal = await ensureFreshToken();
+        if (renewal === "expired" && localStorage.getItem("fd_session_user")) {
+          localStorage.removeItem("fd_jwt_token");
+          localStorage.removeItem("fd_session_user");
+          window.location.href = "/login?sessionExpired=1";
+          return;
+        }
         const token = localStorage.getItem("fd_jwt_token");
         const headers: any = {};
         if (token) {
@@ -631,6 +685,21 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
         if (!res.ok) throw new Error("Backend load failed");
         const data = await res.json();
+
+        // The server couldn't use our token (expired/invalid): renew it and
+        // load again, rather than show a logged-out view (empty bell, no
+        // rider jobs) while the app still looks logged in.
+        if (data?.sessionExpired && !(window as any).__fdRetriedLoad) {
+          (window as any).__fdRetriedLoad = true;
+          const r2 = await ensureFreshToken(true);
+          if (r2 === "renewed") { (window as any).__fdRetriedLoad = false; return loadFromCloudSQL(); }
+          if (r2 === "expired" && localStorage.getItem("fd_session_user")) {
+            localStorage.removeItem("fd_jwt_token");
+            localStorage.removeItem("fd_session_user");
+            window.location.href = "/login?sessionExpired=1";
+            return;
+          }
+        }
 
         // Keep the lightweight version-poll in sync with whatever we just
         // fully loaded, so the next 15s check doesn't immediately think
@@ -660,7 +729,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const sortedOrders = [...(data.orders || [])].sort(
             (a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
           );
-          setOrders(sortedOrders);
+          // Admins get no orders in this load (their pages fetch their own).
+          // Replacing the list with that empty one wiped the admin Orders
+          // page every minute -> "Order not found" until a refresh.
+          if (!data.ordersOmitted) setOrders(sortedOrders);
           setPaymentGateways(data.paymentGateways || []);
 
           if (data.savedAddresses) {
@@ -683,7 +755,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               .map((n: any) => (n.userId === "all" && readAnn.has(n.id) ? { ...n, read: true } : n))
               .sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt)));
             loaded.forEach((n) => notificationsCreatedHere.current.add(n.id));
-            setNotifications(loaded);
+            // This reload can be older than what the person just did, so
+            // keep their recent reads/clears and any just-arrived ones
+            // instead of letting the server's copy undo them.
+            const readHere = notificationsReadHere.current;
+            const clearedHere = notificationsClearedHere.current;
+            setNotifications(prev => {
+              const fromServer = loaded
+                .filter(n => !clearedHere.has(n.id))
+                .map(n => (readHere.has(n.id) ? { ...n, read: true } : n));
+              const ids = new Set(fromServer.map(n => n.id));
+              const recentCutoff = Date.now() - 5 * 60 * 1000;
+              const keepLocal = prev.filter(n => !ids.has(n.id) && !clearedHere.has(n.id) && new Date(n.createdAt).getTime() > recentCutoff);
+              return [...keepLocal, ...fromServer].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+            });
           }
 
           if (data.systemSettings) {
@@ -2310,28 +2395,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // (that's all the backend ever sends back), never the actual PIN,
       // so that old approach could never succeed and silently guaranteed
       // this exact dead end every time a token went missing.
+      // Renew the login first. If that fails (e.g. the login is too old),
+      // the old token is useless -- don't send it and fail AFTER the
+      // customer has paid; ask for their PIN right here instead.
       if (token) {
-        try {
-          const refreshRes = await fetch("/api/auth/refresh-token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token })
-          });
-          const refreshData = await refreshRes.json();
-          if (refreshData.success && refreshData.token) {
-            token = refreshData.token;
-            localStorage.setItem("fd_jwt_token", token);
-          }
-        } catch (e) {
-          console.error("[checkout] Token refresh failed:", e);
-        }
+        const renewal = await ensureFreshToken(true);
+        token = renewal === "expired" ? null : localStorage.getItem("fd_jwt_token");
+        const left = token ? tokenSecondsLeft(token) : null;
+        if (left !== null && left <= 0) token = null;
       }
 
-      // Still nothing usable -- rather than a dead-end alert after the
-      // customer may have already paid, ask them to confirm their PIN
-      // right here so they can finish submitting THIS order. Nothing about
-      // their cart, delivery details or payment proof is lost, since we
-      // never navigate away.
       if (!token && activeUser?.email) {
         const reauthPin = window.prompt(
           "Your session needs to be refreshed to finish this order. Please re-enter your login PIN to continue -- your order details are still here:"
@@ -2352,14 +2425,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return { success: false, error: "Unable to verify your session. Please log out completely and log back in, then try again." };
       }
 
-      const headers: any = { "Content-Type": "application/json" };
-      headers["Authorization"] = `Bearer ${token}`;
-      headers["X-Auth-Token"] = token;
-
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
+      const checkoutBody = JSON.stringify({
           customerId: activeUser.id,
           customerName: activeUser.name,
           customerPhone: deliveryPhone || activeUser.phone || "N/A",
@@ -2386,10 +2452,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             quantity: item.quantity,
             selectedAddons: item.selectedAddons
           }))
-        })
+        });
+      const sendCheckout = (t: string) => fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}`, "X-Auth-Token": t },
+        body: checkoutBody,
       });
 
-      const data = await res.json();
+      let res = await sendCheckout(token);
+      let data = await res.json();
+
+      // Login rejected: never make a customer who may have already paid
+      // start over. Ask for their PIN and send the SAME order again.
+      if ((res.status === 401 || res.status === 403) && /jwt|token/i.test(String(data?.error || "")) && activeUser?.email) {
+        const pin = window.prompt("For your security, please re-enter your login PIN to finish this order. Your order and payment receipt are still here:");
+        if (!pin) return { success: false, error: "Please confirm your PIN to finish this order. Nothing has been lost -- press Place Order again." };
+        const again = await login(activeUser.email, pin, (activeUser.role as UserRole) || "customer");
+        if (!again.success || !again.token) {
+          return { success: false, error: again.error || "That PIN didn't work. Press Place Order to try again -- your order is still here." };
+        }
+        res = await sendCheckout(again.token);
+        data = await res.json();
+      }
       if (res.status === 409 && data.priceChanged) {
         // Fees changed between showing the total and placing the order --
         // the checkout screen refreshes its total and the customer confirms.
@@ -2397,8 +2481,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       if (!data.success || res.status === 401 || res.status === 403) {
         if (res.status === 401 || res.status === 403) {
-          localStorage.removeItem("fd_jwt_token");
-          alert(data.error + "\n\nYour secure session has expired or is invalid. Please log out and log back in to get a fresh token.");
+          alert((data.error || "We couldn't confirm your login.") + "\n\nYour order is still here. Please press Place Order again.");
         } else {
           alert(data.error || "Checkout failed");
         }
@@ -2551,6 +2634,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // server; announcements to "all" are tracked per device.
   const markNotificationAsRead = (notificationId: string) => {
     const n = notifications.find(x => x.id === notificationId);
+    notificationsReadHere.current.add(notificationId);
     setNotifications(prev => prev.map(x => x.id === notificationId ? { ...x, read: true } : x));
     if (!n || n.read) return;
     if (n.userId === "all") {
@@ -2562,6 +2646,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const markAllNotificationsAsRead = (userId: string) => {
     const mine = notifications.filter(n => n.userId === userId || n.userId === "all" || userId === "all");
+    mine.forEach(n => notificationsReadHere.current.add(n.id));
     setNotifications(prev => prev.map(n => (n.userId === userId || n.userId === "all" || userId === "all") ? { ...n, read: true } : n));
     const ann = loadIdSet(ANNOUNCEMENT_READ_KEY);
     mine.filter(n => n.userId === "all").forEach(n => ann.add(n.id));
@@ -2571,6 +2656,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const clearAllNotifications = (userId: string) => {
     const mine = notifications.filter(n => n.userId === userId || n.userId === "all" || userId === "all");
+    mine.forEach(n => notificationsClearedHere.current.add(n.id));
     setNotifications(prev => prev.filter(n => !(n.userId === userId || n.userId === "all" || userId === "all")));
     const hidden = loadIdSet(ANNOUNCEMENT_HIDDEN_KEY);
     mine.filter(n => n.userId === "all").forEach(n => hidden.add(n.id));
@@ -2580,6 +2666,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const deleteNotification = (notificationId: string) => {
     const n = notifications.find(x => x.id === notificationId);
+    notificationsClearedHere.current.add(notificationId);
     setNotifications(prev => prev.filter(x => x.id !== notificationId));
     if (n?.userId === "all") {
       const hidden = loadIdSet(ANNOUNCEMENT_HIDDEN_KEY); hidden.add(n.id); saveIdSet(ANNOUNCEMENT_HIDDEN_KEY, hidden);
@@ -2973,6 +3060,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const result = await syncSave("ORDER_UPSERT", candidateOrder);
     if (!result?.success) {
       console.error(`[acceptDelivery] Failed to assign rider to order ${orderId}:`, result?.error);
+      // Taken by someone else / not ready: update the board right away.
+      refreshOrders();
       return { success: false, error: result?.error || "Failed to accept the delivery. Please check your connection and try again." };
     }
 
@@ -3820,6 +3909,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         auth: (cb: (data: object) => void) => cb({ token: localStorage.getItem("fd_jwt_token") || "" }),
       });
       socketRef.current.emit("join", currentUser.id);
+
+      // The server works out this connection's private rooms from the token
+      // when it connects -- so after renewing the token, reconnect.
+      const onTokenRenewed = () => {
+        const s = socketRef.current;
+        if (s) { s.disconnect(); s.connect(); }
+      };
+      window.addEventListener("fd-token-renewed", onTokenRenewed);
+      // Check the token every 6 hours while the app stays open.
+      const renewTimer = window.setInterval(() => { ensureFreshToken(); }, 6 * 3600 * 1000);
+      (socketRef.current as any).__fdCleanup = () => {
+        window.removeEventListener("fd-token-renewed", onTokenRenewed);
+        window.clearInterval(renewTimer);
+      };
       
       if (currentVendor) {
         socketRef.current.emit("join", currentVendor.id);
@@ -3979,6 +4082,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => {
       if (socketRef.current) {
+        (socketRef.current as any).__fdCleanup?.();
         socketRef.current.disconnect();
       }
     };
