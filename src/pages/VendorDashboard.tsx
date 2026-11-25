@@ -1,5 +1,6 @@
 import React from "react";
 import { useDatabase } from "../context/DatabaseContext";
+import { foodSubtotal, vendorTakeHome } from "../money";
 import { Link, useNavigate } from "react-router-dom";
 import { DollarSign, Clock, ListCollapse, UtensilsCrossed, Sparkles, TrendingUp, ShieldAlert, Star, ChevronRight } from "lucide-react";
 
@@ -31,9 +32,11 @@ export const VendorDashboard: React.FC = () => {
   const vendorOrders = orders.filter(o => o.vendorId === currentVendor.id);
   const vendorProducts = products.filter(p => p.vendorId === currentVendor.id);
 
-  const earnings = vendorOrders
-    .filter(o => o.status === "delivered")
-    .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
+  // Food sales only -- the customer's total also includes delivery,
+  // service fee and VAT, which never belonged to the restaurant.
+  const deliveredOrders = vendorOrders.filter(o => o.status === "delivered");
+  const earnings = deliveredOrders.reduce((sum, o) => sum + foodSubtotal(o), 0);
+  const takeHome = deliveredOrders.reduce((sum, o) => sum + vendorTakeHome(o, currentVendor), 0);
 
   const pendingCount = vendorOrders.filter(o => o.status === "pending").length;
   
@@ -89,8 +92,11 @@ export const VendorDashboard: React.FC = () => {
             <DollarSign className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Net Store Income</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block leading-none">Food Sales</span>
             <h3 className="text-xl font-black text-gray-950 mt-1.5 font-mono">{currency}{earnings.toLocaleString()}</h3>
+            <Link to="/vendor/earnings" className="text-[10px] font-bold text-green-700 hover:underline block mt-1">
+              You earn {currency}{takeHome.toLocaleString()} after commission →
+            </Link>
           </div>
         </div>
 
@@ -162,7 +168,7 @@ export const VendorDashboard: React.FC = () => {
                       <span className="text-[10px] text-gray-400">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <span className="block text-[11px] text-gray-500 font-medium">To: {order.customerName} : {order.deliveryAddress}</span>
-                    <span className="text-[10px] text-blue-600 font-bold block">{order.items.length} items : {currency}{(order.totalAmount ?? 0).toLocaleString()}</span>
+                    <span className="text-[10px] text-blue-600 font-bold block">{(order.items || []).length} items : {currency}{foodSubtotal(order).toLocaleString()}</span>
                   </div>
 
                   <span className={`py-1 px-2 rounded-lg font-bold text-[10px] capitalize ${

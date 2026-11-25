@@ -466,6 +466,7 @@ export const CustomerCheckout: React.FC = () => {
   const normalDeliveryFee: number = quote ? quote.normalDeliveryFee : calculateDeliveryFee(cartVendor?.id, total, deliveryAddress);
   const pinRequired = !!quote?.pinRequired;
   const outOfRange = !!quote?.outOfRange;
+  const outsideCoverage = !!quote?.outsideCoverage;
   const availableBatchSlots = cartVendor ? getAvailableBatchSlots(cartVendor.id, deliveryAddress) : [];
   // Mirrors batchDeliveryEnabled's own default: undefined/missing means
   // allowed (true), only an explicit false actually turns it off -- so
@@ -553,6 +554,11 @@ export const CustomerCheckout: React.FC = () => {
     }
     if (pinRequired && !pin) {
       setErrorWord("Please set your delivery location on the map (tap \"Use my current location\" or tap the map). Your delivery fee depends on the distance.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (outsideCoverage) {
+      setErrorWord(quote?.coverageMessage || "Sorry, we don't deliver to this location yet.");
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -1007,6 +1013,7 @@ export const CustomerCheckout: React.FC = () => {
                   </p>
                 )}
                 {quoteError && <p className="text-[11px] font-semibold text-red-600">{quoteError}</p>}
+                {outsideCoverage && <p className="text-[11px] font-bold px-3 py-2 rounded-xl bg-red-50 text-red-700">{quote?.coverageMessage || "Sorry, we don't deliver to this location yet."}</p>}
               </div>
             </div>
 

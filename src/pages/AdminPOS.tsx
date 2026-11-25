@@ -1053,7 +1053,7 @@ export const AdminPOS: React.FC = () => {
                   <span className="col-span-4 text-right">TOTAL</span>
                 </div>
                 
-                {completedOrder.items.map((oi, idx) => (
+                {(completedOrder.items || []).map((oi, idx) => (
                   <div key={idx} className="grid grid-cols-12 text-[10px]">
                     <span className="col-span-6 text-gray-800 font-semibold truncate" title={oi.name}>{oi.name}</span>
                     <span className="col-span-2 text-center text-gray-500">{oi.quantity}</span>

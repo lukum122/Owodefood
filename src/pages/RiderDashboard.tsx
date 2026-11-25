@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useDatabase } from "../context/DatabaseContext";
-import { MapPin, Store, DollarSign, Clock, Compass, HelpCircle, Bike, CheckCircle2, Truck, Phone } from "lucide-react";
+import { MapPin, Store, DollarSign, Clock, Compass, HelpCircle, Bike, CheckCircle2, Truck, Phone, RefreshCw } from "lucide-react";
 
 export const RiderDashboard: React.FC = () => {
   const { 
@@ -9,8 +9,23 @@ export const RiderDashboard: React.FC = () => {
     acceptDelivery, 
     currency,
     riderCommissionType,
-    riderCommissionValue
+    riderCommissionValue,
+    refreshOrders
   } = useDatabase();
+  const [refreshing, setRefreshing] = useState(false);
+  const doRefresh = async () => {
+    setRefreshing(true);
+    await refreshOrders();
+    setRefreshing(false);
+  };
+  // Catch up on jobs whenever the rider comes back to the app, and every
+  // minute while the board is open (in case a live update was missed).
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") refreshOrders(); };
+    document.addEventListener("visibilitychange", onVisible);
+    const t = window.setInterval(() => { if (document.visibilityState === "visible") refreshOrders(); }, 60000);
+    return () => { document.removeEventListener("visibilitychange", onVisible); window.clearInterval(t); };
+  }, []);
 
   if (!currentRider) {
     return (
@@ -67,6 +82,16 @@ export const RiderDashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 font-sans">
+      <div className="flex justify-end">
+        <button
+          onClick={doRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#070329] text-white text-xs font-bold disabled:opacity-60"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Checking…" : "Refresh jobs"}
+        </button>
+      </div>
       
       {/* Availability Status Badge Banner */}
       {!currentRider.isAvailable && (

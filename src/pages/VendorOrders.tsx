@@ -1,6 +1,7 @@
 import React from "react";
 import { OrderChatButton } from "../chat/OrderChatButton";
 import { useDatabase } from "../context/DatabaseContext";
+import { foodSubtotal } from "../money";
 import { OrderStatus } from "../types";
 import { Check, X, Flame, ShieldCheck, ShoppingBag, MapPin, Phone, User, Clock } from "lucide-react";
 
@@ -76,7 +77,10 @@ export const VendorOrders: React.FC = () => {
                       <p className="text-[10px] text-gray-400 mt-1 pl-1">Placed {new Date(order.createdAt).toLocaleTimeString()}</p>
                     </div>
 
-                    <span className="font-extrabold text-gray-950 text-base font-mono">{currency}{(order.totalAmount ?? 0).toLocaleString()}</span>
+                    <div className="text-right">
+                      <span className="font-extrabold text-gray-950 text-base font-mono block">{currency}{foodSubtotal(order).toLocaleString()}</span>
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Food total</span>
+                    </div>
                   </div>
 
                   {/* Customer receipt details & Recipient parameters */}
@@ -85,7 +89,7 @@ export const VendorOrders: React.FC = () => {
                     <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-2">
                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Dish Ordered</span>
                       <div className="divide-y divide-gray-100 text-xs">
-                        {order.items.map((oi) => (
+                        {(order.items || []).map((oi) => (
                           <div key={oi.id} className="py-2 flex justify-between">
                             <span className="text-gray-700">{oi.name} <b className="text-gray-900">x{oi.quantity}</b></span>
                             <span className="font-bold text-gray-800 font-mono">{currency}{((oi.price ?? 0) * oi.quantity).toLocaleString()}</span>
@@ -223,7 +227,7 @@ export const VendorOrders: React.FC = () => {
                     <span className="text-[10px] text-gray-400 font-mono italic">{new Date(ho.createdAt).toLocaleDateString()}</span>
                   </div>
                   
-                  <span className="font-bold text-gray-900 font-mono">{currency}{(ho.totalAmount ?? 0).toLocaleString()}</span>
+                  <span className="font-bold text-gray-900 font-mono">{currency}{foodSubtotal(ho).toLocaleString()}</span>
                 </div>
               ))}
             </div>

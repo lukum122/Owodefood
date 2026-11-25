@@ -251,7 +251,7 @@ export const CustomerOrders: React.FC = () => {
                           )}
                         </div>
                       ) : (
-                        order.items.map((item, id) => {
+                        (order.items || []).map((item, id) => {
                           const itemAddonTotal = (item.selectedAddons || []).reduce((s, a) => s + ((a.price ?? 0) * (a.quantity ?? 1)), 0);
                           const itemUnitTotal = (item.price ?? 0) + itemAddonTotal;
                           return (

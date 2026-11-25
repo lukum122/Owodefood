@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useDatabase } from "../context/DatabaseContext";
 import { isVendorOpen, getVendorHoursDisplay } from "../types";
+import { GetAppSection } from "../components/GetAppSection";
 import { Search, Star, MapPin, Sparkles, Filter, ChevronRight, ArrowRight, LayoutGrid, Store, UtensilsCrossed, Apple, Pill, ShoppingBag, Flame, Shuffle, ArrowUpDown, Heart } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 
@@ -236,7 +237,7 @@ export const CustomerHome: React.FC = () => {
     // Count order items matching this subcategory
     orders.forEach(order => {
       if (targetVendorIds.has(order.vendorId)) {
-        order.items.forEach(item => {
+        (order.items || []).forEach(item => {
           const p = products.find(prod => prod.id === item.productId);
           if (p && p.category) {
             const cat = baseList.find(c => c.name.toLowerCase() === p.category.toLowerCase());
@@ -982,6 +983,9 @@ export const CustomerHome: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Install the app to the home screen (Android / iPhone) */}
+      <GetAppSection compact />
 
     </div>
   );
