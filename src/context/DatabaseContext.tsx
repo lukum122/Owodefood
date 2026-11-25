@@ -4,6 +4,27 @@ import { io, Socket } from "socket.io-client";
 import { User, Vendor, Product, Order, Rider, Address, Category, UserRole, OrderStatus, Addon, PaymentGateway, VendorCategory, VendorCategoryInfo, Employee, UserSavedAddress, ExtremeLocationTier, ExtremeLocation, Review, AppNotification, WalletTransaction, SystemSurgeConfig, LegalContent, ContactInfo, HomepageSection, Collection, HeroBannerConfig, ReceiptPickupConfig } from "../types";
 import { hasRole } from "../roleHelper";
 import { useUpdateManager } from './UpdateManagerContext';
+import { notifyUser } from "../notify";
+
+// Read state for platform-wide ("all") announcements is per person, so it
+// lives on this device rather than on the shared database row.
+const ANNOUNCEMENT_READ_KEY = "fd_read_announcements";
+const ANNOUNCEMENT_HIDDEN_KEY = "fd_hidden_announcements";
+function loadIdSet(key: string): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
+}
+function saveIdSet(key: string, ids: Set<string>) {
+  try { localStorage.setItem(key, JSON.stringify(Array.from(ids).slice(-300))); } catch { /* ignore */ }
+}
+function apiHeaders(): Record<string, string> {
+  const token = localStorage.getItem("fd_jwt_token") || "";
+  return { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Auth-Token": token };
+}
+function postJson(url: string, body: any, method = "POST") {
+  return fetch(url, { method, headers: apiHeaders(), body: JSON.stringify(body) })
+    .then((r) => r.ok)
+    .catch(() => false);
+}
 
 export interface CartItem {
   id: string;
@@ -25,6 +46,8 @@ interface DatabaseContextType {
   orders: Order[];
   riders: Rider[];
   cart: CartItem[];
+  /** Re-download this account's orders (rider job board "Refresh"). */
+  refreshOrders: () => Promise<boolean>;
   categories: Category[];
   addProductCategory: (category: Omit<Category, "id">) => void;
   updateProductCategory: (id: string, updates: Partial<Category>) => void;
@@ -381,8 +404,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [riders, setRiders] = useState<Rider[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Keep a live copy of a logged-in customer's cart on the server so admin
+  // can see what people are about to order (Admin > Active Carts).
+  const cartSyncTimer = useRef<number | undefined>(undefined);
+  const lastSyncedCart = useRef<string>("");
   const [reviews, setReviews] = useState<Review[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const notificationsCreatedHere = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -644,6 +672,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setEmployees(data.employees || []);
           setMyEmployeeProfile(data.myEmployeeProfile || null);
           setReviews(data.reviews || []);
+
+          // Notifications were saved on the server but never loaded back,
+          // so the bell emptied on every reload / new visit.
+          if (Array.isArray(data.notifications)) {
+            const readAnn = loadIdSet(ANNOUNCEMENT_READ_KEY);
+            const hiddenAnn = loadIdSet(ANNOUNCEMENT_HIDDEN_KEY);
+            const loaded: AppNotification[] = data.notifications
+              .filter((n: any) => !(n.userId === "all" && hiddenAnn.has(n.id)))
+              .map((n: any) => (n.userId === "all" && readAnn.has(n.id) ? { ...n, read: true } : n))
+              .sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt)));
+            loaded.forEach((n) => notificationsCreatedHere.current.add(n.id));
+            setNotifications(loaded);
+          }
 
           if (data.systemSettings) {
             if (data.systemSettings.platformCommissionRate) setPlatformCommissionRate(Number(data.systemSettings.platformCommissionRate));
@@ -2163,6 +2204,23 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const clearCart = () => setCart([]);
 
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const payload = cart.map(i => ({
+      productId: i.product.id,
+      quantity: i.quantity,
+      addons: (i.selectedAddons || []).map(a => ({ name: a.name, price: a.price, quantity: a.quantity || 1 })),
+    }));
+    const sig = JSON.stringify(payload);
+    if (sig === lastSyncedCart.current) return;
+    window.clearTimeout(cartSyncTimer.current);
+    cartSyncTimer.current = window.setTimeout(() => {
+      lastSyncedCart.current = sig;
+      postJson("/api/cart", { items: payload }, "PUT");
+    }, 2000);
+    return () => window.clearTimeout(cartSyncTimer.current);
+  }, [cart, currentUser?.id]);
+
   // Replaces an existing cart item's addons in place, keeping the same
   // cart entry (and its quantity) rather than adding a new, separate
   // line -- used when a customer edits an item's customization from the
@@ -2471,6 +2529,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString(),
       relatedId
     };
+    notificationsCreatedHere.current.add(newNotif.id);
     setNotifications(prev => [newNotif, ...prev]);
 
     // Persist to the server so the intended recipient actually sees this on
@@ -2487,20 +2546,46 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
+  // Read / clear used to change only this browser's copy, so everything
+  // came back unread (or reappeared) after a reload. Now saved on the
+  // server; announcements to "all" are tracked per device.
   const markNotificationAsRead = (notificationId: string) => {
-    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+    const n = notifications.find(x => x.id === notificationId);
+    setNotifications(prev => prev.map(x => x.id === notificationId ? { ...x, read: true } : x));
+    if (!n || n.read) return;
+    if (n.userId === "all") {
+      const s = loadIdSet(ANNOUNCEMENT_READ_KEY); s.add(n.id); saveIdSet(ANNOUNCEMENT_READ_KEY, s);
+    } else {
+      postJson("/api/notifications/read", { ids: [notificationId] });
+    }
   };
 
   const markAllNotificationsAsRead = (userId: string) => {
-    setNotifications(prev => prev.map(n => n.userId === userId || userId === "all" ? { ...n, read: true } : n));
+    const mine = notifications.filter(n => n.userId === userId || n.userId === "all" || userId === "all");
+    setNotifications(prev => prev.map(n => (n.userId === userId || n.userId === "all" || userId === "all") ? { ...n, read: true } : n));
+    const ann = loadIdSet(ANNOUNCEMENT_READ_KEY);
+    mine.filter(n => n.userId === "all").forEach(n => ann.add(n.id));
+    saveIdSet(ANNOUNCEMENT_READ_KEY, ann);
+    if (mine.some(n => n.userId !== "all" && !n.read)) postJson("/api/notifications/read", {});
   };
 
   const clearAllNotifications = (userId: string) => {
-    setNotifications(prev => prev.filter(n => n.userId !== userId && userId !== "all"));
+    const mine = notifications.filter(n => n.userId === userId || n.userId === "all" || userId === "all");
+    setNotifications(prev => prev.filter(n => !(n.userId === userId || n.userId === "all" || userId === "all")));
+    const hidden = loadIdSet(ANNOUNCEMENT_HIDDEN_KEY);
+    mine.filter(n => n.userId === "all").forEach(n => hidden.add(n.id));
+    saveIdSet(ANNOUNCEMENT_HIDDEN_KEY, hidden);
+    if (mine.some(n => n.userId !== "all")) postJson("/api/notifications/clear", {});
   };
 
   const deleteNotification = (notificationId: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    const n = notifications.find(x => x.id === notificationId);
+    setNotifications(prev => prev.filter(x => x.id !== notificationId));
+    if (n?.userId === "all") {
+      const hidden = loadIdSet(ANNOUNCEMENT_HIDDEN_KEY); hidden.add(n.id); saveIdSet(ANNOUNCEMENT_HIDDEN_KEY, hidden);
+    } else if (n) {
+      postJson("/api/notifications/clear", { ids: [notificationId] });
+    }
   };
 
   // WALLET SYSTEM MANAGEMENT ACTIONS
@@ -3057,10 +3142,28 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setOrders(prev => {
       const byId = new Map(prev.map(o => [o.id, o]));
       for (const incoming of incomingOrders) {
-        byId.set(incoming.id, incoming);
+        if (!incoming?.id) continue;
+        // Merge rather than replace: a live update that leaves fields out
+        // (e.g. no items) used to wipe them, making the order vanish from
+        // the customer's screen until a reload brought the full copy back.
+        const existing = byId.get(incoming.id) as Order | undefined;
+        const items = Array.isArray(incoming.items) ? incoming.items : (existing?.items || []);
+        byId.set(incoming.id, { ...(existing || {}), ...incoming, items } as Order);
       }
       return Array.from(byId.values());
     });
+  };
+
+  const refreshOrders = async (): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/sync/load", { headers: apiHeaders() });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (Array.isArray(data.orders)) mergeOrdersIntoContext(data.orders);
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const mergeUsersIntoContext = (incomingUsers: User[]) => {
@@ -3732,12 +3835,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       socketRef.current.on("new_order", (data) => {
-        // Play a "Ding" sound
-        try {
-          const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-          audio.play();
-        } catch(e) {}
-        alert(`New Order Received! Order ID: ${data.orderId}`);
+        // Loud beep + toast (the old alert() froze the whole screen).
+        const isAdminSession = currentUser?.roles?.includes("admin") || currentUser?.roles?.includes("super_admin");
+        notifyUser({
+          title: "🛎️ New order received!",
+          message: `Order #${data.orderId}${data.order?.customerName ? ` from ${data.order.customerName}` : ""}`,
+          kind: "urgent",
+          link: isAdminSession ? "/admin/orders" : "/vendor/orders",
+        });
 
         if (data.order) {
           setOrders(prev => {
@@ -3750,6 +3855,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Chat: hand live messages to whichever chat screen/badge is open.
       socketRef.current.on("chat_message", (data: any) => {
         window.dispatchEvent(new CustomEvent("fd-chat-message", { detail: data }));
+        // Beep for messages from other people only.
+        if (data?.message?.senderId && data.message.senderId !== currentUser?.id) {
+          notifyUser({
+            title: `💬 ${data.message.senderName || "New message"}`,
+            message: String(data.message.body || (data.message.imageUrl ? "📷 Photo" : "")).slice(0, 120),
+          });
+        }
       });
       // Live rider position for tracking maps.
       socketRef.current.on("rider_location", (data: any) => {
@@ -3763,12 +3875,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
 
       socketRef.current.on("new_delivery_job", (data) => {
-        // Play a "Ding" sound for riders
-        try {
-          const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-          audio.play();
-        } catch(e) {}
-        alert(`New Delivery Job Available! Order ID: ${data.orderId}`);
+        notifyUser({
+          title: "🛵 New delivery job!",
+          message: `${data.vendorName ? data.vendorName + " — " : ""}Order #${data.orderId}. Open your dashboard to take it.`,
+          kind: "urgent",
+          link: "/rider/dashboard",
+        });
       });
 
       socketRef.current.on("sync_update", (data: { type?: string; payload?: any }) => {
@@ -3834,8 +3946,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               // double-checking here avoids polluting someone else's
               // notification list in the (currently only admin-inclusive)
               // room case.
-              if (payload.userId === currentUser?.id) {
+              if (payload.userId === currentUser?.id || payload.userId === "all") {
                 setNotifications(prev => (prev.some(n => n.id === payload.id) ? prev : [payload, ...prev]));
+                // Every notification beeps (and shows a toast) when it
+                // arrives -- once, and not for ones this browser created.
+                if (!notificationsCreatedHere.current.has(payload.id)) {
+                  notificationsCreatedHere.current.add(payload.id);
+                  notifyUser({ title: payload.title, message: payload.message });
+                }
               }
               return;
             case "USER_SAVED_ADDRESS_UPSERT":
@@ -3889,6 +4007,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         orders,
         riders,
         cart,
+        refreshOrders,
         categories,
         addProductCategory,
         updateProductCategory,
