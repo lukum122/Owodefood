@@ -31,6 +31,7 @@ import {
   payoutLogs,
 } from "./src/db/schema.ts";
 import { registerChatRoutes } from "./src/server/chat.ts";
+import { registerExtraRoutes, loadMapSettings, checkCoverage, googleTileConfig } from "./src/server/extras.ts";
 import { quoteOrder, validCoord, loadPricingSettings, DEFAULT_DELIVERY_PRICING } from "./src/server/pricing.ts";
 import { uploadPublicImage, uploadPrivateImage, getSignedPrivateUrl, isPublicR2Configured, isPrivateR2Configured } from "./src/server/r2.ts";
 import { eq, sql, inArray, count, sum, and, or, ilike, gte, lte, desc, isNull, asc, gt } from "drizzle-orm";
@@ -301,7 +302,7 @@ app.use(helmet({
       // begin with. This is a fixed browser-generated scheme, not a
       // domain, so it doesn't widen what's allowed the way adding a real
       // external domain would.
-      imgSrc: ["'self'", "data:", "blob:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : []), ...(mapTileOrigin ? [mapTileOrigin] : [])],
+      imgSrc: ["'self'", "data:", "blob:", "https://*.r2.cloudflarestorage.com", ...(r2PublicOrigin ? [r2PublicOrigin] : []), ...(mapTileOrigin ? [mapTileOrigin] : []), "https://tile.googleapis.com"],
       connectSrc: ["'self'", "ws:", "wss:"], // ws/wss for the Socket.io connection
       objectSrc: ["'none'"],
       frameAncestors: ["'self'"],
@@ -2038,7 +2039,10 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
           : Promise.resolve([]),
         db.select().from(userSavedAddresses).where(eq(userSavedAddresses.userId, reqUser.id)),
         db.select().from(walletTransactions).where(eq(walletTransactions.userId, reqUser.id)),
-        db.select().from(appNotifications).where(eq(appNotifications.userId, reqUser.id)),
+        // Own notifications plus platform-wide announcements ("all").
+        db.select().from(appNotifications)
+          .where(inArray(appNotifications.userId, [reqUser.id, "all"]))
+          .orderBy(desc(appNotifications.createdAt)).limit(200),
       ]);
 
       // RIDERS: this load never included any rider orders, so the rider
@@ -2052,7 +2056,10 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         const riderOrders = await db.select().from(orders).where(
           or(
             inArray(orders.riderId, myApprovedRiderIds),
-            and(isNull(orders.riderId), inArray(orders.status, ["accepted", "preparing", "ready"]))
+            and(isNull(orders.riderId), inArray(orders.status, ["accepted", "preparing", "ready"])),
+            // Receipt-pickup errands sit at "pending" until a rider takes
+            // them -- the rider board shows them, but they were never sent.
+            and(isNull(orders.riderId), eq(orders.orderType, "receipt_pickup"), eq(orders.status, "pending"))
           )
         ).orderBy(desc(orders.createdAt)).limit(400);
         const seen = new Set(allOrders.map((o: any) => o.id));
@@ -3885,6 +3892,10 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
         if (!reqUser) {
           return res.status(401).json({ error: "Unauthorized: Please log in." });
         }
+        // Platform-wide announcements are a staff-only broadcast.
+        if (payload.userId === "all" && !isAdmin && !(await isActiveEmployee(reqUser))) {
+          return res.status(403).json({ error: "Only admins can send announcements to everyone." });
+        }
         await db.insert(appNotifications).values({
           id: payload.id,
           userId: payload.userId,
@@ -3995,8 +4006,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       if (payload?.riderId) notifyRooms.add(payload.riderId);
       if (payload?.userId) notifyRooms.add(payload.userId);
 
-      for (const room of notifyRooms) {
-        io.to(room).emit("sync_update", { type, payload: confirmedData });
+      if (type === "NOTIFICATION_CREATE" && payload?.userId === "all") {
+        // Announcement to everyone: there is no "all" room, so broadcast.
+        io.emit("sync_update", { type, payload: confirmedData });
+      } else {
+        for (const room of notifyRooms) {
+          io.to(room).emit("sync_update", { type, payload: confirmedData });
+        }
       }
 
       // Rider job board: every approved rider sees open jobs appear (and
@@ -4004,12 +4020,19 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       // stripped -- riders only get it once the job is theirs. The
       // assigned rider is excluded here because they already received the
       // full record through their own room above.
+      // A rider approved while their app is open joins the live job board
+      // right away (rooms were only worked out when the socket connected).
+      if (type === "RIDER_UPSERT" && confirmedData?.status === "approved" && confirmedData?.userId) {
+        io.in(confirmedData.userId).socketsJoin(["riders", confirmedData.id]);
+      }
+
       if (type === "ORDER_UPSERT" && confirmedData?.id) {
-        const isOpenJob = !confirmedData.riderId && ["accepted", "preparing", "ready"].includes(confirmedData.status);
+        const isOpenJob = !confirmedData.riderId && (["accepted", "preparing", "ready"].includes(confirmedData.status)
+          || (confirmedData.orderType === "receipt_pickup" && confirmedData.status === "pending"));
         if (isOpenJob) {
           const keepFullOpen = [confirmedData.vendorId, confirmedData.customerId, "admin"].filter(Boolean) as string[];
           io.to("riders").except(keepFullOpen).emit("sync_update", { type, payload: { ...confirmedData, customerPhone: "" } });
-        } else if (confirmedData.riderId || confirmedData.status === "cancelled") {
+        } else if (confirmedData.riderId || ["cancelled", "delivered"].includes(confirmedData.status)) {
           // Taken or cancelled: other riders only need to know it's gone
           // from the board -- not the customer's name or address.
           const gone = {
@@ -4062,8 +4085,20 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
 });
 
 // 4. Secure Checkout API
-app.get("/api/map/config", (req: any, res: any) => {
-  res.json({ tileUrl: MAP_TILE_URL, attribution: MAP_TILE_ATTRIBUTION, maxZoom: 19, defaultCenter: { lat: 8.4966, lng: 4.5421 } });
+app.get("/api/map/config", async (req: any, res: any) => {
+  const ms = await loadMapSettings().catch(() => null);
+  // Google map images when chosen in Admin > Map & Coverage (and the key
+  // works); otherwise the free OpenStreetMap images.
+  const google = await googleTileConfig().catch(() => null);
+  res.set("Cache-Control", "no-store");
+  res.json({
+    tileUrl: google?.tileUrl || MAP_TILE_URL,
+    attribution: google?.attribution || MAP_TILE_ATTRIBUTION,
+    maxZoom: google?.maxZoom || 19,
+    defaultCenter: { lat: 8.4966, lng: 4.5421 },
+    provider: google ? "google" : "osm",
+    coverage: ms?.coverageEnabled && ms.areas.length ? { areas: ms.areas, message: ms.coverageMessage } : null,
+  });
 });
 
 // Price preview for the checkout screen -- the exact same calculation the
@@ -4079,11 +4114,15 @@ app.post("/api/checkout/quote", verifyTokenOptional, async (req: any, res: any) 
       lat: hasPin ? deliveryLat : null, lng: hasPin ? deliveryLng : null, batch: !!batch,
     });
     if ("error" in q) return res.status(400).json({ error: q.error });
+    const cov = hasPin ? await checkCoverage(deliveryLat, deliveryLng) : { ok: true } as any;
+    const mapCfgQ = await loadMapSettings();
+    const coverageOnQ = mapCfgQ.coverageEnabled && mapCfgQ.areas.length > 0;
     res.json({
+      outsideCoverage: !cov.ok, coverageMessage: cov.ok ? null : cov.message,
       subtotal: q.subtotal, deliveryFee: q.deliveryFee, normalDeliveryFee: q.normalDeliveryFee, serviceFee: q.serviceFee, tax: q.tax, total: q.total,
       distanceKm: q.distanceKm, usedDistance: q.usedDistance, pricingMode: q.pricingMode, outOfRange: q.outOfRange, maxKm: q.maxKm,
       vendorHasLocation: q.vendorHasLocation,
-      pinRequired: !isReceiptPickup && q.pricingMode !== "zones" && q.vendorHasLocation,
+      pinRequired: !isReceiptPickup && ((q.pricingMode !== "zones" && q.vendorHasLocation) || coverageOnQ),
     });
   } catch (e) {
     console.error("Quote failed:", e);
@@ -4356,6 +4395,18 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     }
     if (!isReceiptPickup && quote.pricingMode !== "zones" && quote.vendorHasLocation && !hasPin) {
       return res.status(400).json({ error: "Please set your delivery location on the map so we can calculate your delivery fee." });
+    }
+    // Delivery coverage set by admin on the map (Admin > Map & Coverage).
+    {
+      const mapCfg = await loadMapSettings();
+      const coverageOn = mapCfg.coverageEnabled && mapCfg.areas.length > 0;
+      if (coverageOn && !isReceiptPickup && !hasPin) {
+        return res.status(400).json({ error: "Please set your delivery location on the map so we can confirm we deliver there." });
+      }
+      if (coverageOn && hasPin) {
+        const cov = await checkCoverage(deliveryLat, deliveryLng);
+        if (!cov.ok) return res.status(400).json({ error: cov.message, outsideCoverage: true });
+      }
     }
     // If what the customer saw differs from the real price (settings
     // changed, surge switched on, stale app), don't silently charge a
@@ -4804,7 +4855,10 @@ app.post("/api/orders/:id/confirm-delivery", authLimiter, verifyTokenOptional, a
       createdAt: deliveredAt,
     });
 
-    const updated = (await db.select().from(orders).where(eq(orders.id, order.id)).limit(1))[0];
+    const updatedRow = (await db.select().from(orders).where(eq(orders.id, order.id)).limit(1))[0];
+    // Always send the items with an order update: the customer's order
+    // screen needs them, and an update without them used to blank it out.
+    const updated = { ...updatedRow, items: await db.select().from(orderItems).where(eq(orderItems.orderId, order.id)) };
 
     // Live update to everyone involved.
     const rooms = new Set<string>(["admin", order.customerId, order.vendorId, order.riderId].filter(Boolean));
@@ -4839,6 +4893,7 @@ app.post("/api/push/unsubscribe", async (req: any, res: any) => {
 
 // In-app chat (order chats + 24/7 support inbox) -- see src/server/chat.ts
 registerChatRoutes(app, { io, verifyTokenOptional, sendPushToUsers, isAdminUser, isActiveEmployee });
+registerExtraRoutes(app, { io, verifyTokenOptional, sendPushToUsers, isAdminUser, hasPermission });
 
 // Structured logger
 const logger = {
