@@ -13,9 +13,6 @@ export default defineConfig(() => {
         workbox: {
           clientsClaim: true,
           skipWaiting: true,
-          // The app bundle is ~2.3 MB (over the 2 MB default), so raise the
-          // offline-cache limit or the build fails.
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           // Adds the push + notification-tap handlers (public/push-sw.js)
           // to the generated service worker.
           importScripts: ['/push-sw.js'],
