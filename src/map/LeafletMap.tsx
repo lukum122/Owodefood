@@ -5,11 +5,26 @@ import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+export interface CoverageArea { id: string; name: string; lat: number; lng: number; radiusKm: number }
 export interface MapConfig {
   tileUrl: string;
   attribution: string;
   maxZoom: number;
   defaultCenter: { lat: number; lng: number };
+  provider?: "osm" | "google";
+  coverage?: { areas: CoverageArea[]; message: string } | null;
+}
+
+/** Is a point inside any admin delivery area? (true when coverage is off) */
+export function insideCoverage(cfg: MapConfig | null, lat: number, lng: number): boolean {
+  const areas = cfg?.coverage?.areas || [];
+  if (areas.length === 0) return true;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  return areas.some((a) => {
+    const dLat = toRad(lat - a.lat), dLng = toRad(lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h)) <= a.radiusKm;
+  });
 }
 
 let configPromise: Promise<MapConfig> | null = null;
@@ -58,12 +73,15 @@ interface Props {
   center?: { lat: number; lng: number } | null;
   zoom?: number;
   fitToMarkers?: boolean;
+  /** Circles to draw, e.g. delivery areas. */
+  circles?: CoverageArea[];
   onMapClick?: (lat: number, lng: number) => void;
   onMarkerDrag?: (id: string, lat: number, lng: number) => void;
   className?: string;
 }
 
-export const LeafletMap: React.FC<Props> = ({ markers, center, zoom = 15, fitToMarkers, onMapClick, onMarkerDrag, className }) => {
+export const LeafletMap: React.FC<Props> = ({ markers, center, zoom = 15, fitToMarkers, circles, onMapClick, onMarkerDrag, className }) => {
+  const circleLayerRef = useRef<L.LayerGroup | null>(null);
   const elRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<Map<string, L.Marker>>(new Map());
@@ -95,6 +113,7 @@ export const LeafletMap: React.FC<Props> = ({ markers, center, zoom = 15, fitToM
       cancelled = true;
       mapRef.current?.remove();
       mapRef.current = null;
+      circleLayerRef.current = null;
       layerRef.current.clear();
     };
   }, []);
@@ -132,6 +151,20 @@ export const LeafletMap: React.FC<Props> = ({ markers, center, zoom = 15, fitToM
       map.fitBounds(L.latLngBounds(markers.map((m) => [m.lat, m.lng] as [number, number])), { padding: [40, 40], maxZoom: 16 });
     }
   }, [markers, ready, fitToMarkers]);
+
+  // Delivery-area circles.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (!circleLayerRef.current) circleLayerRef.current = L.layerGroup().addTo(map);
+    const g = circleLayerRef.current;
+    g.clearLayers();
+    for (const c of circles || []) {
+      L.circle([c.lat, c.lng], { radius: c.radiusKm * 1000, color: "#16a34a", weight: 2, fillColor: "#22c55e", fillOpacity: 0.08, interactive: false })
+        .bindTooltip(c.name, { permanent: false })
+        .addTo(g);
+    }
+  }, [circles, ready]);
 
   // Re-center when asked (e.g. "use my location").
   useEffect(() => {
