@@ -385,3 +385,56 @@ export const chatReads = pgTable("chat_reads", {
 }, (table) => ({
   userIdx: index("chat_reads_user_idx").on(table.userId),
 }));
+
+// Where a vendor / rider wants their earnings sent. Kept in its own table
+// (NOT on vendors/riders) because vendor records are sent to every visitor.
+export const payoutAccounts = pgTable("payout_accounts", {
+  id: text("id").primaryKey(),
+  recipientType: text("recipient_type").notNull(), // vendor | rider
+  recipientId: text("recipient_id").notNull(),
+  userId: text("user_id").notNull(),
+  bankName: text("bank_name").notNull(),
+  bankAccountNumber: text("bank_account_number").notNull(),
+  bankAccountName: text("bank_account_name").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// A vendor or rider asking to be paid what they've earned. Admin transfers
+// the money manually, then presses "Paid" -- which settles the orders.
+export const payoutRequests = pgTable("payout_requests", {
+  id: text("id").primaryKey(),
+  recipientType: text("recipient_type").notNull(),
+  recipientId: text("recipient_id").notNull(),
+  recipientName: text("recipient_name").notNull(),
+  userId: text("user_id").notNull(),
+  amount: integer("amount").notNull(),
+  orderIds: jsonb("order_ids").notNull(),
+  bankName: text("bank_name").notNull(),
+  bankAccountNumber: text("bank_account_number").notNull(),
+  bankAccountName: text("bank_account_name").notNull(),
+  note: text("note"),
+  status: text("status").notNull().default("pending"), // pending | paid | rejected
+  adminNote: text("admin_note"),
+  reference: text("reference"),
+  requestedAt: text("requested_at").notNull(),
+  processedAt: text("processed_at"),
+  processedBy: text("processed_by"),
+}, (table) => ({
+  recipientIdx: index("payout_requests_recipient_idx").on(table.recipientId),
+  statusIdx: index("payout_requests_status_idx").on(table.status),
+}));
+
+// Live copy of each logged-in customer's cart, so admin can follow up.
+export const customerCarts = pgTable("customer_carts", {
+  userId: text("user_id").primaryKey(),
+  userName: text("user_name"),
+  userPhone: text("user_phone"),
+  vendorId: text("vendor_id"),
+  vendorName: text("vendor_name"),
+  items: jsonb("items").notNull(),
+  itemCount: integer("item_count").notNull().default(0),
+  subtotal: integer("subtotal").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => ({
+  updatedIdx: index("customer_carts_updated_idx").on(table.updatedAt),
+}));
