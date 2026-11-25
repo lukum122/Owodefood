@@ -2010,7 +2010,8 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         db.select().from(userSavedAddresses),
         db.select().from(employees),
         db.select().from(walletTransactions),
-        db.select().from(appNotifications),
+        // Newest first and capped -- this was every notification ever sent.
+        db.select().from(appNotifications).orderBy(desc(appNotifications.createdAt)).limit(500),
       ]);
     } else if (reqUser) {
       // Regular user / Vendor / Rider - Tenant Isolation.
@@ -2056,7 +2057,9 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
         const riderOrders = await db.select().from(orders).where(
           or(
             inArray(orders.riderId, myApprovedRiderIds),
-            and(isNull(orders.riderId), inArray(orders.status, ["accepted", "preparing", "ready"])),
+            // Open jobs: only once the restaurant marks the food READY for
+            // pickup (they used to appear the moment admin accepted).
+            and(isNull(orders.riderId), eq(orders.status, "ready")),
             // Receipt-pickup errands sit at "pending" until a rider takes
             // them -- the rider board shows them, but they were never sent.
             and(isNull(orders.riderId), eq(orders.orderType, "receipt_pickup"), eq(orders.status, "pending"))
@@ -2094,6 +2097,13 @@ app.get("/api/sync/load", verifyTokenOptional, async (req: any, res: any) => {
       users: allUsers,
       vendors: allVendors,
       products: allProducts,
+      // Admins get NO orders here (their pages fetch orders separately), so
+      // tell the app not to replace its order list with this empty one --
+      // that wiped the admin Orders page and caused "Order not found".
+      ordersOmitted: !!isAdmin,
+      // A token was sent but has expired / is invalid: the app renews it
+      // and reloads, instead of silently showing a logged-out view.
+      sessionExpired: !reqUser && !!(req as any).jwtError,
       orders: allOrders.map((o) => {
         // Attach items to orders
         const items = allOrderItems.filter((oi) => oi.orderId === o.id);
@@ -2886,7 +2896,28 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
             const isClaimingRider = !order.riderId && !!payload.riderId && myApprovedRiderIds.includes(payload.riderId);
             const isRider = isAssignedRider || isClaimingRider;
 
+            // Someone else already took it: say so plainly.
+            if (!isCustomer && !isVendor && !isAssignedRider && order.riderId && payload.riderId && myApprovedRiderIds.includes(payload.riderId)) {
+              return res.status(409).json({ error: "Another rider has already taken this delivery.", jobTaken: true });
+            }
+
             if (!isCustomer && !isVendor && !isRider) return res.status(403).json({ error: "Forbidden" });
+
+            if (isClaimingRider && !isVendor) {
+              const claimable = order.status === "ready" || (order.orderType === "receipt_pickup" && order.status === "pending");
+              if (!claimable) {
+                return res.status(409).json({ error: "This order isn't ready for pickup yet. It will appear again when the restaurant marks it ready.", notReady: true });
+              }
+              // Take the job atomically, so two riders tapping at the same
+              // moment can't both get it.
+              const taken = await db.update(orders)
+                .set({ riderId: payload.riderId, riderName: payload.riderName })
+                .where(and(eq(orders.id, order.id), isNull(orders.riderId)))
+                .returning({ id: orders.id });
+              if (taken.length === 0) {
+                return res.status(409).json({ error: "Another rider has already taken this delivery.", jobTaken: true });
+              }
+            }
 
             // Riders can't close an order through this generic route any
             // more -- delivery must go through /api/orders/:id/confirm-delivery,
@@ -2913,6 +2944,18 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
                 payload.status = order.status;
               }
               payload.riderId = order.riderId;
+            } else if (isVendor && !isRider) {
+              // Restaurants never assign riders. Their app sends its whole
+              // saved copy of the order, and an out-of-date copy used to
+              // wipe the rider who had just taken the job.
+              payload.riderId = order.riderId;
+              payload.riderName = order.riderName;
+              // ...and can't move an order backwards once a rider has it
+              // or it's finished (e.g. "ready" over "out for delivery").
+              const rank: Record<string, number> = { pending: 0, awaiting_payment_verification: 0, accepted: 1, preparing: 2, ready: 3, out_for_delivery: 4, delivered: 5 };
+              if (payload.status !== "cancelled" && (rank[order.status] ?? 0) > (rank[payload.status] ?? 0) && (rank[order.status] ?? 0) >= 4) {
+                payload.status = order.status;
+              }
             } else if (isRider && !isVendor) {
               // A rider can only ever set themselves as the rider -- never
               // reassign the job to someone else.
@@ -2923,6 +2966,13 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           } else {
             if (payload.customerId !== reqUser.id) return res.status(403).json({ error: "Forbidden" });
           }
+        }
+
+        if (!isNew && existingOrder[0].riderId && !payload.riderId) {
+          // Nobody "un-assigns" a rider by leaving the field empty -- that
+          // only happens when an app sends an out-of-date copy.
+          payload.riderId = existingOrder[0].riderId;
+          payload.riderName = existingOrder[0].riderName;
         }
 
         await db.insert(orders).values({
@@ -3208,8 +3258,9 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
           }
         }
 
-        // Send Rider Notifications if Order is Accepted and Needs a Rider
-        if (statusChanged && payload.status === "accepted" && !payload.riderId) {
+        // Alert riders when the food is READY for pickup and has no rider
+        // (this used to fire as soon as the order was accepted).
+        if (statusChanged && payload.status === "ready" && !payload.riderId) {
           io.to("riders").emit("new_delivery_job", { orderId: payload.id, vendorName: payload.vendorName });
           
           try {
@@ -4027,12 +4078,12 @@ app.post("/api/sync/save", verifyTokenOptional, async (req, res) => {
       }
 
       if (type === "ORDER_UPSERT" && confirmedData?.id) {
-        const isOpenJob = !confirmedData.riderId && (["accepted", "preparing", "ready"].includes(confirmedData.status)
+        const isOpenJob = !confirmedData.riderId && (confirmedData.status === "ready"
           || (confirmedData.orderType === "receipt_pickup" && confirmedData.status === "pending"));
         if (isOpenJob) {
           const keepFullOpen = [confirmedData.vendorId, confirmedData.customerId, "admin"].filter(Boolean) as string[];
           io.to("riders").except(keepFullOpen).emit("sync_update", { type, payload: { ...confirmedData, customerPhone: "" } });
-        } else if (confirmedData.riderId || ["cancelled", "delivered"].includes(confirmedData.status)) {
+        } else if (confirmedData.riderId || !["ready", "pending"].includes(confirmedData.status)) {
           // Taken or cancelled: other riders only need to know it's gone
           // from the board -- not the customer's name or address.
           const gone = {
@@ -4265,6 +4316,10 @@ app.get("/api/admin/rider-locations", verifyTokenOptional, async (req: any, res:
 
 app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
   try {
+    // Check the login FIRST (before uploading receipt images etc.).
+    if (!req.user) {
+      return res.status(403).json({ error: `Unauthorized: Invalid JWT token. Details: ${req.jwtError || 'Missing token'}` });
+    }
     const { customerName, customerPhone, vendorId, vendorName, items, deliveryAddress, paymentMethod, serviceFee, deliveryFee, tax, receiptImage: rawReceiptImage, orderType, receiptImageOrQr: rawReceiptImageOrQr, receiptNote, batchDate, batchTime, specialInstructions, deliveryLat, deliveryLng } = req.body;
 
     const isReceiptPickup = orderType === "receipt_pickup";
@@ -4284,9 +4339,7 @@ app.post("/api/checkout", verifyTokenOptional, async (req: any, res: any) => {
     const receiptImage = rawReceiptImage ? (await uploadPrivateImage(rawReceiptImage, "receipts")) || rawReceiptImage : rawReceiptImage;
     const receiptImageOrQr = rawReceiptImageOrQr ? (await uploadPrivateImage(rawReceiptImageOrQr, "receipts")) || rawReceiptImageOrQr : rawReceiptImageOrQr;
 
-    if (!req.user) {
-      return res.status(403).json({ error: `Unauthorized: Invalid JWT token. Details: ${req.jwtError || 'Missing token'}` });
-    }
+
 
     // Always trust the verified JWT for identity — never a client-supplied ID.
     // A client-sent customerId can drift out of sync with the real logged-in
