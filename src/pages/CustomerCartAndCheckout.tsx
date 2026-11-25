@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useDatabase } from "../context/DatabaseContext";
+import { useDatabase, ensureFreshToken, tokenSecondsLeft } from "../context/DatabaseContext";
 import { isVendorOpen } from "../types";
 import { CartItem } from "../context/DatabaseContext";
 import { compressImageToDataUrl } from "../imageUtils";
@@ -386,6 +386,36 @@ export const CustomerCheckout: React.FC = () => {
   const [isOrdered, setIsOrdered] = useState(false);
   const [errorWord, setErrorWord] = useState("");
 
+  // Check the login the moment checkout opens -- BEFORE the customer sees
+  // the bank details and pays -- instead of finding out it had expired
+  // only after they've paid and pressed Place Order.
+  const [sessionState, setSessionState] = useState<"checking" | "ok" | "expired">("checking");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [confirmingPin, setConfirmingPin] = useState(false);
+  const [confirmPinError, setConfirmPinError] = useState("");
+  useEffect(() => {
+    if (!currentUser) { setSessionState("ok"); return; }
+    let alive = true;
+    ensureFreshToken(true).then((r) => {
+      if (!alive) return;
+      const t = localStorage.getItem("fd_jwt_token") || "";
+      const left = t ? tokenSecondsLeft(t) : null;
+      setSessionState(r === "expired" || !t || (left !== null && left <= 0) ? "expired" : "ok");
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
+  const confirmIdentity = async () => {
+    if (!currentUser?.email || !confirmPin) return;
+    setConfirmingPin(true);
+    setConfirmPinError("");
+    const r = await login(currentUser.email, confirmPin, (currentUser.role as any) || "customer");
+    setConfirmingPin(false);
+    if (r.success) { setSessionState("ok"); setConfirmPin(""); }
+    else setConfirmPinError(r.error || "That PIN didn't work. Please try again.");
+  };
+
   const [receiptBase64, setReceiptBase64] = useState<string>("");
   const [monnifySuccess, setMonnifySuccess] = useState<boolean>(false);
   const [showMonnifyModal, setShowMonnifyModal] = useState<boolean>(false);
@@ -589,6 +619,11 @@ export const CustomerCheckout: React.FC = () => {
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingOrder) return; // already submitting -- ignore repeat taps
+    if (currentUser && sessionState === "expired") {
+      setErrorWord("Please confirm your PIN at the top of this page first.");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (!streetAddress.trim()) {
       setErrorWord("Please state your street address and landmark details.");
 
@@ -788,6 +823,39 @@ export const CustomerCheckout: React.FC = () => {
           >
             Sign In / Register ⚡
           </button>
+        </div>
+      )}
+
+      {currentUser && sessionState === "expired" && (
+        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-3">
+          <p className="text-xs font-black text-amber-900 flex items-center gap-2">
+            <KeyRound className="w-4 h-4" /> Please confirm it's you before paying
+          </p>
+          <p className="text-[11px] text-amber-800">
+            You've been signed in for a long time, so for your security please enter your login PIN.
+            Your cart and details stay exactly as they are.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="current-password"
+              value={confirmPin}
+              onChange={(e) => setConfirmPin(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmIdentity(); } }}
+              placeholder="Your PIN"
+              className="flex-1 px-3 py-2.5 rounded-xl border border-amber-200 text-sm bg-white"
+            />
+            <button
+              type="button"
+              onClick={confirmIdentity}
+              disabled={confirmingPin || !confirmPin}
+              className="px-4 py-2.5 rounded-xl bg-[#070329] text-white text-xs font-black disabled:opacity-50 flex items-center gap-2"
+            >
+              {confirmingPin && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Confirm
+            </button>
+          </div>
+          {confirmPinError && <p className="text-[11px] font-bold text-red-600">{confirmPinError}</p>}
         </div>
       )}
 
@@ -1185,7 +1253,12 @@ export const CustomerCheckout: React.FC = () => {
             {/* Sub-panels for payment options */}
             {paymentMethod && (
               <div className="mt-4 p-4 bg-gray-50/50 border border-gray-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
-                {paymentMethod === "Local Bank Transfer" && (
+                {paymentMethod === "Local Bank Transfer" && currentUser && sessionState === "expired" && (
+                  <p className="text-[11px] font-bold text-amber-800 bg-amber-50 p-3 rounded-xl">
+                    Confirm your PIN at the top of this page to see the account to pay into.
+                  </p>
+                )}
+                {paymentMethod === "Local Bank Transfer" && !(currentUser && sessionState === "expired") && (
                   <div className="space-y-3 text-xs font-sans">
                     <span className="font-bold text-gray-700 block text-[10px] uppercase tracking-wider font-mono">Company Account Credentials</span>
                     

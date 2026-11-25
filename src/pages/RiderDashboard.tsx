@@ -41,9 +41,10 @@ export const RiderDashboard: React.FC = () => {
     );
   }
 
-  // Active riders see unassigned orders that are either accepted, preparing, or ready
+  // Only food that's READY for pickup -- riders used to see (and try to
+  // take) orders the moment admin accepted them, while still cooking.
   const allUnassignedJobs = orders.filter(
-    o => !o.riderId && ["accepted", "preparing", "ready"].includes(o.status)
+    o => !o.riderId && o.status === "ready" && o.orderType !== "receipt_pickup"
   );
   // Split into immediate ("now") jobs and batch-scheduled jobs -- riders see
   // both, but batch jobs are grouped separately by their slot.
@@ -203,7 +204,7 @@ export const RiderDashboard: React.FC = () => {
             <div className="text-center py-16 bg-white rounded-3xl border border-gray-100 max-w-lg mx-auto">
               <Compass className="w-10 h-10 text-gray-300 mx-auto mb-3 animate-spin" />
               <p className="text-sm font-bold text-gray-700">No jobs ready at this moment</p>
-              <p className="text-xs text-gray-400 mt-1">Waiting for partners to complete kitchen prep. Keep terminal online.</p>
+              <p className="text-xs text-gray-400 mt-1">New jobs show up here as soon as a restaurant marks food ready for pickup. Keep the app open to hear the alert.</p>
             </div>
           )
         ) : (
